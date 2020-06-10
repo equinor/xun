@@ -1,0 +1,14 @@
+{
+    "name": "data",
+    "type": "record",
+    "fields": [
+        {
+            "name": "time",
+            "type": "long"
+        },
+        {
+            "name": "value",
+            "type": "string"
+        }
+    ]
+}

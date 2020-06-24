@@ -21,7 +21,7 @@ def main(args):
     )
 
     with open(filename, 'wb') as f:
-        writer = fastavro.writer(f, schema(), avro_records)
+        fastavro.writer(f, schema(), avro_records)
 
 
 @memoized

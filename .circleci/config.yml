@@ -1,0 +1,49 @@
+version: 2.1
+
+commands:
+    install_build_deps:
+        steps:
+            - run:
+                name: install cmake gcc python3
+                command: |
+                    sudo apt-get update
+                    sudo apt-get install \
+                    -y cmake g++ python3 python3-pip git 
+    
+    python_build:
+        steps:
+            - checkout
+            - install_build_deps:
+            - run:
+                name: install python dependencies
+                command: python -m pip install --user -r python/requirements-dev.txt
+            - run:
+                name: build python
+                command: |
+                    cd python
+                    python setup.py build_ext --inplace install --user test
+
+jobs:
+    python-35:
+        docker:
+            - image: circleci/python:3.5
+        steps:
+            - python_build
+
+    python-36:
+        docker:
+            - image: circleci/python:3.6
+        steps:
+            - python_build
+
+    python-37:
+        docker:
+            - image: circleci/python:3.7
+        steps:
+            - python_build:
+
+    python-38:
+        docker:
+            - image: circleci/python:3.8
+        steps:
+            - python_build:

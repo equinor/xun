@@ -1,11 +1,8 @@
 from .. import cli
 from .. import cli_helpers
 from .helpers import capture_stdout
-from .helpers import tmpwd
 from xun import ExportError
-from pathlib import Path
-import pytest  # noqa: F401
-import argparse
+import pytest
 import fastavro
 import json
 import struct
@@ -23,7 +20,7 @@ def test_valid_format():
 
 
 def test_invalid_bin_size():
-    with pytest.raises(ExportError) as ex_err:
+    with pytest.raises(ExportError):
         set_xun_sima_root_args = cli.parser.parse_args([
             'sima-export',
             'i5fi',
@@ -33,8 +30,8 @@ def test_invalid_bin_size():
 
 
 def test_get_schema_only():
-    with capture_stdout() as stdout, pytest.raises(SystemExit) as exit:
-        set_xun_sima_root_args = cli.parser.parse_args([
+    with capture_stdout() as stdout, pytest.raises(SystemExit):
+        cli.parser.parse_args([
             'sima-export',
             'i2fi',
             '--out-schema'])

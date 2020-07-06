@@ -1,2 +1,3 @@
 camille
 fastavro
+networkx

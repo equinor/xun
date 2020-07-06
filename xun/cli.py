@@ -18,6 +18,7 @@ import argparse
 import sys
 
 
+from . import functions
 from . import sima
 from . import zephyre
 from .cli_helpers import schema_action
@@ -81,3 +82,18 @@ parser_export.add_argument('-s', '--out-schema',
                            action=schema_action(
                                lambda args: sima.export.schema(args.format)
                            ))
+
+
+#
+# Xun functions
+#
+
+# parser_functions = subparsers.add_parser('functions')
+#
+# parser_fgraph = subparsers.add_parser('graph', parents=[parser_functions])
+# parser_fgraph.set_defaults(func=functions.graph.main)
+# parser_fgraph.add_argument('program')
+#
+# parser_exec = subparsers.add_parser('exec', parents=[parser_functions])
+# parser_exec.set_defaults(func=functions.exec.main)
+# parser_exec.add_argument('program')

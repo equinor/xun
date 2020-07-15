@@ -1,4 +1,5 @@
 camille
 diskcache
 fastavro
+matplotlib
 networkx

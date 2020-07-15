@@ -27,8 +27,8 @@ def add3(a):
 
 
 @context.function()
-def script():
+def script(value):
     print("Result:", result)
     return result
     with ...:
-        result = add3(2)
+        result = add3(value)

@@ -1,4 +1,5 @@
 from .context import context
+from .functions import ContextError
 from .functions import CopyError
 from .functions import Function
 from .functions import FunctionDescription
@@ -19,5 +20,6 @@ from .transformations import separate_constants
 from .transformations import sort_constants
 from .transformations import stmt_dag
 
+from . import cli
 from . import driver
 from . import store

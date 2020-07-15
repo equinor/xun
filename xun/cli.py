@@ -88,12 +88,12 @@ parser_export.add_argument('-s', '--out-schema',
 # Xun functions
 #
 
-# parser_functions = subparsers.add_parser('functions')
-#
-# parser_fgraph = subparsers.add_parser('graph', parents=[parser_functions])
-# parser_fgraph.set_defaults(func=functions.graph.main)
-# parser_fgraph.add_argument('program')
-#
-# parser_exec = subparsers.add_parser('exec', parents=[parser_functions])
-# parser_exec.set_defaults(func=functions.exec.main)
-# parser_exec.add_argument('program')
+parser_exec = subparsers.add_parser('exec')
+parser_exec.set_defaults(func=functions.cli.xun_exec)
+parser_exec.add_argument('program')
+parser_exec.add_argument('call_string')
+
+parser_fgraph = subparsers.add_parser('graph')
+parser_fgraph.set_defaults(func=functions.cli.xun_graph)
+parser_fgraph.add_argument('program')
+parser_fgraph.add_argument('call_string')

@@ -11,6 +11,7 @@ import textwrap
 import types
 
 
+class ContextError(Exception): pass
 class CopyError(Exception): pass
 class FunctionDefNotFoundError(Exception): pass
 class FunctionError(Exception): pass

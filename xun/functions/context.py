@@ -12,13 +12,16 @@ class context:
     def __contains__(ctx, name):
         return name in ctx.functions
 
-    def __getattr__(ctx, name):
-        if name in ctx.functions:
-            return Compiler(ctx, name)
-        return super(context, ctx).__getattribute__(name)
-
     def __getitem__(self, key):
         return self.functions[key]
+
+    def __getattr__(ctx, name):
+        if name in ctx.functions:
+            return ctx.entry(name)
+        return super(context, ctx).__getattribute__(name)
+
+    def entry(ctx, name):
+        return Compiler(ctx, name)
 
     def function(ctx, max_parallel=None):
         class function_decorator:

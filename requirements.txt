@@ -1,3 +1,4 @@
 camille
+diskcache
 fastavro
 networkx

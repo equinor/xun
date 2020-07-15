@@ -1,10 +1,15 @@
+from .helpers import tmpwd
 from collections.abc import MutableMapping
+import os
 import pytest
 import xun
 
 
 stores = [
     xun.functions.store.Memory,
+
+    # working directory is assumed to be tmp
+    lambda: xun.functions.store.DiskCache(os.getcwd()),
 ]
 
 
@@ -37,7 +42,7 @@ def test_store_decorator_dict_satisifies_MutableMapping():
 
 
 @pytest.mark.parametrize('cls', stores)
-def test_store_is_collection(cls):
+def test_store_is_collection(cls, tmpwd):
     inst = create_instance(cls)
 
     assert isinstance(inst, MutableMapping)
@@ -48,7 +53,7 @@ def test_store_is_collection(cls):
 
 
 @pytest.mark.parametrize('cls', stores)
-def test_store_delete_is_permanent(cls):
+def test_store_delete_is_permanent(cls, tmpwd):
     inst = create_instance(cls)
 
     del inst['a']
@@ -61,7 +66,7 @@ def test_store_delete_is_permanent(cls):
 
 
 @pytest.mark.parametrize('cls', stores)
-def test_store_key_is_permanent(cls):
+def test_store_key_is_permanent(cls, tmpwd):
     inst = create_instance(cls)
 
     assert 'a' in inst and inst['a'] == 0

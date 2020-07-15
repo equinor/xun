@@ -1,4 +1,5 @@
 from collections.abc import MutableMapping
+import diskcache
 import functools
 
 
@@ -43,3 +44,33 @@ def store(orig_class):
 @store
 class Memory(dict):
     pass
+
+
+@store
+class DiskCache:
+    def __init__(self, cache_dir):
+        self.cache_dir = cache_dir
+
+    def __contains__(self, key):
+        with diskcache.Cache(self.cache_dir) as cache:
+            return key in cache
+
+    def __delitem__(self, key):
+        with diskcache.Cache(self.cache_dir) as cache:
+            del cache[key]
+
+    def __getitem__(self, key):
+        with diskcache.Cache(self.cache_dir) as cache:
+            return cache[key]
+
+    def __iter__(self):
+        with diskcache.Cache(self.cache_dir) as cache:
+            return iter(cache)
+
+    def __len__(self):
+        with diskcache.Cache(self.cache_dir) as cache:
+            return len(cache)
+
+    def __setitem__(self, key, value):
+        with diskcache.Cache(self.cache_dir) as cache:
+            cache[key] = value

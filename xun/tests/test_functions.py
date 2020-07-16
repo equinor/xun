@@ -67,9 +67,6 @@ def test_describe_function():
     expected = xun.functions.FunctionDescription(
         ast=xun.functions.function_ast(f).body[0],
         name='f',
-        args=['a', 'b', 'c'],
-        varargs=[],
-        kwonlyargs=[],
         globals=f.__globals__,
         module=f.__module__,
     )

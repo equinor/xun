@@ -137,6 +137,7 @@ def describe(func):
     return FunctionDescription(
         ast=func_tree,
         name=describer.func_name,
+        globals=func.__globals__,
         module=func.__module__,
     )
 
@@ -146,6 +147,7 @@ FunctionDescription = namedtuple(
     [
         'ast',
         'name',
+        'globals',
         'module',
     ]
 )

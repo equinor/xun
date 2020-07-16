@@ -9,7 +9,7 @@ def test_Script():
     s = cli.Script('xun/tests/test_data/script.py')
 
     assert isinstance(s.context, xun.context)
-    assert isinstance(s.context.driver, driver.Local)
+    assert isinstance(s.context.driver, driver.Sequential)
     assert isinstance(s.context.store, store.Memory)
     assert tuple(s.context.functions.keys()) == ('hello', 'hello_world')
 

@@ -17,12 +17,13 @@ def has_side_effect(L: List[int], kw=None):
 
 
 def as_callable_python(func):
-    fcode = (xun.functions.Function(func)
+    fcode = (xun.functions.FunctionImage(func)
         .apply(xun.functions.separate_constants)
         .apply(xun.functions.sort_constants)
         .apply(xun.functions.copy_only_constants))
+    f = fcode.assemble(fcode.copy_only_constants, fcode.body)
 
-    return fcode.compile(fcode.copy_only_constants, fcode.body)
+    return f.compile()
 
 
 def test_statement_dag():
@@ -44,7 +45,7 @@ def test_statement_dag():
         (ln[0], 'd')
     ])
 
-    fcode = xun.functions.Function(f)
+    fcode = xun.functions.FunctionImage(f)
     fcode = fcode.apply(xun.functions.separate_constants)
 
     constant_graph = xun.functions.stmt_dag(fcode.constants)
@@ -75,7 +76,7 @@ def test_fail_when_with_constant_statement_is_not_a_dag():
             a = b
             b = a # Loop
 
-    fcode = xun.functions.Function(f)
+    fcode = xun.functions.FunctionImage(f)
     fcode = fcode.apply(xun.functions.separate_constants)
 
     with pytest.raises(xun.functions.NotDAGError):

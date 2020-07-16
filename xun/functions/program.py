@@ -1,6 +1,6 @@
-from .functions import Function
-from .functions import overwrite_globals
 from . import transformations
+from .functions import NotDAGError
+from .functions import overwrite_globals
 import ast
 import networkx as nx
 import queue
@@ -138,7 +138,7 @@ def build_function_graph(context, call):
     def skip_xun_functions(node):
         return isinstance(node.func, ast.Name) and node.func.id in context
 
-    decomposed = (Function(context[call.function_name].func)
+    decomposed = (context[call.function_name].func
         .apply(transformations.separate_constants)
         .apply(transformations.sort_constants)
         .apply(transformations.copy_only_constants,
@@ -146,7 +146,7 @@ def build_function_graph(context, call):
         .apply(transformations.build_xun_graph, context)
     )
 
-    graph_builder = decomposed.compile(decomposed.xun_graph)
+    graph_builder = decomposed.assemble(decomposed.xun_graph).compile()
     graph = graph_builder(*call.args, **call.kwargs)
 
     # The compiled functions does not know it self, so it cannot return
@@ -213,7 +213,8 @@ def build_function(context, func):
     def skip_xun_functions(node):
         return isinstance(node.func, ast.Name) and node.func.id in context
 
-    decomposed = (Function(func)
+    func = (
+        func
         .apply(transformations.separate_constants)
         .apply(transformations.sort_constants)
         .apply(transformations.copy_only_constants,
@@ -221,13 +222,13 @@ def build_function(context, func):
         .apply(transformations.load_from_store, context)
     )
 
-    func = decomposed.compile(decomposed.load_from_store, decomposed.body)
+    f = func.assemble(func.load_from_store, func.body).compile()
     globals_with_store = {
-        **func.__globals__,
+        **func.desc.globals,
         '_xun_store': context.store
     }
 
-    return overwrite_globals(func, globals_with_store)
+    return overwrite_globals(f, globals_with_store)
 
 
 

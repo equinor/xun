@@ -1,6 +1,7 @@
 from .helpers import tmpwd
 from collections.abc import MutableMapping
 import os
+import pickle
 import pytest
 import xun
 
@@ -89,3 +90,17 @@ def test_store_key_is_permanent(cls, tmpwd):
         inst['a'] = 'Not allowed'
     except KeyError:
         pass
+
+
+@pytest.mark.parametrize('cls', stores)
+def test_store_must_be_pickleable(cls, tmpwd):
+    inst = create_instance(cls)
+
+    pickled = pickle.dumps(inst)
+    unpickled = pickle.loads(pickled)
+
+    assert isinstance(unpickled, MutableMapping)
+    assert 'a' in unpickled and 'b' in unpickled and 'c' in unpickled
+    assert unpickled['a'] == 0
+    assert unpickled['b'] == 1
+    assert unpickled['c'] == 2

@@ -19,13 +19,13 @@ def test_overwrite_globals():
     assert g() == 7
 
 
-def test_function_decomposition():
+def test_FunctionImage():
     def f(a):
         return a + d
         with ...:
             d = a + b
             b = 1
-    g = xun.functions.Function(f)
+    g = xun.functions.FunctionImage(f)
     h = g.update([], {'a': 1, 'b': 2})
     i = h.update(['a'], {})
 
@@ -46,17 +46,17 @@ def test_function_compilation():
         return global_c
         return 7
 
-    g_desc = xun.functions.Function(f)
-    g = g_desc.compile(g_desc.ast)
+    g_img = xun.functions.FunctionImage(f)
+    g = g_img.assemble(g_img.ast).compile()
     assert g() == f() and g() == global_c
 
-    new_nodes = g_desc.ast[1:]
-    h_desc = g_desc.update(['ast'], {'cropped_ast': new_nodes})
-    h = h_desc.compile(h_desc.cropped_ast)
+    new_nodes = g_img.ast[1:]
+    h_img = g_img.update(['ast'], {'cropped_ast': new_nodes})
+    h = h_img.assemble(h_img.cropped_ast).compile()
     assert h() == 7
 
     # g shohuld not have changed
-    g = g_desc.compile(g_desc.ast)
+    g = g_img.assemble(g_img.ast).compile()
     assert g() == f() and g() == global_c
 
 
@@ -64,9 +64,10 @@ def test_describe_function():
     def f(a, b, c):
         pass
 
-    expected = xun.functions.FunctionDescription(
+    expected = xun.functions.FunctionInfo(
         ast=xun.functions.function_ast(f).body[0],
         name='f',
+        defaults=f.__defaults__,
         globals=f.__globals__,
         module=f.__module__,
     )

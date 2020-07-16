@@ -1,4 +1,4 @@
-from .functions import describe
+from .function_image import FunctionImage
 from .program import Compiler
 from collections import namedtuple
 
@@ -16,7 +16,7 @@ class context:
         return self.functions[key]
 
     def __getattr__(ctx, name):
-        if name in ctx.functions:
+        if name in super(context, ctx).__getattribute__('functions'):
             return ctx.entry(name)
         return super(context, ctx).__getattribute__(name)
 
@@ -24,25 +24,18 @@ class context:
         return Compiler(ctx, name)
 
     def function(ctx, max_parallel=None):
-        class function_decorator:
-            def __init__(self, func):
-                self.func = func
-                self.desc = describe(func)
-                self.name = self.desc.name
-                ctx.register(func, self.desc)
-
-            def __call__(self, *args, **kwargs):
-                raise NotImplementedError()
+        def function_decorator(func):
+            ctx.register(func.__name__, FunctionImage(func))
         return function_decorator
 
-    def register(ctx, func, desc):
-        ctx.functions[desc.name] = ContextEntry(desc=desc, func=func)
+    def register(ctx, name, func):
+        ctx.functions[name] = ContextEntry(name=name, func=func)
 
 
 ContextEntry = namedtuple(
     'ContextEntry',
     [
-        'desc',
+        'name',
         'func',
     ]
 )

@@ -1,6 +1,9 @@
-from .functions import Function
-from .functions import NotDAGError
+from .function_image import FunctionImage
 from .functions import function_ast
+from .functions import stmt_dag
+from .functions import stmt_external_names
+from .functions import stmt_targets
+from .functions import target_names
 from collections import Counter
 from itertools import chain
 from itertools import tee
@@ -12,7 +15,7 @@ import networkx as nx
 # Transformations
 #
 
-def separate_constants(func: Function):
+def separate_constants(func: FunctionImage):
     ast_it0, ast_it1 = tee(func.ast)
     body = [stmt for stmt in ast_it0 if not is_with_constants(stmt)]
     with_constants = [stmt for stmt in ast_it1 if is_with_constants(stmt)]
@@ -29,7 +32,7 @@ def separate_constants(func: Function):
     return func.update(['ast'], {'body': body, 'constants': constants})
 
 
-def sort_constants(func: Function):
+def sort_constants(func: FunctionImage):
     constant_graph = stmt_dag(func.constants)
     sorted_constants = [ node for node in nx.topological_sort(constant_graph)
                          if isinstance(node, ast.AST) ]
@@ -43,7 +46,7 @@ def sort_constants(func: Function):
     )
 
 
-def copy_only_constants(func: Function, ignore_predicate=lambda _: False):
+def copy_only_constants(func: FunctionImage, ignore_predicate=lambda _: False):
     def make_expr_deepcopy(expr):
         deepcopy_id = ast.Name(id='deepcopy', ctx=ast.Load())
         return ast.Call(deepcopy_id, args=[expr], keywords=[])
@@ -81,7 +84,7 @@ def copy_only_constants(func: Function, ignore_predicate=lambda _: False):
     )
 
 
-def build_xun_graph(func: Function, context):
+def build_xun_graph(func: FunctionImage, context):
     @function_ast
     def helper_code():
         from xun.functions import CallNode as _xun_CallNode
@@ -166,7 +169,7 @@ def build_xun_graph(func: Function, context):
     )
 
 
-def load_from_store(func: Function, context):
+def load_from_store(func: FunctionImage, context):
     class LoadTransformer(ast.NodeTransformer):
         def visit_Call(self, node):
             node = self.generic_visit(node)
@@ -212,9 +215,11 @@ def load_from_store(func: Function, context):
         },
     )
 
+
 #
 # Predicates and checks
 #
+
 
 def check_with_constants(node):
     if not is_with_constants(node):
@@ -262,76 +267,3 @@ def no_reassignments(node):
         if isinstance(assign, ast.Assign)
     ])
     return all(count == 1 for count in Counter(names).values())
-
-
-#
-# Helpers
-#
-
-def stmt_dag(stmts):
-    """
-    Create directed acyclic graph from a list of statements
-    """
-    G = nx.DiGraph()
-    for stmt in stmts:
-        inputs = stmt_external_names(stmt)
-        outputs = stmt_targets(stmt)
-        G.add_node(stmt)
-        G.add_edges_from((i, stmt) for i in inputs)
-        G.add_edges_from((stmt, o) for o in outputs)
-    if not nx.is_directed_acyclic_graph(G):
-        raise NotDAGError('Graph is not directed acyclic graph')
-    return G
-
-
-def target_names(t):
-    """
-    given a target expression node, return the names of all targets
-    """
-    if isinstance(t, list):
-        return list(chain(*[target_names(u) for u in t]))
-    elif isinstance(t, tuple):
-        return list(chain(*[target_names(u) for u in t]))
-    elif isinstance(t, ast.Starred):
-        return target_names(t.value)
-    elif isinstance(t, ast.Name):
-        return [t.id]
-    else:
-        raise TypeError('{}'.format(t))
-
-
-
-def stmt_targets(stmt):
-    """
-    Return a list of all target names for a statement
-    """
-    return target_names(stmt.targets)
-
-
-def stmt_external_names(stmt):
-    """
-    Return a list of names of all external names referenced by the statement
-    """
-    comp_types = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
-
-    def comp_targets(node):
-        targets = []
-        for gen in node.generators:
-            targets.extend(target_names(gen.target))
-        return targets
-
-    def visit_children(node, scope):
-        return list(chain(
-            *[external_names(c, scope) for c in ast.iter_child_nodes(node)]
-        ))
-
-    def external_names(e, scope=frozenset()):
-        if isinstance(e, ast.Name):
-            return [e.id] if e.id not in scope else []
-        elif isinstance(e, comp_types):
-            new_scope = scope | frozenset(comp_targets(e))
-            return visit_children(e, new_scope)
-        else:
-            return visit_children(e, scope)
-
-    return external_names(stmt.value)

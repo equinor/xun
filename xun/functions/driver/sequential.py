@@ -8,7 +8,7 @@ class Sequential(Driver):
         return program.store[sentinel.call]
 
     def run_and_store(self, program, call):
-        func = program[call.function_name]
+        func = program[call.function_name].compile()
         args = [
             self.load_from_store(program, arg)
             if isinstance(arg, SentinelNode) else arg

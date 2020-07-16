@@ -1,12 +1,9 @@
-from collections import Counter
 from collections import namedtuple
 from itertools import chain
-from typing import Any
-from typing import Dict
-from typing import List
 import ast
 import copy
 import inspect
+import networkx as nx
 import textwrap
 import types
 
@@ -18,88 +15,7 @@ class FunctionError(Exception): pass
 class NotDAGError(Exception): pass
 
 
-class Function:
-    def __init__(self, func_or_desc, attrs=None, deleted=frozenset()):
-        self.keys = ()
-        if attrs is not None:
-            for name, value in attrs.items():
-                self.keys += (name,)
-                super().__setattr__(name, value)
-        self.desc = (
-            func_or_desc
-            if isinstance(func_or_desc, FunctionDescription)
-            else describe(func_or_desc)
-        )
-        self.deleted = deleted
-
-        self.ast = copy.deepcopy(self.desc.ast.body)
-
-        self.lock = True
-
-    def __setattr__(self, name, value):
-        if hasattr(self, 'lock'):
-            raise AttributeError('can\'t set attribute')
-        super().__setattr__(name, value)
-
-    def __getattr__(self, name):
-        if name in super().__getattribute__('deleted'):
-            raise AttributeError('{} is deleted'.format(name))
-        return super().__getattribute__(name)
-
-    def apply(self, transformation, *args, **kwargs):
-        return transformation(self, *args, **kwargs)
-
-    def compile(self, *nodes):
-        args = self.desc.ast.args
-
-        body = list(chain(*nodes))
-
-        fdef = ast.fix_missing_locations(ast.Module(
-            type_ignores=[],
-            body=[
-                ast.FunctionDef(
-                    name=self.desc.name,
-                    args=args,
-                    decorator_list=[],
-                    body=body,
-                )
-            ],
-        ))
-
-        function_code = compile(fdef, '<string>', 'exec')
-
-        namespace = {}
-        exec(function_code, namespace)
-        f = namespace[self.desc.name]
-
-        return overwrite_globals(f, self.desc.globals, self.desc.module)
-
-    def update(self, deleted: List[str], new: Dict[str, Any]):
-        for key in new.keys():
-            if key in self.keys:
-                raise AttributeError('Key {} already exists'.format(key))
-        attrs = {
-            **{ k: getattr(self, k)
-                for k in self.keys
-                if not k in deleted },
-            **{ k: v
-                for k, v in new.items()
-                if not k in deleted },
-        }
-        new_deleted = self.deleted | frozenset(deleted)
-
-        f = Function(self.desc, attrs=attrs, deleted=new_deleted)
-
-        return f
-
-
-def function_ast(func):
-    source = inspect.getsource(func)
-    dedent = textwrap.dedent(source)
-    return ast.parse(dedent)
-
-
-def overwrite_globals(func, globals, module=None):
+def overwrite_globals(func, globals, defaults=None, module=None):
     """
     Returns a new function, with the same code as the given, but with the given
     scope
@@ -108,7 +24,7 @@ def overwrite_globals(func, globals, module=None):
         func.__code__,
         globals,
         name=func.__name__,
-        argdefs=func.__defaults__,
+        argdefs=defaults if defaults is not None else func.__defaults__,
         closure=func.__closure__,
     )
     if module is not None:
@@ -118,6 +34,7 @@ def overwrite_globals(func, globals, module=None):
 
 
 def describe(func):
+    print('describing {}, from module {}'.format(func.__name__, func.__module__))
     tree = function_ast(func)
 
     is_single_function_module = (
@@ -134,19 +51,21 @@ def describe(func):
     describer = Describer()
     describer.visit(func_tree)
 
-    return FunctionDescription(
+    return FunctionInfo(
         ast=func_tree,
         name=describer.func_name,
-        globals=func.__globals__,
+        defaults=func.__defaults__,
+        globals={},
         module=func.__module__,
     )
 
 
-FunctionDescription = namedtuple(
-    'FunctionDescription',
+FunctionInfo = namedtuple(
+    'FunctionInfo',
     [
         'ast',
         'name',
+        'defaults',
         'globals',
         'module',
     ]
@@ -171,3 +90,87 @@ class Describer(ast.NodeVisitor):
             raise FunctionError('More than one function definition')
         self.func_node = node
         self.func_name = node.name
+
+
+#
+# AST helpers
+#
+
+
+def function_ast(func):
+    source = inspect.getsource(func)
+    dedent = textwrap.dedent(source)
+    return ast.parse(dedent)
+
+
+def stmt_dag(stmts):
+    """
+    Create directed acyclic graph from a list of statements
+    """
+    G = nx.DiGraph()
+    for stmt in stmts:
+        inputs = stmt_external_names(stmt)
+        outputs = stmt_targets(stmt)
+        G.add_node(stmt)
+        G.add_edges_from((i, stmt) for i in inputs)
+        G.add_edges_from((stmt, o) for o in outputs)
+    if not nx.is_directed_acyclic_graph(G):
+        raise NotDAGError('Graph is not directed acyclic graph')
+    return G
+
+
+def target_names(t):
+    """
+    given a target expression node, return the names of all targets
+    """
+    if isinstance(t, list):
+        return list(chain(*[target_names(u) for u in t]))
+    elif isinstance(t, tuple):
+        return list(chain(*[target_names(u) for u in t]))
+    elif isinstance(t, ast.Starred):
+        return target_names(t.value)
+    elif isinstance(t, ast.Name):
+        return [t.id]
+    else:
+        raise TypeError('{}'.format(t))
+
+
+
+def stmt_targets(stmt):
+    """
+    Return a list of all target names for a statement
+    """
+    return target_names(stmt.targets)
+
+
+def stmt_external_names(stmt):
+    """
+    Return a list of names of all external names referenced by the statement
+    """
+    comp_types = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+
+    def comp_targets(node):
+        targets = []
+        for gen in node.generators:
+            targets.extend(target_names(gen.target))
+        return targets
+
+    def visit_children(node, scope):
+        return list(chain(
+            *[external_names(c, scope) for c in ast.iter_child_nodes(node)]
+        ))
+
+    def external_names(e, scope=frozenset()):
+        if isinstance(e, ast.Name):
+            return [e.id] if e.id not in scope else []
+        elif isinstance(e, comp_types):
+            new_scope = scope | frozenset(comp_targets(e))
+            return visit_children(e, new_scope)
+        else:
+            return visit_children(e, scope)
+
+    return external_names(stmt.value)
+
+
+def stmt_target_referenced(stmt):
+    return stmt_targets(stmt), stmt_external_names(stmt)

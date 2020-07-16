@@ -3,6 +3,7 @@ from math import radians
 from math import sin
 from xun.functions import CallNode, SentinelNode, TargetNode
 import ast
+import pickle
 import pytest
 import networkx as nx
 import xun
@@ -10,9 +11,29 @@ import xun
 
 def create_context():
     return xun.context(
-        driver=xun.functions.driver.Local(),
+        driver=xun.functions.driver.Sequential(),
         store=xun.functions.store.Memory(),
     )
+
+def sample_sin_context():
+    context = create_context()
+
+    @context.function()
+    def mksample(i, step_size):
+        return i / step_size
+
+    @context.function()
+    def deg_to_rad(deg):
+        return radians(deg)
+
+    @context.function()
+    def sample_sin(offset, sample_count, step_size):
+        return [sin(s) + offset for s in radians]
+        with ...:
+            samples = [mksample(i, step_size) for i in range(sample_count)]
+            radians = [deg_to_rad(s) for s in samples]
+
+    return context
 
 
 def test_build_function_graph():
@@ -164,22 +185,7 @@ def test_program_graph():
 
 
 def test_program():
-    context = create_context()
-
-    @context.function()
-    def mksample(i, step_size):
-        return i / step_size
-
-    @context.function()
-    def deg_to_rad(deg):
-        return radians(deg)
-
-    @context.function()
-    def sample_sin(offset, sample_count, step_size):
-        return [sin(s) + offset for s in radians]
-        with ...:
-            samples = [mksample(i, step_size) for i in range(sample_count)]
-            radians = [deg_to_rad(s) for s in samples]
+    context = sample_sin_context()
 
     offset = 0
     sample_count = 10
@@ -190,6 +196,34 @@ def test_program():
     assert result == [
         sin(radians(i / step_size)) + offset for i in range(sample_count)
     ]
+
+
+def test_program_is_pickleable():
+    context = sample_sin_context()
+
+    offset = 0
+    sample_count = 10
+    step_size = 36
+    # program = context.sample_sin.compile(offset, sample_count, step_size)
+
+    # pickled_program = pickle.dumps(program)
+    # unpickled_program = pickle.loads(pickled_program)
+
+    # result = unpickled_program()
+
+    compiler = context.sample_sin
+    pickled_compiler = pickle.dumps(compiler)
+    unpickled_compiler = pickle.loads(pickled_compiler)
+
+    program = unpickled_compiler.compile(offset, sample_count, step_size)
+
+    result = program()
+
+    assert result == [
+        sin(radians(i / step_size)) + offset for i in range(sample_count)
+    ]
+
+
 #
 #
 # def test_max_workers():

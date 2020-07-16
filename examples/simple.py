@@ -2,7 +2,7 @@ import xun
 
 
 context = xun.context(
-    driver=xun.functions.driver.Local(),
+    driver=xun.functions.driver.Sequential(),
     store=xun.functions.store.Memory(),
 )
 

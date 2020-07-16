@@ -119,7 +119,8 @@ def overwrite_globals(func, globals, module=None):
 def describe(func):
     tree = function_ast(func)
 
-    is_single_function_module = (isinstance(tree, ast.Module)
+    is_single_function_module = (
+        isinstance(tree, ast.Module)
         and len(tree.body) == 1
         and isinstance(tree.body[0], ast.FunctionDef)
     )
@@ -135,10 +136,6 @@ def describe(func):
     return FunctionDescription(
         ast=func_tree,
         name=describer.func_name,
-        args=describer.func_args,
-        varargs=describer.func_varargs,
-        kwonlyargs=describer.func_kwonlyargs,
-        globals=func.__globals__,
         module=func.__module__,
     )
 
@@ -148,10 +145,6 @@ FunctionDescription = namedtuple(
     [
         'ast',
         'name',
-        'args',
-        'varargs',
-        'kwonlyargs',
-        'globals',
         'module',
     ]
 )
@@ -161,9 +154,6 @@ class Describer(ast.NodeVisitor):
     def __init__(self):
         self.func_node = None
         self.func_name = None
-        self.func_args = None
-        self.func_varargs = None
-        self.func_kwonlyargs = None
 
     def visit(self, node):
         r = super().visit(node)
@@ -178,6 +168,3 @@ class Describer(ast.NodeVisitor):
             raise FunctionError('More than one function definition')
         self.func_node = node
         self.func_name = node.name
-        self.func_args = [a.arg for a in node.args.args]
-        self.func_varargs = []
-        self.func_kwonlyargs = []

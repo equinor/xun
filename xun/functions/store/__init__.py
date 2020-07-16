@@ -1,3 +1,3 @@
-from .store import store
-from .store import Memory
 from .store import DiskCache
+from .store import Memory
+from .store import StoreMeta

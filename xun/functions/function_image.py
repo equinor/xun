@@ -39,10 +39,10 @@ class Function:
 
 class FunctionImage:
     def __init__(self, func_or_desc, attrs=None, deleted=frozenset()):
-        self.keys = ()
+        self.keys = frozenset()
         if attrs is not None:
             for name, value in attrs.items():
-                self.keys += (name,)
+                self.keys |= {name}
                 super().__setattr__(name, value)
 
         self.desc = (
@@ -64,7 +64,7 @@ class FunctionImage:
         return super().__getattribute__(name)
 
     def apply(self, transformation, *args, **kwargs):
-        return transformation(self, *args, **kwargs)
+        return transformation(copy.deepcopy(self), *args, **kwargs)
 
     def assemble(self, *nodes):
         args = self.desc.ast.args
@@ -91,7 +91,7 @@ class FunctionImage:
             self.desc.module
         )
 
-    def update(self, deleted: List[str], new: Dict[str, Any]):
+    def update(self, deleted: List[str], new: Dict[str, Any], new_desc=None):
         for key in new.keys():
             if key in self.keys:
                 raise AttributeError('Key {} already exists'.format(key))
@@ -105,6 +105,10 @@ class FunctionImage:
         }
         new_deleted = self.deleted | frozenset(deleted)
 
-        f = FunctionImage(self.desc, attrs=attrs, deleted=new_deleted)
+        f = FunctionImage(
+            new_desc if new_desc is not None else self.desc,
+            attrs=attrs,
+            deleted=new_deleted,
+        )
 
         return f

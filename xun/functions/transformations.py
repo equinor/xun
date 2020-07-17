@@ -1,14 +1,10 @@
 from .function_image import FunctionImage
 from .functions import function_ast
-from .functions import stmt_dag
+from .functions import separate_constants_ast
+from .functions import sort_constants_ast
 from .functions import stmt_external_names
 from .functions import stmt_targets
-from .functions import target_names
-from collections import Counter
-from itertools import chain
-from itertools import tee
 import ast
-import networkx as nx
 
 
 #
@@ -16,27 +12,12 @@ import networkx as nx
 #
 
 def separate_constants(func: FunctionImage):
-    ast_it0, ast_it1 = tee(func.ast)
-    body = [stmt for stmt in ast_it0 if not is_with_constants(stmt)]
-    with_constants = [stmt for stmt in ast_it1 if is_with_constants(stmt)]
-
-    if len(with_constants) > 1:
-        msg = 'Functions must have at most one with constants statement'
-        raise ValueError(msg)
-
-    constants = []
-    if len(with_constants) == 1:
-        check_with_constants(with_constants[0])
-        constants = with_constants[0].body
-
+    body, constants = separate_constants_ast(func.ast)
     return func.update(['ast'], {'body': body, 'constants': constants})
 
 
 def sort_constants(func: FunctionImage):
-    constant_graph = stmt_dag(func.constants)
-    sorted_constants = [ node for node in nx.topological_sort(constant_graph)
-                         if isinstance(node, ast.AST) ]
-
+    sorted_constants, constant_graph = sort_constants_ast(func.constants)
     return func.update(
         ['constants'],
         {
@@ -214,56 +195,3 @@ def load_from_store(func: FunctionImage, context):
             'load_from_store': lfs,
         },
     )
-
-
-#
-# Predicates and checks
-#
-
-
-def check_with_constants(node):
-    if not is_with_constants(node):
-        msg = 'Not an with constants statement: {}'
-        raise ValueError(msg.format(node))
-    if not is_assignments_and_expressions(node):
-        msg = ('With constants statement can only contain assignments and '
-               'expressions: {}')
-        raise ValueError(msg.format(node))
-    if not no_reassignments(node):
-        msg = 'Reassigments not allowed in with constants statement: {}'
-        raise ValueError(msg.format(node))
-
-
-def is_with_constants(node):
-    if not isinstance(node, ast.With):
-        return False
-    try:
-        items = node.items
-
-        if len(items) != 1:
-            return False
-
-        context_expr = items[0].context_expr
-
-        return isinstance(context_expr, ast.Ellipsis)
-    except AttributeError:
-        return False
-    except IndexError:
-        return False
-
-
-def is_assignments_and_expressions(node):
-    return all(
-        isinstance(node, ast.Assign)
-        or isinstance(node, ast.Expression)
-        for node in node.body
-    )
-
-
-def no_reassignments(node):
-    names = chain(*[
-        target_names(assign.targets)
-        for assign in node.body
-        if isinstance(assign, ast.Assign)
-    ])
-    return all(count == 1 for count in Counter(names).values())

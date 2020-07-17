@@ -204,27 +204,13 @@ def test_program_is_pickleable():
     offset = 0
     sample_count = 10
     step_size = 36
-    # program = context.sample_sin.compile(offset, sample_count, step_size)
+    program = context.sample_sin.compile(offset, sample_count, step_size)
 
-    # pickled_program = pickle.dumps(program)
-    # unpickled_program = pickle.loads(pickled_program)
+    pickled_program = pickle.dumps(program)
+    unpickled_program = pickle.loads(pickled_program)
 
-    # result = unpickled_program()
-
-    compiler = context.sample_sin
-    pickled_compiler = pickle.dumps(compiler)
-    unpickled_compiler = pickle.loads(pickled_compiler)
-
-    program = unpickled_compiler.compile(offset, sample_count, step_size)
-
-    result = program()
+    result = unpickled_program()
 
     assert result == [
         sin(radians(i / step_size)) + offset for i in range(sample_count)
     ]
-
-
-#
-#
-# def test_max_workers():
-#     assert False

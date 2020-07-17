@@ -6,9 +6,12 @@ from .functions import CopyError
 from .functions import FunctionError
 from .functions import FunctionInfo
 from .functions import NotDAGError
+from .functions import argnames
 from .functions import describe
+from .functions import func_external_names
 from .functions import function_ast
 from .functions import overwrite_globals
+from .functions import stmt_dag
 from .program import CallNode
 from .program import SentinelNode
 from .program import TargetNameNode
@@ -19,7 +22,6 @@ from .transformations import build_xun_graph
 from .transformations import copy_only_constants
 from .transformations import separate_constants
 from .transformations import sort_constants
-from .transformations import stmt_dag
 
 from . import cli
 from . import driver

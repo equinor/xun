@@ -26,6 +26,7 @@ class context:
     def function(ctx, max_parallel=None):
         def function_decorator(func):
             ctx.register(func.__name__, FunctionImage(func))
+            return func
         return function_decorator
 
     def register(ctx, name, func):

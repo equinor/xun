@@ -19,6 +19,7 @@ class Sequential(Driver):
             if isinstance(value, SentinelNode) else value
             for key, value in call.kwargs.items()
         }
+
         result = func(*args, **kwargs)
 
         program.store[CallNode(call.function_name, *args, **kwargs)] = result

@@ -222,13 +222,15 @@ def build_function(context, func):
         .apply(transformations.load_from_store, context)
     )
 
-    f = func.assemble(func.load_from_store, func.body).compile()
-    globals_with_store = {
+    new_desc = func.desc._replace(globals={
         **func.desc.globals,
         '_xun_store': context.store
-    }
+    })
+    func = func.update([], {}, new_desc=new_desc)
 
-    return overwrite_globals(f, globals_with_store)
+    f = func.assemble(func.load_from_store, func.body)
+
+    return f
 
 
 

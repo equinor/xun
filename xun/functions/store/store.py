@@ -29,7 +29,6 @@ class StoreMeta(ABCMeta):
             def __delitem__(self, key):
                 delitem(self, key)
                 self._store_deleted.add(key)
-                print('DELETED', key)
             attrib_dict['__delitem__'] = __delitem__
 
         if '__getitem__' in attrib_dict:

@@ -1,4 +1,5 @@
 import astunparse
+import inspect
 import pytest
 import xun
 
@@ -47,16 +48,16 @@ def test_function_compilation():
         return 7
 
     g_img = xun.functions.FunctionImage(f)
-    g = g_img.assemble(g_img.ast).compile()
+    g = g_img.assemble(g_img.ast.body[0].body).compile()
     assert g() == f() and g() == global_c
 
-    new_nodes = g_img.ast[1:]
+    new_nodes = g_img.ast.body[0].body[1:]
     h_img = g_img.update(['ast'], {'cropped_ast': new_nodes})
     h = h_img.assemble(h_img.cropped_ast).compile()
     assert h() == 7
 
     # g shohuld not have changed
-    g = g_img.assemble(g_img.ast).compile()
+    g = g_img.assemble(g_img.ast.body[0].body).compile()
     assert g() == f() and g() == global_c
 
 
@@ -76,10 +77,12 @@ def test_describe_function():
     )
 
     expected = xun.functions.FunctionInfo(
-        ast=xun.functions.function_ast(f).body[0],
+        src=xun.functions.function_source(f),
+        ast=xun.functions.function_ast(f),
         name='f',
         defaults=f.__defaults__,
         globals={'some_value': None},
+        module_infos={},
         module=f.__module__,
     )
     decomposed = xun.functions.describe(f)

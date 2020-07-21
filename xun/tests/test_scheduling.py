@@ -187,7 +187,7 @@ def test_program_graph():
 def test_program():
     context = sample_sin_context()
 
-    offset = 0
+    offset = 42
     sample_count = 10
     step_size = 36
     program = context.sample_sin.compile(offset, sample_count, step_size)
@@ -201,7 +201,7 @@ def test_program():
 def test_program_is_pickleable():
     context = sample_sin_context()
 
-    offset = 0
+    offset = 42
     sample_count = 10
     step_size = 36
     program = context.sample_sin.compile(offset, sample_count, step_size)

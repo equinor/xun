@@ -1,4 +1,5 @@
 from . import transformations
+from .function_image import FunctionImage
 from .functions import NotDAGError
 from .functions import overwrite_globals
 import ast
@@ -40,7 +41,6 @@ class Program:
         return self.functions.__dict__[key]
 
 
-
 class CallNode:
     def __init__(self, function_name, *args, **kwargs):
         self.function_name = function_name
@@ -80,7 +80,7 @@ class SentinelNode:
     def __copy__(self):
         raise _xun_CopyError('Cannot copy value')
 
-    def __deepcopy__(self):
+    def __deepcopy__(self, memo=None):
         raise _xun_CopyError('Cannot copy value')
 
     def __eq__(self, other):
@@ -138,7 +138,7 @@ def build_function_graph(context, call):
     def skip_xun_functions(node):
         return isinstance(node.func, ast.Name) and node.func.id in context
 
-    decomposed = (context[call.function_name].func
+    decomposed = (FunctionImage(context[call.function_name])
         .apply(transformations.separate_constants)
         .apply(transformations.sort_constants)
         .apply(transformations.copy_only_constants,
@@ -213,8 +213,7 @@ def build_function(context, func):
     def skip_xun_functions(node):
         return isinstance(node.func, ast.Name) and node.func.id in context
 
-    func = (
-        func
+    fimg = (FunctionImage(func)
         .apply(transformations.separate_constants)
         .apply(transformations.sort_constants)
         .apply(transformations.copy_only_constants,
@@ -222,13 +221,13 @@ def build_function(context, func):
         .apply(transformations.load_from_store, context)
     )
 
-    new_desc = func.desc._replace(globals={
-        **func.desc.globals,
+    new_desc = fimg.desc._replace(globals={
+        **fimg.desc.globals,
         '_xun_store': context.store
     })
-    func = func.update([], {}, new_desc=new_desc)
+    fimg = fimg.update([], {}, new_desc=new_desc)
 
-    f = func.assemble(func.load_from_store, func.body)
+    f = fimg.assemble(fimg.load_from_store, fimg.body)
 
     return f
 
@@ -236,8 +235,8 @@ def build_function(context, func):
 
 def build_functions(context):
     functions = {}
-    for fname, (desc, func) in context.functions.items():
+    for fname, desc in context.functions.items():
         if fname in functions:
             raise ValueError('{} already exists'.format(fname))
-        functions[fname] = build_function(context, func)
+        functions[fname] = build_function(context, desc)
     return types.SimpleNamespace(**functions)

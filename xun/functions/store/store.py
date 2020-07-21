@@ -1,3 +1,5 @@
+from ...memoized import memoized
+from ..functions import CopyError
 from abc import ABCMeta
 from collections.abc import MutableMapping
 import copyreg
@@ -52,8 +54,51 @@ class StoreMeta(ABCMeta):
         return type.__new__(cls, name, bases, attrib_dict)
 
 
-class Memory(dict, metaclass=StoreMeta):
-    pass
+class Memory(metaclass=StoreMeta):
+    def __init__(self):
+        super().__init__()
+        self.id = id(self)
+        self.dict = Memory.get_dict(self.id)
+
+    @staticmethod
+    @memoized
+    def get_dict(id):
+        return dict()
+
+    def __copy__(self):
+        raise CopyError('Cannot copy memory store')
+
+    def __deepcopy__(self, memo):
+        raise CopyError('Cannot copy memory store')
+
+    def __getstate__(self):
+        return (self._store_deleted, self.id)
+
+    def __setstate__(self, state):
+        self._store_deleted = state[0]
+        self.id = state[1]
+        self.dict = Memory.get_dict(self.id)
+
+    def __contains__(self, key):
+        return key in self.dict
+
+    def __delitem__(self, key):
+        del self.dict[key]
+
+    def __getitem__(self, key):
+        return self.dict[key]
+
+    def __iter__(self):
+        return iter(self.dict)
+
+    def __len__(self):
+        return len(self.dict)
+
+    def __setitem__(self, key, value):
+        self.dict[key] = value
+
+    def __repr__(self):
+        return repr(self.dict)
 
 
 class DiskCache(metaclass=StoreMeta):

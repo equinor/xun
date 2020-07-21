@@ -15,7 +15,7 @@ def test_Script():
 
     call = CallNode('hello_world', 'world')
     result = s.exec(call)
-    assert result == 'hello world!'
+    assert result == 'Hello world!'
 
 
 def test_interpret_call():

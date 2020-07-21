@@ -49,6 +49,7 @@ def overwrite_globals(func, globals, defaults=None, module=None):
 
 
 def describe(func):
+    src = function_source(func)
     tree = function_ast(func)
 
     is_single_function_module = (
@@ -60,21 +61,29 @@ def describe(func):
     if not is_single_function_module:
         raise ValueError('can only describe a single function')
 
-    func_tree = tree.body[0]
+    tree = strip_decorators(tree)
 
-    external_references = func_external_names(func_tree)
-    globals = {
+    external_references = func_external_names(tree.body[0])
+    function_globals = {
         name: value
         for name, value in func.__globals__.items()
         if name in external_references
-        and not inspect.isbuiltin(name)
+        and not inspect.ismodule(value)
+    }
+    module_infos = {
+        name: value.__name__
+        for name, value in func.__globals__.items()
+        if name in external_references
+        and inspect.ismodule(value)
     }
 
     return FunctionInfo(
-        ast=func_tree,
+        src=src,
+        ast=tree,
         name=func.__name__,
         defaults=func.__defaults__,
-        globals=globals,
+        globals=function_globals,
+        module_infos=module_infos,
         module=func.__module__,
     )
 
@@ -82,10 +91,12 @@ def describe(func):
 FunctionInfo = namedtuple(
     'FunctionInfo',
     [
+        'src',
         'ast',
         'name',
         'defaults',
         'globals',
+        'module_infos',
         'module',
     ]
 )
@@ -96,10 +107,33 @@ FunctionInfo = namedtuple(
 #
 
 
-def function_ast(func):
+def function_source(func):
     source = inspect.getsource(func)
     dedent = textwrap.dedent(source)
-    return ast.parse(dedent)
+    return dedent
+
+
+def function_ast(func):
+    src = function_source(func)
+    return ast.parse(src)
+
+
+def strip_decorators(tree):
+    fdef = tree.body[0]
+    new = ast.Module(
+        type_ignores=tree.type_ignores,
+        body=[
+            ast.FunctionDef(
+                name=fdef.name,
+                args=fdef.args,
+                body=fdef.body,
+                decorator_list=[],
+                returns=fdef.returns,
+                type_comment=fdef.type_comment,
+            )
+        ]
+    )
+    return ast.fix_missing_locations(new)
 
 
 def separate_constants_ast(stmts: [ast.AST]):
@@ -237,6 +271,13 @@ def stmt_external_names(stmt):
     return external_names(stmt)
 
 
+def fdef_external_names(fdef):
+    found = frozenset()
+    for expr in fdef.decorator_list:
+        found |= stmt_external_names(expr)
+    return found
+
+
 def body_external_names(stmts, locals=frozenset()):
     local = set(locals)
     names = set()
@@ -255,7 +296,9 @@ def func_external_names(fdef):
     body, constants = separate_constants_ast(fdef.body)
     sorted_constants, _ = sort_constants_ast(constants)
     stmts = list(chain(sorted_constants, body))
-    return body_external_names(stmts, locals=locals)
+    return ( fdef_external_names(fdef)
+           | body_external_names(stmts, locals=locals)
+           )
 
 
 def argnames(fdef):

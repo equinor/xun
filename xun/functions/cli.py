@@ -96,7 +96,7 @@ def interpret_call(call_string):
         ],
     ))
 
-    code = compile(module, '<string>', 'exec')
+    code = compile(module, '<ast>', 'exec')
 
     scope = {}
     exec(code, scope)

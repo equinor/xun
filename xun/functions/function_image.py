@@ -7,34 +7,93 @@ from typing import Dict
 from typing import List
 import ast
 import copy
+import pickle
 
 
 class Function:
-    def __init__(self, tree, name, globals, defaults, module):
+    def __init__(self,
+                 tree,
+                 name,
+                 defaults,
+                 globals,
+                 module_infos,
+                 module,
+                 callable=True):
         self.tree = tree
         self.name = name
-        self.globals = globals
         self.defaults = defaults
+        self.globals = globals
+        self.module_infos = module_infos
         self.module = module
+        self.callable = callable
+        self._func = None
+
+        if self.globals is None:
+            raise Exception(str(self.__dict__))
+
+    @staticmethod
+    def from_function(func, callable=True):
+        desc = describe(func)
+        return Function.from_description(desc, callable=callable)
+
+    @staticmethod
+    def from_description(desc, callable=True):
+        return Function(
+            desc.ast,
+            desc.name,
+            desc.defaults,
+            desc.globals,
+            desc.module_infos,
+            desc.module,
+            callable=callable,
+        )
 
     def compile(self):
-        function_code = compile(self.tree, '<string>', 'exec')
+        function_code = compile(self.tree, '<ast>', 'exec')
 
-        namespace = {}
+        namespace = {
+            '__builtins__': __builtins__,
+            **self.globals,
+            **{
+                alias: importlib.import_module(name)
+                for alias, name in self.module_infos
+            },
+        }
         exec(function_code, namespace)
         f = namespace[self.name]
 
-        function_globals = {
-            '__builtins__': __builtins__,
-            **self.globals,
-        }
-
         return overwrite_globals(
             f,
-            function_globals,
+            f.__globals__,
             defaults=self.defaults,
             module=self.module,
         )
+
+    def __call__(self, *args, **kwargs):
+        if self._func is None:
+            self._func = self.compile()
+        return self._func(*args, **kwargs)
+
+    def __getstate__(self):
+        return (
+            self.tree,
+            self.name,
+            self.defaults,
+            self.globals,
+            self.module_infos,
+            self.module,
+            self.callable,
+        )
+
+    def __setstate__(self, state):
+        self.tree = state[0]
+        self.name = state[1]
+        self.defaults = state[2]
+        self.globals = state[3]
+        self.module_infos = state[4]
+        self.module = state[5]
+        self.callable = state[6]
+        self._func = None
 
 
 class FunctionImage:
@@ -50,7 +109,7 @@ class FunctionImage:
             else describe(func_or_desc)
         )
         self.deleted = deleted
-        self.ast = copy.deepcopy(self.desc.ast.body)
+        self.ast = copy.deepcopy(self.desc.ast)
         self.lock = True
 
     def __setattr__(self, name, value):
@@ -67,7 +126,7 @@ class FunctionImage:
         return transformation(copy.deepcopy(self), *args, **kwargs)
 
     def assemble(self, *nodes):
-        args = self.desc.ast.args
+        args = self.desc.ast.body[0].args
 
         body = list(chain(*nodes))
 
@@ -83,13 +142,19 @@ class FunctionImage:
             ],
         ))
 
-        return Function(
+        f = Function(
             fdef,
             self.desc.name,
-            self.desc.globals,
             self.desc.defaults,
-            self.desc.module
+            self.desc.globals,
+            self.desc.module_infos,
+            self.desc.module,
         )
+
+        pickled = pickle.dumps(f)
+        return pickle.loads(pickled)
+
+        return f
 
     def update(self, deleted: List[str], new: Dict[str, Any], new_desc=None):
         for key in new.keys():
@@ -112,3 +177,7 @@ class FunctionImage:
         )
 
         return f
+
+
+def make_shared(func):
+    return Function.from_function(func)

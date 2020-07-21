@@ -7,9 +7,14 @@ some_ctx = xun.context(
 )
 
 
+@xun.make_shared
+def capitalize(msg):
+    return msg[0].upper() + msg[1:]
+
+
 @some_ctx.function()
 def hello():
-    return 'hello'
+    return capitalize('hello')
 
 
 @some_ctx.function()

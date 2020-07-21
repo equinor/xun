@@ -12,7 +12,7 @@ import ast
 #
 
 def separate_constants(func: FunctionImage):
-    body, constants = separate_constants_ast(func.ast)
+    body, constants = separate_constants_ast(func.ast.body[0].body)
     return func.update(['ast'], {'body': body, 'constants': constants})
 
 

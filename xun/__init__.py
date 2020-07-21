@@ -10,6 +10,7 @@ from .core import SchemaError
 from .core import args_hash
 from .core import filename_from_args
 from .functions import context
+from .functions import make_shared
 from .memoized import memoized
 
 

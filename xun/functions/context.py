@@ -1,4 +1,5 @@
-from .function_image import FunctionImage
+from .function_image import Function
+from .functions import describe
 from .program import Compiler
 from collections import namedtuple
 
@@ -25,18 +26,10 @@ class context:
 
     def function(ctx, max_parallel=None):
         def function_decorator(func):
-            ctx.register(func.__name__, FunctionImage(func))
-            return func
+            desc = describe(func)
+            ctx.register(func.__name__, desc)
+            return Function.from_description(desc, callable=False)
         return function_decorator
 
-    def register(ctx, name, func):
-        ctx.functions[name] = ContextEntry(name=name, func=func)
-
-
-ContextEntry = namedtuple(
-    'ContextEntry',
-    [
-        'name',
-        'func',
-    ]
-)
+    def register(ctx, name, desc):
+        ctx.functions[name] = desc

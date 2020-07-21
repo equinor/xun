@@ -109,28 +109,3 @@ def test_with_constants_no_side_effects():
     # has_side_effect adds 42 to the new L[0] inside has_side_effect
     # L[0] should be 7 inside has_side_effect
     assert g() == 1 + 42 + 7
-
-
-def test_function_image_apply_does_not_affect_original():
-    context = xun.context(
-        xun.functions.driver.Sequential(),
-        xun.functions.store.Memory(),
-    )
-
-
-    @context.function()
-    def mksample(i, step_size):
-        return i / step_size
-
-
-    @context.function()
-    def deg_to_rad(deg):
-        return radians(deg)
-
-
-    @context.function()
-    def sample_sin(offset, sample_count, step_size):
-        return [sin(s) + offset for s in radians]
-        with ...:
-            samples = [mksample(i, step_size) for i in range(sample_count)]
-            radians = [deg_to_rad(s) for s in samples]

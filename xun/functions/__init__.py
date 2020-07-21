@@ -1,6 +1,7 @@
 from .context import context
 from .function_image import Function
 from .function_image import FunctionImage
+from .function_image import make_shared
 from .functions import ContextError
 from .functions import CopyError
 from .functions import FunctionError
@@ -10,6 +11,7 @@ from .functions import argnames
 from .functions import describe
 from .functions import func_external_names
 from .functions import function_ast
+from .functions import function_source
 from .functions import overwrite_globals
 from .functions import stmt_dag
 from .program import CallNode
@@ -26,3 +28,4 @@ from .transformations import sort_constants
 from . import cli
 from . import driver
 from . import store
+from . import module

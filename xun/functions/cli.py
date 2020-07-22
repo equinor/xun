@@ -7,6 +7,9 @@ import xun
 
 
 def xun_graph(args):
+    """
+    CLI entrypoint for ``xun graph`` command
+    """
     import matplotlib.pyplot as plt
 
     call = interpret_call(args.call_string)
@@ -23,11 +26,29 @@ def xun_graph(args):
 
 
 def xun_exec(args):
+    """
+    CLI entrypoint for ``xun graph`` command
+    """
     call = interpret_call(args.call_string)
     script = Script(args.program)
     script.exec(call)
 
 class Script:
+    """Script
+
+    Attributes
+    ----------
+    module : module
+        The context module to be executed
+    context : xun.context
+        The context to be executed
+
+    Methods
+    -------
+    exec(call)
+        Build and run program with the provided call from the context
+
+    """
     def __init__(self, path):
         self.module = load_module(path)
         self.context = identify_context(self.module)
@@ -42,6 +63,20 @@ class Script:
 
 
 def load_module(path):
+    """Load Module
+
+    Load and return module
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Path to the python file to load
+
+    Returns
+    -------
+    module
+        The loaded module
+    """
     path = Path(path).resolve()
     spec = importlib.util.spec_from_file_location('_xun_script_module', path)
     module = importlib.util.module_from_spec(spec)
@@ -50,6 +85,20 @@ def load_module(path):
 
 
 def identify_context(module):
+    """Identify context
+
+    Given a module, extract the context object from it
+
+    Parameters
+    ----------
+    module : module
+        xun project module
+
+    Returns
+    -------
+    xun.context
+        The context specified in the module
+    """
     found = inspect.getmembers(module, lambda m: isinstance(m, xun.context))
     if len(found) == 0:
         raise xun.function.ContextError('No context found')
@@ -59,6 +108,28 @@ def identify_context(module):
 
 
 def interpret_call(call_string):
+    """Interpret call
+
+    Given a call string, return a call node representing the call
+
+    Parameters
+    ----------
+    call_string : str
+        The call string in python syntax
+
+    Returns
+    -------
+    xun.functions.CallNode
+        Call node representing the call
+
+    Examples
+    --------
+
+    >>> call_string = 'some_function(1, 2, kw=3)'
+    >>> interpret_call(call_string)
+    CallNode<some_function(1, 2, kw=3)>
+
+    """
     tree = ast.parse(call_string)
     if not len(tree.body) == 1:
         raise SyntaxError('More than one statement in call string')

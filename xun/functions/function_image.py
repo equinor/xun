@@ -7,6 +7,7 @@ from typing import Dict
 from typing import List
 import ast
 import copy
+import importlib
 import pickle
 
 
@@ -56,7 +57,7 @@ class Function:
             **self.globals,
             **{
                 alias: importlib.import_module(name)
-                for alias, name in self.module_infos
+                for alias, name in self.module_infos.items()
             },
         }
         exec(function_code, namespace)

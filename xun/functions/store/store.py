@@ -8,13 +8,6 @@ import functools
 import pickle
 
 
-def patch(attrib_dict):
-    def patch_internal(func):
-        if func.__name__ in attrib_dict:
-            attrib_dict[func.__name__] = func
-    return patch_internal
-
-
 class StoreMeta(ABCMeta):
     def __new__(cls, name, bases, attrib_dict):
         bases += (MutableMapping,)

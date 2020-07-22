@@ -49,6 +49,20 @@ def overwrite_globals(func, globals, defaults=None, module=None):
 
 
 def describe(func):
+    """ Describe function
+
+    .. note:: Any function decorators will be removed
+
+    Parameters
+    ----------
+    func : function
+        Function to describe
+
+    Returns
+    -------
+    FunctionInfo
+        Description of the given function
+    """
     src = function_source(func)
     tree = function_ast(func)
 
@@ -108,17 +122,50 @@ FunctionInfo = namedtuple(
 
 
 def function_source(func):
+    """Function Source
+
+    Get the source code of a function. Cannot be done on dynamically generated
+    functions.
+
+    Returns
+    -------
+    str
+        Function source code
+    """
     source = inspect.getsource(func)
     dedent = textwrap.dedent(source)
     return dedent
 
 
 def function_ast(func):
+    """Function AST
+
+    Get an abstract syntax tree of a function
+
+    Returns
+    -------
+    ast.Module
+        Abstract syntax tree of the function
+    """
     src = function_source(func)
     return ast.parse(src)
 
 
 def strip_decorators(tree):
+    """Strip decorators
+
+    Strip any decorators from a function ast
+
+    Parameters
+    ----------
+    tree : ast.Module
+        Function AST
+
+    Returns
+    -------
+    ast.Module
+        Function AST without decorators
+    """
     fdef = tree.body[0]
     new = ast.Module(
         type_ignores=tree.type_ignores,
@@ -137,6 +184,22 @@ def strip_decorators(tree):
 
 
 def separate_constants_ast(stmts: [ast.AST]):
+    """Separate constants from ast statements
+
+    Given a list of statements, separate them into statements directly defined
+    in the function body, and statements defined in a 'with constants'
+    statement.
+
+    Parameters
+    ----------
+    stmts : list of ast.AST
+        statements to separate
+
+    Returns
+    -------
+    tuple of lists of statements
+        (body, constants)
+    """
     ast_it0, ast_it1 = tee(stmts)
     body = [stmt for stmt in ast_it0 if not is_with_constants(stmt)]
     with_constants = [stmt for stmt in ast_it1 if is_with_constants(stmt)]
@@ -154,6 +217,25 @@ def separate_constants_ast(stmts: [ast.AST]):
 
 
 def sort_constants_ast(stmts: [ast.AST]):
+    """Sort with constants statements
+
+    The with constants statement grammar lets you write statements in arbitrary
+    order. To make this runnable python code, a sorting that allows sequential
+    execution need to be found. This is done by constructina a statement
+    dependency graph, which is required to be a directed acyclic graph, and
+    computing a topological sort.
+
+    Parameters
+    ----------
+    stmts : list of statements
+        The statements to be sorted
+
+    Returns
+    -------
+    list of ast.AST, nx.DiGraph
+        The sorted statements and the statement dependency graph
+
+    """
     constant_graph = stmt_dag(stmts)
     sorted_constants = [
         node for node in nx.topological_sort(constant_graph)
@@ -271,7 +353,22 @@ def stmt_external_names(stmt):
     return external_names(stmt)
 
 
-def fdef_external_names(fdef):
+def fdef_decorator_external_names(fdef):
+    """FunctionDef external names
+
+    Function definitions may depend on external names from their decorators.
+    Returns any referenced external names
+
+    Parameters
+    ----------
+    fdef : ast.FunctionDef
+        The function definition AST
+
+    Returns
+    -------
+    frozenset of str
+        Referenced external names
+    """
     found = frozenset()
     for expr in fdef.decorator_list:
         found |= stmt_external_names(expr)
@@ -279,6 +376,23 @@ def fdef_external_names(fdef):
 
 
 def body_external_names(stmts, locals=frozenset()):
+    """Body external names
+
+    Given a list of statements, returns any referenced name not created by
+    previous statements, or in locals
+
+    Parameters
+    ----------
+    stmts : list of statements
+        body
+    locals : frozenset of str
+        Any locally defined names, usually used in recursive calls
+
+    Returns
+    -------
+    frozenset of str
+        The externally referenced names
+    """
     local = set(locals)
     names = set()
 
@@ -292,16 +406,44 @@ def body_external_names(stmts, locals=frozenset()):
 
 
 def func_external_names(fdef):
+    """Function external names
+
+    given a function definition ast, return all externally referenced names.
+
+    Parameters
+    ----------
+    fdef : ast.FunctionDef
+        The function definition AST
+
+    Returns
+    -------
+    frozenset of str
+        The externally referenced names
+    """
     locals = argnames(fdef)
     body, constants = separate_constants_ast(fdef.body)
     sorted_constants, _ = sort_constants_ast(constants)
     stmts = list(chain(sorted_constants, body))
-    return ( fdef_external_names(fdef)
+    return ( fdef_decorator_external_names(fdef)
            | body_external_names(stmts, locals=locals)
            )
 
 
 def argnames(fdef):
+    """FunctionDef argument names
+
+    Given a function definition ast, return the names of all it's arguments
+
+    Parameters
+    ----------
+    fdef : ast.FunctionDef
+        The function definition AST
+
+    Returns
+    -------
+    frozenset of str
+        argument names
+    """
     args = frozenset()
     args |= frozenset(a.arg for a in fdef.args.posonlyargs)
     args |= frozenset(a.arg for a in fdef.args.args)
@@ -320,6 +462,13 @@ def argnames(fdef):
 
 
 def check_with_constants(node):
+    """Check with constants
+
+    Raises
+    ------
+    ValueError
+        If the node is not a valid with constants statement
+    """
     if not is_with_constants(node):
         msg = 'Not an with constants statement: {}'
         raise ValueError(msg.format(node))
@@ -333,6 +482,13 @@ def check_with_constants(node):
 
 
 def is_with_constants(node):
+    """Is with constants statement
+
+    Returns
+    -------
+    bool
+        Whether or not the node is a with constants statement
+    """
     if not isinstance(node, ast.With):
         return False
     try:
@@ -351,6 +507,14 @@ def is_with_constants(node):
 
 
 def is_assignments_and_expressions(node):
+    """Is assignments and expressions
+
+    Returns
+    -------
+    bool
+        Whether or not the node's body contains exclusively assignment and
+        expression statements
+    """
     return all(
         isinstance(node, ast.Assign)
         or isinstance(node, ast.Expression)
@@ -359,6 +523,13 @@ def is_assignments_and_expressions(node):
 
 
 def no_reassignments(node):
+    """No re-assignments
+
+    Returns
+    -------
+    bool
+        Whether or not the node never re-assigns a name
+    """
     names = chain(*[
         target_names(assign.targets)
         for assign in node.body

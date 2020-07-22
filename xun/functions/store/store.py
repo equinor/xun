@@ -9,6 +9,15 @@ import pickle
 
 
 class StoreMeta(ABCMeta):
+    """StoreMeta
+
+    Metaclass for stores. Adds immutability and permanent deletion. Any class
+    using this as metaclass will have to satisfy the interface of
+    `collections.abc.MutableMapping`.
+
+    Subject to change
+
+    """
     def __new__(cls, name, bases, attrib_dict):
         bases += (MutableMapping,)
 

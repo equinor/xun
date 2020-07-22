@@ -4,25 +4,26 @@ import networkx as nx
 
 
 class Sequential(Driver):
-    def load_from_store(self, program, sentinel):
+    def load_sentinel_value(self, program, sentinel):
         return program.store[sentinel.call]
 
-    def run_and_store(self, program, call):
-        func = program[call.function_name]
+    def replace_sentinels(self, call):
         args = [
-            self.load_from_store(program, arg)
+            self.load_sentinel_value(program, arg)
             if isinstance(arg, SentinelNode) else arg
             for arg in call.args
         ]
         kwargs = {
-            key: self.load_from_store(program, value)
+            key: self.load_sentinel_value(program, value)
             if isinstance(value, SentinelNode) else value
             for key, value in call.kwargs.items()
         }
+        return CallNode(call.function_name, *args, **kwargs)
 
-        result = func(*args, **kwargs)
-
-        program.store[CallNode(call.function_name, *args, **kwargs)] = result
+    def run_and_store(self, program, call):
+        func = program[call.function_name]
+        result = func(*call.args, **call.kwargs)
+        program.store[call] = result
 
     def exec(self, program):
         assert nx.is_directed_acyclic_graph(program.graph)
@@ -32,6 +33,11 @@ class Sequential(Driver):
         for task in schedule:
             if not isinstance(task, CallNode):
                 continue
-            self.run_and_store(program, task)
+
+            call = self.replace_sentinels(task)
+            if call in program.store:
+                continue
+
+            self.run_and_store(program, call)
 
         return program.store[program.entry_call]

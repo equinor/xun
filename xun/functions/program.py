@@ -1,3 +1,4 @@
+from ..memoized import memoized
 from . import transformations
 from .function_image import FunctionImage
 from .functions import NotDAGError
@@ -290,6 +291,38 @@ class TargetNameNode:
         return TargetNode(self.target_name, owner)
 
 
+@memoized
+def compile_function_graph_builder(context, function_name):
+    """Compile a function graph builder
+
+    Make a graph builder from a context function, results are memoized
+
+    Parameters
+    ----------
+    context : xun.context
+        The context owning the function
+    function_name : str
+        The name of the context function to compile
+
+    Returns
+    -------
+    function
+        A function that returns a sub-dag for the original function
+    """
+    def skip_xun_functions(node):
+        return isinstance(node.func, ast.Name) and node.func.id in context
+
+    decomposed = (FunctionImage(context[function_name])
+        .apply(transformations.separate_constants)
+        .apply(transformations.sort_constants)
+        .apply(transformations.copy_only_constants,
+               ignore_predicate=skip_xun_functions)
+        .apply(transformations.build_xun_graph, context)
+    )
+
+    return decomposed.assemble(decomposed.xun_graph).compile()
+
+
 def build_function_graph(context, call):
     """Build Function Graph
 
@@ -308,18 +341,7 @@ def build_function_graph(context, call):
     nx.DiGraph, tuple of CallNode
         the internal dependency graph and calls this call depend on
     """
-    def skip_xun_functions(node):
-        return isinstance(node.func, ast.Name) and node.func.id in context
-
-    decomposed = (FunctionImage(context[call.function_name])
-        .apply(transformations.separate_constants)
-        .apply(transformations.sort_constants)
-        .apply(transformations.copy_only_constants,
-               ignore_predicate=skip_xun_functions)
-        .apply(transformations.build_xun_graph, context)
-    )
-
-    graph_builder = decomposed.assemble(decomposed.xun_graph).compile()
+    graph_builder = compile_function_graph_builder(context, call.function_name)
     graph = graph_builder(*call.args, **call.kwargs)
 
     # The compiled functions does not know it self, so it cannot return
@@ -376,10 +398,10 @@ def build_call_graph(context, call):
     while not q.empty():
         call = q.get()
 
-        assert isinstance(call, CallNode)
-
         if call in visited:
             continue
+
+        visited.add(call)
 
         func_graph, dependencies = build_function_graph(context, call)
 

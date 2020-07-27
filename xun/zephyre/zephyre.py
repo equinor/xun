@@ -27,5 +27,5 @@ def main(args):
 @memoized
 def schema():
     schema_str = pkg_resources.resource_string('xun', 'zephyre/zephyre.avsc')
-    schema_dict = json.loads(schema_str)
+    schema_dict = json.loads(schema_str.decode('utf-8'))
     return schema_dict

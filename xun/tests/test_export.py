@@ -62,10 +62,8 @@ def test_export(tmpwd):
         '-o', 'out.avro'])
     set_xun_sima_root_args.func(set_xun_sima_root_args)
 
-    print(ref_path)
-
     test_data = {}
-    with open(ref_path, 'rb') as db:
+    with open(str(ref_path), 'rb') as db:
         td = struct.unpack('i24fi', db.read())
         test_data = dict(('col_{}'.format(i), v) for (i,v) in enumerate(td))
 

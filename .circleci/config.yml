@@ -1,0 +1,99 @@
+version: 2.1
+
+commands:
+  install_build_deps:
+    steps:
+      - run:
+          name: Install cmake, gcc, python3, git
+          command: |
+            sudo apt-get update
+            sudo apt-get install \
+            -y cmake g++ python3 python3-pip git 
+    
+  instal_python_deps:
+    steps:
+      - checkout
+      - install_build_deps
+      - run:
+          name: Install python dependencies
+          command: |
+            python -m pip install --user -r requirements.txt
+            python -m pip install --user -r requirements-dev.txt
+            python -m pip install --user flake8
+
+            # Temporary solution until new camille distribution
+            python -m pip install --user scikit-build
+            python -m pip install --user pybind11
+            python -m pip install --user git+https://github.com/equinor/camille.git
+
+  flake8_req_check:
+    steps:
+      - run:
+          name: Check code errors (pyflakes)
+          command: flake8 --ignore=E --per-file-ignores="__init__.py:F401" .
+
+  flake8_opt_check:
+    steps:
+      - run:
+          name: Check formatting rules (PEP8)
+          command: git diff HEAD^ | flake8 --diff --per-file-ignores="__init__.py:F401"
+
+  python_build_test:
+    steps:
+      - run:
+          name: build python
+          command: python setup.py build_ext --inplace install --user test
+
+
+jobs:
+  python-check:
+    parameters:
+      version:
+        type: string
+        default: "3.6"
+      formatting:
+        type: boolean
+        default: false
+    docker:
+      - image: "circleci/python:<< parameters.version >>"
+    steps:
+      - instal_python_deps
+      - when:
+          condition: << parameters.formatting >>
+          steps:
+            - flake8_opt_check
+      - unless:
+          condition:  << parameters.formatting >>
+          steps:
+            - flake8_req_check
+            - python_build_test
+
+
+workflows:
+  version: 2
+
+  required:
+    jobs:
+      - python-check:
+          name: Python 3.5 code error and test check
+          version: "3.5"
+          formatting: false
+      - python-check:
+          name: Python 3.6 code error and test check
+          version: "3.6"
+          formatting: false
+      - python-check:
+          name: Python 3.7 code error and test check
+          version: "3.7"
+          formatting: false
+      - python-check:
+          name: Python 3.8 code error and test check
+          version: "3.8"
+          formatting: false
+  
+  optional:
+    jobs:
+      - python-check:
+          name: Python formatting check
+          version: "3.8"
+          formatting: true

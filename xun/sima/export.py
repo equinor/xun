@@ -4,8 +4,6 @@ from pathlib import Path
 import struct
 import fastavro
 import re
-import json
-import logging
 
 
 char_to_word = {

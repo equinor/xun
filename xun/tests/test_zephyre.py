@@ -1,17 +1,14 @@
 from .helpers import capture_stdout
-from .helpers import tmpwd
 from camille.util import utcdate
-from pathlib import Path
-from pkg_resources import resource_stream
 from unittest.mock import patch
 from xun import cli
 from xun import filename_from_args
 from xun.zephyre import schema as load_schema
 import datetime
 import fastavro
-import hashlib
+import requests
 import json
-import pytest  # noqa: F401
+import pytest
 
 
 schema = load_schema()
@@ -97,7 +94,7 @@ def test_zephyre_out_schema():
     argv = ['zephyre', '--out-schema']
 
     with capture_stdout() as stdout, pytest.raises(SystemExit) as exit:
-        args = cli.parser.parse_args(argv)
+        cli.parser.parse_args(argv)
 
     assert exit.value.code == 0
 

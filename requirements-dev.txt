@@ -1,6 +1,8 @@
-setuptools >=28
-setuptools_scm
+astor
+astunparse
+pyshd
 pytest
 pytest-runner
-pyshd
+setuptools >=28
+setuptools_scm
 sphinx

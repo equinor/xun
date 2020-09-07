@@ -65,8 +65,8 @@ jobs:
       - unless:
           condition:  << parameters.formatting >>
           steps:
-            - flake8_req_check
             - python_build_test
+            - flake8_req_check
 
 
 workflows:

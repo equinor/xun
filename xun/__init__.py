@@ -9,20 +9,14 @@ from .core import ExportError
 from .core import SchemaError
 from .core import args_hash
 from .core import filename_from_args
+from .functions import Function
+from .functions import function
+from .functions import describe
+from .functions import function_ast
+from .functions import function_source
+from .functions import make_shared
 from .memoized import memoized
 
 
 from . import sima
 from . import zephyre
-
-
-__all__ = [
-    'sima',
-    'zephyre',
-
-    'ExportError',
-    'SchemaError',
-    'args_hash',
-    'filename_from_args',
-    'memoized',
-]

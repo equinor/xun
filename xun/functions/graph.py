@@ -5,10 +5,10 @@ from .errors import NotDAGError
 
 def sink_nodes(dag):
     """
-    Given a directed acyclic graph, return a list of it's sink nodes.
+    Given a directed acyclic graph, return a list of its sink nodes.
     """
-    if __debug__ and not nx.is_directed_acyclic_graph(dag):
-        raise NotDAGError('dag must be directed acyclic graph')
+    if not nx.is_directed_acyclic_graph(dag):
+        raise NotDAGError
     return [n for n, out_degree in dag.out_degree() if out_degree == 0]
 
 
@@ -16,8 +16,8 @@ def source_nodes(dag):
     """
     Given a directed acyclic graph, return a list of it's sink nodes.
     """
-    if __debug__ and not nx.is_directed_acyclic_graph(dag):
-        raise NotDAGError('dag must be directed acyclic graph')
+    if not nx.is_directed_acyclic_graph(dag):
+        raise NotDAGError
     return [n for n, in_degree in dag.in_degree() if in_degree == 0]
 
 
@@ -69,9 +69,10 @@ class CallNode:
         return 'CallNode<{}({})>'.format(self.function_name, ', '.join(args))
 
 
-class SentinelNode:
-    """SentinelNode
+class FutureValueNode:
+    """FutureValueNode
 
+    UPDATE
     This node serves two purposes, they are used as sentinel nodes representing
     future values in the call graph. And are used as guards when building the
     call graph. When the call graph is built, the functions doing the building
@@ -79,8 +80,9 @@ class SentinelNode:
     functions. This makes let's us use the sentinel nodes directly in the
     function dependency graph.
 
-    Another use is that because sentinel nodes are not copyable, and arguments
-    and results to and from call to functions outside the context are copied,
+    TODO This must be updated:
+    Another use is that because FutureValueNode are not copyable, and arguments
+    and results to and from calls to functions outside the context are copied,
     they cannot be used for anything other than as arguments to other context
     functions. This guards against attempted changes to future values, something
     that is of course impossible.
@@ -88,7 +90,7 @@ class SentinelNode:
     Attributes
     ----------
     call : CallNode
-        The CallNode whos result this Node represents
+        The CallNode whose result this Node represents
     """
     def __init__(self, call):
         self.call = call
@@ -109,7 +111,7 @@ class SentinelNode:
         return hash(self.call)
 
     def __repr__(self):
-        return 'SentinelNode<{}>'.format(self.call)
+        return 'FutureValueNode<{}>'.format(self.call)
 
 
 class TargetNode:
@@ -132,6 +134,7 @@ class TargetNode:
 
     G
     |
+    v
     * sentinel_node1
     |
     * CallNode<some_context_function(sentinel_node1)>
@@ -144,6 +147,7 @@ class TargetNode:
     |
     | G
     | |
+    | v
     | * sentinel_node2
     | |
     | * CallNode<some_other_context_function(sentinel_node2)
@@ -152,7 +156,11 @@ class TargetNode:
     |/
     * call_node
     |
+    v
     G
+
+    The graph execution is top to bottom, that is, in order to call call_node,
+    target2 and target3 must be completed.
 
 
     Attributes
@@ -179,11 +187,11 @@ class TargetNode:
         return 'TargetNode(name={}, owner={})'.format(self.name, self.owner)
 
 
-class TargetNameNode:
-    """TargetNameNode
+class TargetNameOnlyNode:
+    """TargetNameOnlyNode
 
     Temporary target node used before it is converted to a TargetNode. This
-    node is only aware of it's name, but not of it's owner
+    node is only aware of its name, but not of its owner
 
     Attributes
     ----------
@@ -207,7 +215,7 @@ class TargetNameNode:
         return hash(self.target_name)
 
     def __repr__(self):
-        return 'TargetNameNode(target_name={})'.format(self.target_name)
+        return 'TargetNameOnlyNode(target_name={})'.format(self.target_name)
 
     def to_target_node(self, owner):
         """To target node
@@ -222,6 +230,6 @@ class TargetNameNode:
         Returns
         -------
         TargetNode
-            The full TargetNode this TargetNameNode should become
+            The full TargetNode this TargetNameOnlyNode should become
         """
         return TargetNode(self.target_name, owner)

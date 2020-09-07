@@ -1,21 +1,20 @@
 from .function_description import describe
-from .util import overwrite_globals
 import importlib
 
 
 class FunctionImage:
     """FunctionImage
 
-    Python functions are only pickleable if they are top-level defined in module
-    installed on the serializing and deserializing systems. This is a
+    Python functions are only picklable if they are top-level defined in module
+    installed on the serializing and deserializing systems. A FunctionImage is a
     representation of functions that can be pickled and unpickled even if the
-    function is not known to the deserializing system, or even the serializing
-    system.
+    function does not originally exist on the deserializing system, or even the
+    serializing system.
 
-    FunctionImage object are how functions are communicated and stored in xun
-    projects. If a context function calls an external function not installed on
-    the system, they need to be represented as a FunctionImage object, to do
-    this, the xun.make_shared function decorator can be used.
+    FunctionImage objects are how functions are communicated and stored in xun
+    projects. If a FunctionImage refers to a function that isn't installed, that
+    function should also be represented as a FunctionImage. This can be achieved
+    using the `xun.make_shared` function decorator.
 
     Attributes
     ----------
@@ -23,17 +22,12 @@ class FunctionImage:
         The syntax tree of the function
     name : str
         FunctionImage name
-    defaults
-        The original function's default arguments values
     globals : dict
         The original function's globals filtered so that this object can be
         pickled.
-    module_infos : dict
-        mapping external_names used by the function that reference modules. The
-        dict keys are the names used by the function, while the values are
+    referenced_modules : dict
+        The dict keys are the names used by the function, while the values are
         actual module names.
-    module : str
-        Name of the module that this function lives in
     _func : function
         Cached compiled function. _func is not pickled.
 
@@ -67,16 +61,12 @@ class FunctionImage:
     def __init__(self,
                  tree,
                  name,
-                 defaults,
                  globals,
-                 module_infos,
-                 module):
+                 referenced_modules):
         self.tree = tree
         self.name = name
-        self.defaults = defaults
         self.globals = globals
-        self.module_infos = module_infos
-        self.module = module
+        self.referenced_modules = referenced_modules
         self._func = None
 
     @staticmethod
@@ -121,10 +111,8 @@ class FunctionImage:
         return FunctionImage(
             desc.ast,
             desc.name,
-            desc.defaults,
             desc.globals,
-            desc.module_infos,
-            desc.module,
+            desc.referenced_modules,
         )
 
     def compile(self):
@@ -143,19 +131,14 @@ class FunctionImage:
             '__builtins__': __builtins__,
             **self.globals,
             **{
-                alias: importlib.import_module(name)
-                for alias, name in self.module_infos.items()
+                m.asname: importlib.import_module(m.module)
+                for m in self.referenced_modules
             },
         }
         exec(function_code, namespace)
         f = namespace[self.name]
 
-        return overwrite_globals(
-            f,
-            f.__globals__,
-            defaults=self.defaults,
-            module=self.module,
-        )
+        return f
 
     def __call__(self, *args, **kwargs):
         """
@@ -174,10 +157,8 @@ class FunctionImage:
         return (
             self.tree,
             self.name,
-            self.defaults,
             self.globals,
-            self.module_infos,
-            self.module,
+            self.referenced_modules,
         )
 
     def __setstate__(self, state):
@@ -187,10 +168,8 @@ class FunctionImage:
         """
         self.tree = state[0]
         self.name = state[1]
-        self.defaults = state[2]
-        self.globals = state[3]
-        self.module_infos = state[4]
-        self.module = state[5]
+        self.globals = state[2]
+        self.referenced_modules = state[3]
         self._func = None
 
 

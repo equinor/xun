@@ -2,6 +2,11 @@
 import xun
 
 
+"""
+TODO, not good use, but! it works cause of automatic memoization
+"""
+
+
 @xun.function()
 def fibonacci_number(n):
     return f_n_1 + f_n_2

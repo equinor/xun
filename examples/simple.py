@@ -6,6 +6,7 @@ import xun
 v = 3
 
 
+@xun.make_shared
 def add(a, b):
     return a + b
 

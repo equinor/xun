@@ -5,7 +5,7 @@ from .util import function_ast
 from .util import separate_constants_ast
 from .util import sort_constants_ast
 from .util import stmt_external_names
-from .util import stmt_targets
+from .util import stmt_introduced_names
 from itertools import chain
 from typing import Any
 from typing import Dict
@@ -14,6 +14,19 @@ import ast
 import copy
 import pickle
 import types
+
+"""Transformations
+
+This module includes functionality for working with and manipulating function
+code. The FunctionDecomposition class provides a data structure to make managing
+code fragments easier, while the transformation functions are used to generate
+xun scheduling and execution code.
+
+The code is represented by and manipulated with the python ast module [1][2].
+
+.. [1] Python ast documentation: https://docs.python.org/3/library/ast.html
+.. [2] Greentreesnakes: https://greentreesnakes.readthedocs.io/en/latest/
+"""
 
 
 class FunctionDecomposition(types.SimpleNamespace):
@@ -151,10 +164,8 @@ class FunctionDecomposition(types.SimpleNamespace):
         f = FunctionImage(
             fdef,
             self.desc.name,
-            self.desc.defaults,
             self.desc.globals,
-            self.desc.module_infos,
-            self.desc.module,
+            self.desc.referenced_modules,
         )
 
         return f
@@ -230,33 +241,39 @@ def sort_constants(func: FunctionDecomposition):
 
 def copy_only_constants(
         func: FunctionDecomposition,
-        ignore_predicate=lambda _: False):
+        xun_function_names=frozenset(),
+    ):
     """Copy only constants
 
     Working on the FunctionDecomposition `sorted_constants`. Change any
     expression leaving the with constants statement through function calls to a
     copy of the expression. Change any expression entering as a result of a
     function to a copy of that expression. This ensures that any value inside
-    the with constants statement neven changes.
+    the with constants statement never changes, e.g. acts as if it is a value,
+    never a reference. This is necessary to ensure immutability in constant
+    fields, and is what is responsible for the constness of the fields. If a
+    function took a reference to a value instead of a copy, it could change the
+    value. This would result in us not being able to evaluate and know its value
+    when scheduling, since order is arbitrary.
 
     Calls to context functions will later be replaced by sentinel nodes, which
     are not copyable, and should therefore not be made copy only. Managing which
-    statments to skip is done through the ignore_predicate predicate.
+    statements to skip is done through the skip_if predicate.
 
     The `sorted_constants` attribute is replaced by `copy_only_constants`.
 
     Parameters
     ----------
     func : FunctionDecomposition
-    ignore_predicate : callable, optional
-        This predicate is made available because we do not was to alter any
+    skip_if : callable, optional
+        This predicate is made available because we do not want to alter any
         calls to context functions as these should not be copy only.
 
     Returns
     -------
     FunctionDecomposition
     """
-    def make_expr_deepcopy(expr):
+    def gen_deepcopy_expr(expr):
         deepcopy_id = ast.Name(id='deepcopy', ctx=ast.Load())
         return ast.Call(deepcopy_id, args=[expr], keywords=[])
 
@@ -264,16 +281,19 @@ def copy_only_constants(
         def visit_Call(self, node):
             node = self.generic_visit(node)
 
-            if ignore_predicate(node):
+            if not isinstance(node.func, ast.Name):
                 return node
 
-            args = [make_expr_deepcopy(arg) for arg in node.args]
+            if node.func.id in xun_function_names:
+                return node
+
+            args = [gen_deepcopy_expr(arg) for arg in node.args]
             keywords = [
-                ast.keyword(kw.arg, make_expr_deepcopy(kw.value))
+                ast.keyword(kw.arg, gen_deepcopy_expr(kw.value))
                 for kw in node.keywords
             ]
             new_call = ast.Call(func=node.func, args=args, keywords=keywords)
-            copy_result = make_expr_deepcopy(new_call)
+            copy_result = gen_deepcopy_expr(new_call)
             return copy_result
 
     transformer = CallArgumentCopyTransformer()
@@ -288,18 +308,21 @@ def copy_only_constants(
     return func.update(copy_only_constants=copy_only_constants)
 
 
-def build_xun_graph(func: FunctionDecomposition, dependencies):
+def build_xun_graph(
+        func: FunctionDecomposition,
+        xun_function_names=frozenset(),
+    ):
     """Build Xun Graph Transformation
 
-    This transformation will generated code from a FunctionDecomposition's
-    copy_only_constants such that any call to a context function is replaced by
-    an uncopyable SentinelNode and registered in a graph. The new code will
+    This transformation will generate code from a FunctionDecompositions
+    copy_only_constants such that any call to a xun function is replaced by an
+    uncopyable FutureValueNode and registered in a graph. The new code will
     return a dependency graph for the function assembled from the
     FunctionDecomposition.
 
     This version of the code is final and will be run during scheduling.
 
-    Attribute `copy_only_constants` is replaced by `xun_graph`.
+    Attribute `xun_graph` is introduced.
 
     Parameters
     ----------
@@ -313,46 +336,66 @@ def build_xun_graph(func: FunctionDecomposition, dependencies):
     """
 
     # The following code is never executed here, but is injected into the
-    # FunctionDecomposition body. (`xun_graph` attribute)
+    # FunctionDecomposition body. (`xun_graph` attribute). The injected code
+    # provides a graph, and a funtion _xun_register_future_value that is used
+    # to populate the graph.
     @function_ast
     def helper_code():
         from xun.functions import CallNode as _xun_CallNode
         from xun.functions import CopyError as _xun_CopyError
-        from xun.functions import TargetNameNode as _xun_TargetNameNode
-        from xun.functions import SentinelNode as _xun_SentinelNode
+        from xun.functions import TargetNameOnlyNode as _xun_TargetNameOnlyNode
+        from xun.functions import FutureValueNode as _xun_FutureValueNode
         import networkx as _xun_nx
 
         _xun_graph = _xun_nx.DiGraph()
 
-        def _xun_register_sentinel(fname,
-                                   external_names,
-                                   targets,
-                                   *args,
-                                   **kwargs):
+        def _xun_register_future_value(fname,
+                                       external_names,
+                                       targets,
+                                       *args,
+                                       **kwargs):
             dependencies = list(
                 filter(
                     lambda a: a in _xun_graph,
-                    map(_xun_TargetNameNode, external_names)
+                    map(_xun_TargetNameOnlyNode, external_names)
                 )
             )
-            outputs = [_xun_TargetNameNode(name) for name in targets]
+            outputs = [_xun_TargetNameOnlyNode(name) for name in targets]
             call = _xun_CallNode(fname, *args, **kwargs)
             _xun_graph.add_node(call)
             _xun_graph.add_edges_from((dep, call) for dep in dependencies)
             _xun_graph.add_edges_from((call, tar) for tar in outputs)
-            return _xun_SentinelNode(call)
+            return _xun_FutureValueNode(call)
+
     header = helper_code.body[0].body
 
     def str_list_to_ast(L):
-        literal = ast.List(
+        """str_list_to_ast
+
+        Given a list of strings, return an ast for a list of strings expression.
+
+        Parameters
+        ----------
+        L : list of strings
+
+        Returns
+        -------
+        ast.List
+            The list of strings as a list of strings expression
+        """
+        expr = ast.List(
             elts=[ast.Constant(el) for el in L],
             ctx=ast.Load(),
         )
-        return literal
+        return expr
 
     class XCall(ast.NodeTransformer):
+        """
+        Transformation any calls to a xun function to _xun_register_future_value
+        """
+
         def __init__(self, stmt):
-            self.targets = stmt_targets(stmt)
+            self.targets = stmt_introduced_names(stmt)
             self.external_xun_names = stmt_external_names(stmt)
 
         def visit_Call(self, node):
@@ -361,11 +404,11 @@ def build_xun_graph(func: FunctionDecomposition, dependencies):
             if not isinstance(node.func, ast.Name):
                 return node
 
-            if node.func.id not in dependencies:
+            if node.func.id not in xun_function_names:
                 return node
 
             new_node = ast.Call(
-                func=ast.Name(id='_xun_register_sentinel', ctx=ast.Load()),
+                func=ast.Name(id='_xun_register_future_value', ctx=ast.Load()),
                 args=[
                     ast.Constant(node.func.id),
                     str_list_to_ast(self.external_xun_names),
@@ -393,7 +436,10 @@ def build_xun_graph(func: FunctionDecomposition, dependencies):
     return func.update(xun_graph=xun_graph)
 
 
-def load_from_store(func: FunctionDecomposition, dependencies):
+def load_from_store(
+        func: FunctionDecomposition,
+        xun_function_names=frozenset()
+    ):
     """Load from Store Transformation
 
     Transform any call to context functions into loads from the context store.
@@ -418,7 +464,7 @@ def load_from_store(func: FunctionDecomposition, dependencies):
             if not isinstance(node.func, ast.Name):
                 return node
 
-            if node.func.id not in dependencies:
+            if node.func.id not in xun_function_names:
                 return node
 
             construct_call = ast.Call(
@@ -427,7 +473,7 @@ def load_from_store(func: FunctionDecomposition, dependencies):
                     ast.Constant(node.func.id),
                     *node.args,
                 ],
-                keywords=[]
+                keywords=node.keywords,
             )
 
             new_node = ast.Subscript(

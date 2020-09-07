@@ -3,6 +3,7 @@ from .util import function_ast
 from .util import function_source
 from .util import strip_decorators
 from collections import namedtuple
+from itertools import tee
 import ast
 import inspect
 
@@ -15,8 +16,17 @@ FunctionDescription = namedtuple(
         'name',
         'defaults',
         'globals',
-        'module_infos',
+        'referenced_modules',
         'module',
+    ]
+)
+
+
+ModuleAlias = namedtuple(
+    'ModuleAlias',
+    [
+        'module',
+        'asname',
     ]
 )
 
@@ -48,31 +58,39 @@ def describe(func):
     if not is_single_function_module:
         raise ValueError('can only describe a single function')
 
+    # Decorators can change the function in ways we don't control, unsupported.
     tree = strip_decorators(tree)
 
-    # Keep only referenced globals
-    external_references = func_external_names(tree.body[0])
-    function_globals = {
+    # Find externally referenced names so that we only have to keep globals and
+    # modules that are actually used.
+    external_names = func_external_names(tree.body[0])
+
+    external_references = {
         name: value
         for name, value in func.__globals__.items()
-        if name in external_references
-        and not inspect.ismodule(value)
+        if name in external_names
     }
 
     # Store function closure as globals
     if func.__closure__ is not None:
-        function_globals.update({
+        external_references.update({
             name: cell.cell_contents
             for name, cell in zip(func.__code__.co_freevars, func.__closure__)
+            if name in external_names
         })
 
-    # Remember names of referenced modules
-    module_infos = {
-        name: value.__name__
-        for name, value in func.__globals__.items()
-        if name in external_references
-        and inspect.ismodule(value)
+    function_globals = {
+        name: value
+        for name, value in external_references.items()
+        if not inspect.ismodule(value)
     }
+
+    function_modules = frozenset(
+        ModuleAlias(module=value.__name__, asname=name)
+        for name, value in external_references.items()
+        if name in external_names
+        and inspect.ismodule(value)
+    )
 
     return FunctionDescription(
         src=src,
@@ -80,6 +98,6 @@ def describe(func):
         name=func.__name__,
         defaults=func.__defaults__,
         globals=function_globals,
-        module_infos=module_infos,
+        referenced_modules=function_modules,
         module=func.__module__,
     )

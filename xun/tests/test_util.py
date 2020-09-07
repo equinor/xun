@@ -7,14 +7,14 @@ import xun
 global_c = 3
 
 
-def test_overwrite_globals():
+def test_overwrite_scope():
     a = 1
     b = 2
 
     def f():
         return a + b + global_c
 
-    g = xun.functions.overwrite_globals(f, globals={'global_c': 4})
+    g = xun.functions.util.overwrite_scope(f, globals={'global_c': 4})
 
     assert f() == 6
     assert g() == 7
@@ -25,23 +25,13 @@ def test_describe_function():
     def f(a, b, c):
         return some_value
 
-    # Some value is a non-local bound value, and not a global. It has to be
-    # injected into the functions globals.
-    f = xun.functions.overwrite_globals(
-        f,
-        {
-            **f.__globals__,
-            'some_value': some_value,
-        }
-    )
-
     expected = xun.functions.FunctionDescription(
         src=xun.functions.function_source(f),
         ast=xun.functions.function_ast(f),
         name='f',
         defaults=f.__defaults__,
         globals={'some_value': None},
-        module_infos={},
+        referenced_modules=frozenset(),
         module=f.__module__,
     )
     decomposed = xun.functions.describe(f)
@@ -55,7 +45,7 @@ def test_describe_function():
 def test_argnames():
     def argnames(f):
         fdef = xun.functions.function_ast(f).body[0]
-        return xun.functions.argnames(fdef)
+        return xun.functions.func_arg_names(fdef)
 
     def no_args():
         pass
@@ -107,4 +97,16 @@ def test_func_external_references():
         'print',
     })
     external_names = xun.functions.func_external_names(func)
+    assert external_names == expected
+
+
+def test_func_external_references_tuple_unpacking():
+    def f():
+        (a, b), c = v
+
+    tree = xun.functions.function_ast(f)
+    tree = xun.functions.strip_decorators(tree)
+
+    expected = frozenset({'v'})
+    external_names = xun.functions.func_external_names(tree.body[0])
     assert external_names == expected

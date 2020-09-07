@@ -1,6 +1,6 @@
 from .errors import NotDAGError
 from .graph import CallNode
-from .graph import TargetNameNode
+from .graph import TargetNameOnlyNode
 from .graph import sink_nodes
 import networkx as nx
 import queue
@@ -23,7 +23,7 @@ class Blueprint:
             for name, func in self.functions.items()
         }
 
-        # Make sure that everything given to the driver is pickleable
+        # Make sure that everything given to the driver is picklable
         if __debug__:
             import pickle
             pickle.dumps(self.graph)
@@ -70,30 +70,31 @@ def build_function_call_graph(functions, call):
     Returns
     -------
     nx.DiGraph, tuple of CallNode
-        the internal dependency graph and calls this call depend on
+        the internal dependency graph and calls this call depends on
     """
     func = functions[call.function_name]
     graph = func.graph(*call.args, **call.kwargs)
 
-    # The compiled functions does not know it self, so it cannot return
-    # TargetNodes. Instead, it returns TargetNameNodes, which need to be
+    # The compiled function does not know itself, so it cannot return
+    # TargetNodes. Instead, it returns TargetNameOnlyNodes, which need to be
     # converted
     graph = nx.relabel_nodes(
         graph,
         {
             t: t.to_target_node(call)
             for t in graph.nodes
-            if isinstance(t, TargetNameNode)
+            if isinstance(t, TargetNameOnlyNode)
         },
     )
 
+    # Connect the function call graph to this call
     graph.add_node(call)
     graph.add_edges_from(
         (node, call) for node in sink_nodes(graph) if node != call
     )
 
     if not nx.is_directed_acyclic_graph(graph):
-        raise NotDAGError()
+        raise NotDAGError
 
     dependencies = tuple(
         n for n in graph.nodes if isinstance(n, CallNode) and n != call
@@ -121,13 +122,10 @@ def build_call_graph(functions, call):
         The call graph built from the context and entry call. The resulting
         graph is required to be a directed acyclic graph.
     """
-    graph, dependencies = build_function_call_graph(functions, call)
-
+    graph = nx.DiGraph()
+    visited = set()
     q = queue.Queue()
-    visited = {call}
-
-    for call in dependencies:
-        q.put(call)
+    q.put(call)
 
     while not q.empty():
         call = q.get()
@@ -145,6 +143,6 @@ def build_call_graph(functions, call):
         graph = nx.compose(graph, func_graph)
 
         if not nx.is_directed_acyclic_graph(graph):
-            raise NotDAGError()
+            raise NotDAGError
 
     return graph

@@ -69,7 +69,8 @@ def identify_function(call, module):
 def interpret_call(call_string):
     """Interpret call
 
-    Given a call string, return a call node representing the call
+    Given a call string, return a call node representing the call. Expressions
+    in the call are evaluated.
 
     Parameters
     ----------
@@ -90,8 +91,8 @@ def interpret_call(call_string):
 
     """
     tree = ast.parse(call_string)
-    if not len(tree.body) == 1:
-        raise SyntaxError('More than one statement in call string')
+    if len(tree.body) != 1:
+        raise SyntaxError('There must be exactly one statement in call string')
 
     expr = tree.body[0]
     if not isinstance(expr, ast.Expr):

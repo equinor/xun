@@ -24,6 +24,9 @@ class Sequential(Driver):
                 continue
 
             call = replace_sentinels(store, task)
+
+            # Do not rerun finished jobs. For example if a workflow has been
+            # stopped and resumed.
             if call in store:
                 continue
 

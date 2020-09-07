@@ -76,11 +76,8 @@ def test_fail_when_with_constant_statement_is_not_a_dag():
             a = b
             b = a # Loop
 
-    fcode = xun.functions.FunctionDecomposition(f)
-    fcode = fcode.apply(xun.functions.separate_constants)
-
-    # with pytest.raises(xun.functions.NotDAGError):
-    constant_graph = xun.functions.stmt_dag(fcode.constants)
+    with pytest.raises(xun.functions.NotDAGError):
+        fcode = xun.functions.FunctionDecomposition(f)
 
 
 def test_with_constants():
@@ -117,13 +114,21 @@ def test_FunctionDecomposition():
 
     g = xun.functions.FunctionDecomposition(f)
     h = g.update(a=1, b=2)
+    k = h.update(a=3)
 
     assert h.a == 1
     assert h.b == 2
 
+    assert k.a == 3
+    assert k.b == 2
+
     # g is Immutable
     with pytest.raises(AttributeError):
         g.a = 1
+
+    # existing keys are immutable
+    with pytest.raises(AttributeError):
+        h.a = 1
 
 
 def test_FunctionDecomposition_compilation():

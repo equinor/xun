@@ -25,13 +25,7 @@ Standalone example xun project file for computing fibonacci numbers
 import xun
 
 
-context = xun.context(
-    driver=xun.functions.driver.Sequential(),
-    store=xun.functions.store.DiskCache('store'),
-)
-
-
-@context.function()
+@xun.function()
 def fibonacci_number(n):
     return f_n_1 + f_n_2
     with ...:
@@ -43,7 +37,7 @@ def fibonacci_number(n):
         f_n_2 = fibonacci_number(n - 2) if n > 1 else 0
 
 
-@context.function()
+@xun.function()
 def fibonacci_sequence(n):
     return sequence
     with ...:
@@ -54,8 +48,11 @@ def main():
     """
     Compute and print the first 10 fibonacci numbers
     """
-    program = context.fibonacci_sequence.compile(10)
-    sequence = program()
+    blueprint = fibonacci_sequence.blueprint(10)
+    sequence = blueprint.run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory(),
+    )
     for num in sequence:
         print(num)
 
@@ -123,6 +120,8 @@ In the above example a job takes in some iterable, `some_values` as argument, po
 * Calling context functions is only allowed within with constants statements
 * Only assignments and free expressions are allowed
 * There can only be one with constants statements per context function
+* Values cannot be modified
+* If a function modifies a value passed to it, the changes will not be reflected for the value in the with constants statement
 * Any code in with constants statements will be executed during scheduling, so the heavy lifting should be done in fully in the function body, and not inside the with constants statements
 
 With constants statements allows xun to figure out the order of calls needed to execute a xun program.

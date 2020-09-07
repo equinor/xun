@@ -29,16 +29,10 @@ class DoesNotSatisfyStore(metaclass=xun.functions.store.StoreMeta):
     pass
 
 
+@pytest.mark.xfail(strict=True)
 def test_store_decorator_requires_MutableMapping():
-    # with pytest.raises(TypeError):
-    #     s = DoesNotSatisfyStore()
-
-    # Due a bug in pytest.raises, we need to manually check the error
-    try:
+    with pytest.raises(TypeError):
         s = DoesNotSatisfyStore()
-    except TypeError:
-        pass
-
 
 def test_store_decorator_dict_satisifies_MutableMapping():
     s = DictAsStore()
@@ -65,15 +59,8 @@ def test_store_delete_is_permanent(cls, tmpwd):
     assert 'a' not in inst
     assert 'b' in inst and 'c' in inst
 
-    # with pytest.raises(KeyError):
-    #     inst['a'] = 'Not allowed'
-
-    # Due a bug in pytest.raises, we need to manually check the error
-    try:
+    with pytest.raises(KeyError):
         inst['a'] = 'Not allowed'
-    except KeyError:
-        pass
-
 
 @pytest.mark.parametrize('cls', stores)
 def test_store_key_is_permanent(cls, tmpwd):
@@ -81,18 +68,11 @@ def test_store_key_is_permanent(cls, tmpwd):
 
     assert 'a' in inst and inst['a'] == 0
 
-    # with pytest.raises(KeyError):
-    #     inst['a'] = 'Not allowed'
-
-    # Due a bug in pytest.raises, we need to manually check the error
-    try:
+    with pytest.raises(KeyError):
         inst['a'] = 'Not allowed'
-    except KeyError:
-        pass
-
 
 @pytest.mark.parametrize('cls', stores)
-def test_store_must_be_pickleable(cls, tmpwd):
+def test_store_must_be_picklable(cls, tmpwd):
     inst = create_instance(cls)
 
     pickled = pickle.dumps(inst)
@@ -103,3 +83,9 @@ def test_store_must_be_pickleable(cls, tmpwd):
     assert unpickled['a'] == 0
     assert unpickled['b'] == 1
     assert unpickled['c'] == 2
+
+    inst['d'] = 3
+    assert unpickled['d'] == 3
+
+    unpickled['e'] = 4
+    assert inst['e'] == 4

@@ -1,8 +1,7 @@
 from .helpers import PickleDriver
-from math import atan2
 from math import radians
 from math import sin
-from xun.functions import CallNode, SentinelNode, TargetNode
+from xun.functions import CallNode, FutureValueNode, TargetNode
 import ast
 import pickle
 import pytest
@@ -56,26 +55,26 @@ def test_build_function_graph():
         ),
         (
             TargetNode('messages', call),
-            CallNode('sign', SentinelNode(CallNode('message', 0)))
+            CallNode('sign', FutureValueNode(CallNode('message', 0)))
         ),
         (
             TargetNode('messages', call),
-            CallNode('sign', SentinelNode(CallNode('message', 1)))
+            CallNode('sign', FutureValueNode(CallNode('message', 1)))
         ),
         (
             TargetNode('messages', call),
-            CallNode('sign', SentinelNode(CallNode('message', 2)))
+            CallNode('sign', FutureValueNode(CallNode('message', 2)))
         ),
         (
-            CallNode('sign', SentinelNode(CallNode('message', 0))),
+            CallNode('sign', FutureValueNode(CallNode('message', 0))),
             TargetNode('signed', call)
         ),
         (
-            CallNode('sign', SentinelNode(CallNode('message', 1))),
+            CallNode('sign', FutureValueNode(CallNode('message', 1))),
             TargetNode('signed', call)
         ),
         (
-            CallNode('sign', SentinelNode(CallNode('message', 2))),
+            CallNode('sign', FutureValueNode(CallNode('message', 2))),
             TargetNode('signed', call)
         ),
         (
@@ -173,7 +172,7 @@ def test_program():
     ]
 
 
-def test_program_is_pickleable():
+def test_program_is_picklable():
     offset = 42
     sample_count = 10
     step_size = 36
@@ -202,6 +201,91 @@ def test_function_closures_available():
     )
 
     assert result == a
+
+
+def test_function_tuple_target():
+    v = ((1, 2), 3) # Closure variable
+
+    @xun.function()
+    def f():
+        (a, b), c = v
+        return (a, b), c
+
+    result = f.blueprint().run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory(),
+    )
+
+    assert result == v
+
+
+def test_function_with_keywords():
+    @xun.function()
+    def f(a, b=None):
+        return b if b is not None else a
+
+    # We wrap the call to f in another xun function to ensure that it passes
+    # through the transformation code.
+    @xun.function()
+    def g(a, b=None):
+        return r
+        with ...:
+            r = f(a=a, b=b)
+
+    assert g.blueprint(1).run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory(),
+    ) == 1
+    assert g.blueprint(1, 2).run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory(),
+    ) == 2
+
+
+def test_module_imports():
+    import math
+    import math as maths
+    from math import pi
+
+    @xun.function()
+    def f():
+        return maths.floor(pi) + math.floor(math.e)
+
+    result = f.blueprint().run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory(),
+    )
+
+    assert result == 5
+
+
+def test_require_single_with_constants_statement():
+    with pytest.raises(ValueError):
+        @xun.function()
+        def two_with_constants():
+            with ...:
+                pass
+            with ...:
+                pass
+
+
+def test_fail_on_mutating_assingment():
+    class MyClass:
+        pass
+
+    with pytest.raises(TypeError):
+        @xun.function()
+        def f():
+            with ...:
+                L = [1]
+                L[0] = 2
+
+    with pytest.raises(TypeError):
+        @xun.function()
+        def g():
+            with ...:
+                instance = MyClass()
+                instance.field = 2
 
 
 def sample_sin_blueprint(offset, sample_count, step_size):

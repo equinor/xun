@@ -3,20 +3,24 @@ import xun
 
 
 """
-WARNING: in this example almost all the computations happens within the with
+WARNING: in this example almost all the computations happen within the with
 constants statement and will be run during scheduling. It cannot be
 parallelized, and is indended only to show the syntax of with constants
 statements.
+
+Note that this quicksort only accepts hashable iterables. We therefore need to
+use tuples instead of lists. This is a limitiation of xun, because arguments
+are hashed in the call graph.
 """
 
 
 @xun.function()
-def quicksort(iterable):
+def quicksort(hashable_iterable):
     result = []
 
-    result.extend(lt_sorted)
+    result.extend(le_sorted)
 
-    if len(pivot) == 1:
+    if len(pivot) == 1: # It is 0 if the list is empty
         result.append(pivot[0])
 
     result.extend(gt_sorted)
@@ -24,15 +28,15 @@ def quicksort(iterable):
     return tuple(result)
     with ...:
         # Tuples are used because arguments must be hashable and lists are not
-        lt_sorted = quicksort(lt) if len(lt) > 0 else tuple()
+        le_sorted = quicksort(le) if len(le) > 0 else tuple()
         gt_sorted = quicksort(gt) if len(gt) > 0 else tuple()
 
         # Workaround because generators can't be pickled, make list before tuple
-        lt = tuple([item for item in L[1:] if item <= pivot[0]])
+        le = tuple([item for item in L[1:] if item <= pivot[0]])
         gt = tuple([item for item in L[1:] if item  > pivot[0]])
 
+        L = list(hashable_iterable)
         pivot = L[:1]
-        L = list(iterable)
 
 
 def main():

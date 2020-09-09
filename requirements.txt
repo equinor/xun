@@ -1,5 +1,7 @@
 camille
+celery
 diskcache
 fastavro
 matplotlib
 networkx
+redis

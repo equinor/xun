@@ -15,6 +15,9 @@
 https://en.wikipedia.org/wiki/Bagua
 ```
 
+# Work in progress
+Removing redundant loading
+
 # Tutorial
 
 ## Quick Start

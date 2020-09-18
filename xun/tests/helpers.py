@@ -42,6 +42,44 @@ class PickleDriver(xun.functions.driver.Sequential):
         )
 
 
+class PicklableMemoryStore(xun.functions.store.Store):
+    """ PicklableMemoryStore
+    Works under the assumption that the object is never replicated outside of
+    the creating process.
+    """
+
+    class Driver(dict, xun.functions.store.StoreDriver):
+        pass
+
+    _drivers = {}
+
+    def __init__(self):
+        self.id = id(self)
+
+    @property
+    def driver(self):
+        if self.id not in PicklableMemoryStore._drivers:
+            raise ValueError('No context for this store')
+        return PicklableMemoryStore._drivers[self.id]
+
+    def __getstate__(self):
+        return self.id
+
+    def __setstate__(self, state):
+        self.id = state
+
+    def __enter__(self):
+        PicklableMemoryStore._drivers.setdefault(
+            self.id,
+            PicklableMemoryStore.Driver(),
+        )
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        del PicklableMemoryStore._drivers[self.id]
+        return exc_type is None
+
+
 class FakeRedis(xun.functions.store.Redis):
     _servers = {}
 

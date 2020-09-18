@@ -4,6 +4,7 @@ fakeredis
 mock-ssh-server
 pyshd
 pytest
+pytest-celery
 pytest-runner
 setuptools >=28
 setuptools_scm

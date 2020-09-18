@@ -65,11 +65,11 @@ class CallNode:
         ))
 
     def __repr__(self):
-        args = []
+        args = [repr(self.function_name)]
         if len(self.args) > 0:
             args.append(', '.join(repr(a) for a in self.args))
         if len(self.kwargs) > 0:
             args.append(', '.join(
-                '{}={}'.format(k, v) for k, v in self.kwargs.items()
+                '{}={}'.format(k, repr(v)) for k, v in self.kwargs.items()
             ))
         return 'CallNode({})'.format(', '.join(args))

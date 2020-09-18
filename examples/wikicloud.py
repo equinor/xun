@@ -5,6 +5,7 @@ from wordcloud import WordCloud, ImageColorGenerator
 import argparse
 import cv2
 import json
+import logging
 import numpy as np
 import re
 import requests
@@ -65,19 +66,31 @@ def download_image(topic):
     file_name = img_url.split('/')[-1]
     subprocess.run(['curl', '-o', file_name, img_url], check=True)
 
-    return file_name
+    img = np.array(Image.open(file_name))
+
+    return img
+
+
+@xun.function()
+def resize_image(image, max_resolution):
+    scale = min(1.0, max_resolution / max(image.shape))
+    shape = (int(image.shape[1] * scale),
+             int(image.shape[0] * scale))
+    return cv2.resize(image, dsize=shape, interpolation=cv2.INTER_CUBIC)
 
 
 @xun.function()
 def wordcloud(topic, max_resolution=512):
-    raw_image = np.array(Image.open(image_path))
-    scale = min(1.0, max_resolution / max(raw_image.shape))
-    shape = (int(raw_image.shape[1] * scale),
-             int(raw_image.shape[0] * scale))
-    image = cv2.resize(raw_image,
-                       dsize=shape,
-                       interpolation=cv2.INTER_CUBIC)
+    return image, text
 
+    with ...:
+        text = download_text(topic)
+        raw_image = download_image(topic)
+        image = resize_image(raw_image, max_resolution)
+        # CallNode('resize_image', Future<image>, 512)
+
+
+def draw(image, text):
     image_colors = ImageColorGenerator(image)
 
     wordcloud_generator = WordCloud(mask=image,
@@ -98,10 +111,6 @@ def wordcloud(topic, max_resolution=512):
     for ax in axes:
         ax.set_axis_off()
     plt.show()
-
-    with ...:
-        text = download_text(topic)
-        image_path = download_image(topic)
 
 
 def main():
@@ -125,13 +134,29 @@ def main():
         type=int,
         default=512
     )
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_const',
+        dest='loglevel',
+        const=logging.DEBUG,
+        default=logging.WARNING
+    )
 
     args = parser.parse_args()
 
-    wordcloud.blueprint(args.topic, max_resolution=args.max_resolution).run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
+    logging.basicConfig(level=args.loglevel)
+
+    blueprint = wordcloud.blueprint(
+        args.topic,
+        max_resolution=args.max_resolution
     )
+
+    image, text = blueprint.run(
+        driver=xun.functions.driver.Celery(),
+        store=xun.functions.store.Redis(host='redis'),
+    )
+
+    draw(image, text)
 
 
 if __name__ == '__main__':

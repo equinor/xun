@@ -1,4 +1,5 @@
 from .store import Store
+from .store import StoreDriver
 from .store import NamespacedKey
 from .store_accessor import StoreAccessor
 

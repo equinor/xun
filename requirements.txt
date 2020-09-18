@@ -1,4 +1,5 @@
 camille
+celery==4.4.7
 diskcache
 fastavro
 matplotlib

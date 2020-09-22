@@ -218,3 +218,23 @@ def test_FunctionDecomposition_compilation():
     # g shohuld not have changed
     g = g_img.assemble(g_img.ast.body[0].body).compile()
     assert g() == f() and g() == global_c
+
+
+def test_dependency_without_target():
+    @xun.function()
+    def procedure():
+        pass
+
+    @xun.function()
+    def workflow():
+        with ...:
+            procedure()
+        return 1
+
+    assert 'procedure' in workflow.dependencies
+
+    result = workflow.blueprint().run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory(),
+    )
+    assert result == 1

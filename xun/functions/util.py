@@ -415,11 +415,7 @@ def is_assignments_and_expressions(node):
         Whether or not the node's body contains exclusively assignment and
         expression statements
     """
-    return all(
-        isinstance(node, ast.Assign)
-        or isinstance(node, ast.Expression)
-        for node in node.body
-    )
+    return all(isinstance(node, (ast.Assign, ast.Expr)) for node in node.body)
 
 
 def has_reassignments(node):

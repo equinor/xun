@@ -2,8 +2,6 @@ from .blueprint import Blueprint
 from .function_description import describe
 from . import transformations
 
-import ast
-
 
 class Function:
     """Function

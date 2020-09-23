@@ -8,13 +8,10 @@ from .util import sort_constants_ast
 from .util import stmt_external_names
 from .util import stmt_introduced_names
 from itertools import chain
-from typing import Any
-from typing import Dict
-from typing import List
 import ast
 import copy
-import pickle
 import types
+
 
 """Transformations
 
@@ -342,7 +339,6 @@ def build_xun_graph(
     @function_ast
     def helper_code():
         from xun.functions import CallNode as _xun_CallNode
-        from xun.functions import CopyError as _xun_CopyError
         from xun.functions import TargetNameOnlyNode as _xun_TargetNameOnlyNode
         from xun.functions import FutureValueNode as _xun_FutureValueNode
         import networkx as _xun_nx

@@ -2,8 +2,6 @@ from .helpers import PickleDriver
 from math import radians
 from math import sin
 from xun.functions import CallNode, FutureValueNode, TargetNode
-import ast
-import pickle
 import pytest
 import networkx as nx
 import xun

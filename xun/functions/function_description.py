@@ -3,7 +3,6 @@ from .util import function_ast
 from .util import function_source
 from .util import strip_decorators
 from collections import namedtuple
-from itertools import tee
 import ast
 import inspect
 

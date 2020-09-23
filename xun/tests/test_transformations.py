@@ -123,7 +123,7 @@ def test_load_from_store_transformation():
     @xun.function_ast
     def reference_source():
         def _xun_load_constants():
-            from copy import deepcopy
+            from copy import deepcopy  # noqa: F401
             from xun.functions import CallNode as _xun_CallNode
             from xun.functions import FutureValueNode as _xun_FutureValueNode
             a = _xun_FutureValueNode(_xun_CallNode('f'))

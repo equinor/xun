@@ -1,7 +1,6 @@
 from .errors import NotDAGError
 from collections import Counter
 from itertools import chain
-from itertools import starmap
 from itertools import tee
 import ast
 import copy
@@ -227,7 +226,6 @@ def stmt_external_names(stmt):
         return targets
 
     def visit_children(node, locals):
-        children = [c for c in ast.iter_child_nodes(node)]
         return frozenset(
             chain(
                 *(

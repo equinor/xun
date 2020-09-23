@@ -201,22 +201,6 @@ def test_function_closures_available():
     assert result == a
 
 
-def test_function_tuple_target():
-    v = ((1, 2), 3) # Closure variable
-
-    @xun.function()
-    def f():
-        (a, b), c = v
-        return (a, b), c
-
-    result = f.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
-
-    assert result == v
-
-
 def test_function_with_keywords():
     @xun.function()
     def f(a, b=None):

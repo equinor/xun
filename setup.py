@@ -30,6 +30,13 @@ if __name__ == '__main__':
         platforms = 'any',
 
         install_requires = [
+            'camille',
+            'celery',
+            'diskcache',
+            'fastavro',
+            'matplotlib',
+            'networkx',
+            'redis',
         ],
 
         setup_requires = [

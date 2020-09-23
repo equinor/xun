@@ -1,99 +1,245 @@
 version: 2.1
 
 commands:
-  install_build_deps:
+
+  bootstrap-macos:
+    parameters:
+      python-version:
+        type: string
     steps:
       - run:
-          name: Install cmake, gcc, python3, git
+          name: Setup MacOS environment
           command: |
-            sudo apt-get update
-            sudo apt-get install \
-            -y cmake g++ python3 python3-pip git 
-    
-  instal_python_deps:
+            curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh --silent
+            bash Miniconda3-latest-MacOSX-x86_64.sh -b -f >> build.log
+            ~/miniconda3/bin/conda create -y -n py<< parameters.python-version >> python=<< parameters.python-version >>
+            ln -s ~/miniconda3/envs/py<< parameters.python-version >>/bin/python ~/python3
+            ~/python3 -m venv py_venv
+
+  bootstrap-win:
+    parameters:
+      python-version:
+        type: string
     steps:
-      - checkout
-      - install_build_deps
       - run:
-          name: Install python dependencies
+          name: Setup Win environment
           command: |
-            python -m pip install --user -r requirements.txt
-            python -m pip install --user -r requirements-dev.txt
-            python -m pip install --user flake8
+            conda init powershell
+            conda create -y -n py-<< parameters.python-version >> python=<< parameters.python-version >>
+            conda activate py-<< parameters.python-version >>
 
-            # Temporary solution until new camille distribution
-            python -m pip install --user scikit-build
-            python -m pip install --user pybind11
-            python -m pip install --user git+https://github.com/equinor/camille.git
+  install-python-deps:
+    steps:
+      - run:
+          name: Install Python dependencies
+          command: |
+            if [ `uname -s` == "Darwin" ]; then
+              . py_venv/bin/activate
+            fi
+            python3 --version
+            python3 -m pip install -r requirements.txt
+            python3 -m pip install -r requirements-dev.txt
+            python3 -m pip install cmake flake8 bandit setuptools-scm
+            # python3 -m pip install coverage codacy-coverage
 
-  flake8_req_check:
+  python-build-test:
+    steps:
+      - run:
+          name: Build & test python
+          command: |
+            if [ `uname -s` == "Darwin" ]; then
+              . py_venv/bin/activate
+            fi
+            python3 setup.py test --verbose
+
+  flake8-req-check:
     steps:
       - run:
           name: Check code errors (pyflakes)
-          command: flake8 --ignore=E --per-file-ignores="__init__.py:F401" .
+          command: |
+            flake8 --select=F4 --per-file-ignores="__init__.py:F401" .
+            flake8 --select=F --per-file-ignores="__init__.py:F401" xun/functions
 
-  flake8_opt_check:
+  flake8-opt-check:
     steps:
       - run:
           name: Check formatting rules (PEP8)
-          command: git diff HEAD^ | flake8 --diff --per-file-ignores="__init__.py:F401"
+          command: |
+            git diff HEAD^ | flake8 --diff --per-file-ignores="__init__.py:F401"
 
-  python_build_test:
+  bandit-check:
     steps:
       - run:
-          name: build python
-          command: python setup.py build_ext --inplace install --user test
+          name: Bandit security check
+          command: |
+            bandit -c bandit.yml -r camille
 
+  codacy-check:
+    steps:
+      - run:
+          name: Codacy code coverage check
+          command: |
+            if [ ! -z "${CODACY_PROJECT_TOKEN}" ]; then
+              coverage run setup.py test;
+              coverage xml;
+              python-codacy-coverage -r coverage.xml;
+            fi
+
+  create-sdist:
+    steps:
+      - run:
+          name: Create source package
+          command: |
+            python3 setup.py sdist
+
+  create-wheel:
+    steps:
+      - run:
+          name: Create wheel
+          command: |
+            python3 -m pip install cibuildwheel==1.6.0
+            python3 -m cibuildwheel --output-dir dist
+
+  upload-pypi:
+    steps:
+      - run:
+          name: Upload to pypi
+          command: |
+            python3 -m pip install twine
+            python3 -m twine upload -u __token__ --skip-existing dist/*
 
 jobs:
   python-check:
     parameters:
       version:
         type: string
-        default: "3.6"
-      formatting:
-        type: boolean
-        default: false
     docker:
       - image: "circleci/python:<< parameters.version >>"
     steps:
-      - instal_python_deps
-      - when:
-          condition: << parameters.formatting >>
-          steps:
-            - flake8_opt_check
-      - unless:
-          condition:  << parameters.formatting >>
-          steps:
-            - python_build_test
-            - flake8_req_check
+      - checkout
+      - install-python-deps
+      - flake8-req-check
+      - bandit-check
+      - python-build-test
+      - codacy-check
 
+  python-formatting-check:
+    docker:
+      - image: "circleci/python:3.8"
+    steps:
+      - checkout
+      - install-python-deps
+      - flake8-opt-check
+
+  python-macos-check:
+    parameters:
+      python-version:
+        type: string
+    macos:
+      xcode: 11.0.0
+    steps:
+      - checkout
+      - bootstrap-macos:
+          python-version: << parameters.python-version >>
+      - install-python-deps
+      - python-build-test
+
+  sdist-deploy:
+    docker:
+      - image: "circleci/python:3.6"
+    steps:
+      - checkout
+      - install-python-deps
+      - create-sdist
+      - upload-pypi
+
+  wheels-manylinux-deploy:
+    docker:
+      - image: "circleci/python:3.6"
+    environment:
+      - CIBW_BUILD: "cp35-manylinux_x86_64 cp36-manylinux_x86_64 cp37-manylinux_x86_64 cp38-manylinux_x86_64"
+      - CIBW_BEFORE_ALL: "yum install -y gcc ninja-build"
+      - CIBW_BEFORE_BUILD: "pip install cmake setuptools-scm -r requirements.txt && pip install -r requirements-dev.txt"
+    steps:
+      - checkout
+      - setup_remote_docker
+      - create-wheel
+      - upload-pypi
+
+  wheels-macos-deploy:
+    macos:
+      xcode: 11.0.0
+    environment:
+      - CIBW_BUILD: "cp35-macosx_x86_64 cp36-macosx_x86_64 cp37-macosx_x86_64 cp38-macosx_x86_64"
+      - CIBW_BEFORE_BUILD: "pip3 install cmake setuptools-scm -r requirements.txt && pip3 install -r requirements-dev.txt"
+    steps:
+      - checkout
+      - create-wheel
+      - upload-pypi
 
 workflows:
   version: 2
 
-  required:
+  linux-check:
     jobs:
       - python-check:
-          name: Python 3.5 code error and test check
+          name: Python 3.5
           version: "3.5"
-          formatting: false
       - python-check:
-          name: Python 3.6 code error and test check
+          name: Python 3.6
           version: "3.6"
-          formatting: false
       - python-check:
-          name: Python 3.7 code error and test check
+          name: Python 3.7
           version: "3.7"
-          formatting: false
       - python-check:
-          name: Python 3.8 code error and test check
+          name: Python 3.8
           version: "3.8"
-          formatting: false
-  
+
+  macos-check:
+    jobs:
+      - python-macos-check:
+          name: MacOS Python 3.5
+          python-version: "3.5"
+      - python-macos-check:
+          name: MacOS Python 3.6
+          python-version: "3.6"
+      - python-macos-check:
+          name: MacOS Python 3.7
+          python-version: "3.7"
+      - python-macos-check:
+          name: MacOS Python 3.8
+          python-version: "3.8"
+
+  linux-deploy:
+    jobs:
+      - sdist-deploy:
+          name: Create and deploy sdist
+          filters:
+            tags:
+              only: /[0-9]+(\.[0-9]+)*/
+            branches:
+              ignore: /.*/
+      - wheels-manylinux-deploy:
+          name: Create and deploy linux wheels
+          requires:
+            - Create and deploy sdist
+          filters:
+            tags:
+              only: /[0-9]+(\.[0-9]+)*/
+            branches:
+              ignore: /.*/
+
+  macos-deploy:
+    jobs:
+      - wheels-macos-deploy:
+          name: Create and deploy macos wheels
+          filters:
+            tags:
+              only: /[0-9]+(\.[0-9]+)*/
+            branches:
+              ignore: /.*/
+
   optional:
     jobs:
-      - python-check:
+      - python-formatting-check:
           name: Python formatting check
-          version: "3.8"
-          formatting: true

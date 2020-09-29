@@ -1,7 +1,5 @@
 from .. import CallNode
-from .. import FutureValueNode
 from .driver import Driver
-from .driver import replace_futures
 import networkx as nx
 
 
@@ -10,13 +8,12 @@ class Sequential(Driver):
     Does a topological sort of the graph, and runs the jobs sequentially
     """
 
-    def run_and_store(self, call, function_images, store):
-        func = function_images[call.function_name]
-        resolved_call = replace_futures(store, call)
+    def run_and_store(self, call, func, store_accessor):
+        resolved_call = store_accessor.resolve_call(call)
         result = func(*resolved_call.args, **resolved_call.kwargs)
-        store[FutureValueNode(call)] = result
+        store_accessor.store_result(call, func, result)
 
-    def exec(self, graph, entry_call, function_images, store):
+    def _exec(self, graph, entry_call, function_images, store_accessor):
         assert nx.is_directed_acyclic_graph(graph)
 
         schedule = list(nx.topological_sort(graph))
@@ -25,11 +22,13 @@ class Sequential(Driver):
             if not isinstance(task, CallNode):
                 continue
 
+            func = function_images[task.function_name]
+
             # Do not rerun finished jobs. For example if a workflow has been
             # stopped and resumed.
-            if task in store:
+            if store_accessor.completed(task, func):
                 continue
 
-            self.run_and_store(task, function_images, store)
+            self.run_and_store(task, func, store_accessor)
 
-        return store[FutureValueNode(entry_call)]
+        return store_accessor.load_result(entry_call)

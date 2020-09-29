@@ -340,7 +340,6 @@ def build_xun_graph(
     def helper_code():
         from xun.functions import CallNode as _xun_CallNode
         from xun.functions import TargetNameOnlyNode as _xun_TargetNameOnlyNode
-        from xun.functions import FutureValueNode as _xun_FutureValueNode
         import networkx as _xun_nx
 
         _xun_graph = _xun_nx.DiGraph()
@@ -361,7 +360,7 @@ def build_xun_graph(
             _xun_graph.add_node(call)
             _xun_graph.add_edges_from((dep, call) for dep in dependencies)
             _xun_graph.add_edges_from((call, tar) for tar in outputs)
-            return _xun_FutureValueNode(call)
+            return call
 
     header = helper_code.body[0].body
 
@@ -497,7 +496,7 @@ def load_from_store(
             transformed = (self.visit(copy.deepcopy(node)) for node in nodes)
             return [node for node in transformed if node is not None]
 
-    class Call2Future(NodeMapper):
+    class Call2CallNode(NodeMapper):
         def visit_Call(self, node):
             node = self.generic_visit(node)
 
@@ -510,15 +509,9 @@ def load_from_store(
                 keywords=node.keywords,
             )
 
-            construct_future = ast.Call(
-                func=ast.Name(id='_xun_FutureValueNode', ctx=ast.Load()),
-                args=[construct_call],
-                keywords=[],
-            )
+            return construct_call
 
-            return construct_future
-
-    class Future2Load(NodeMapper):
+    class CallNode2Load(NodeMapper):
         def __init__(self, output_names=None):
             self.output_names = output_names if output_names is not None else []
 
@@ -533,15 +526,21 @@ def load_from_store(
             if not is_xun_call(node):
                 return self.generic_visit(node)
 
-            node = Call2Future().visit(node)
+            call_node = Call2CallNode().visit(node)
 
-            store_subscript = ast.Subscript(
-                value=ast.Name(id='_xun_store', ctx=ast.Load()),
-                slice=ast.Index(value=node),
+            store_accessor_load_func = ast.Attribute(
+                value=ast.Name(id='_xun_store_accessor', ctx=ast.Load()),
+                attr='load_result',
                 ctx=ast.Load(),
             )
 
-            return store_subscript
+            store_accessor_load_call = ast.Call(
+                func=store_accessor_load_func,
+                args=[call_node],
+                keywords=[],
+            )
+
+            return store_accessor_load_call
 
     # If No dependencies are referenced in the body of the function, there is
     # nothing to load
@@ -553,10 +552,10 @@ def load_from_store(
         if isinstance(node, ast.Assign)
     ]
 
-    with_futures = Call2Future().map(assignments)
+    call_nodes = Call2CallNode().map(assignments)
 
     output_names = []
-    loads = Future2Load(output_names=output_names).map(assignments)
+    loads = CallNode2Load(output_names=output_names).map(assignments)
 
     imports = [
         *[
@@ -573,11 +572,11 @@ def load_from_store(
             ],
         ),
         ast.ImportFrom(
-            module='xun.functions',
+            module='xun.functions.store',
             names=[
                 ast.alias(
-                    name='FutureValueNode',
-                    asname='_xun_FutureValueNode'
+                    name='StoreAccessor',
+                    asname='_xun_StoreAccessor'
                 ),
             ],
         ),
@@ -596,7 +595,15 @@ def load_from_store(
         ),
         body=[
             *imports,
-            *with_futures,
+            ast.Assign(
+                targets=[ast.Name(id='_xun_store_accessor', ctx=ast.Store())],
+                value=ast.Call(
+                    func=ast.Name(id='_xun_StoreAccessor', ctx=ast.Load()),
+                    args=[ast.Name(id='_xun_store', ctx=ast.Load())],
+                    keywords=[],
+                ),
+            ),
+            *call_nodes,
             ast.Return(
                 value=ast.Tuple(elts=loads, ctx=ast.Load())
             )

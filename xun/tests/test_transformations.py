@@ -125,13 +125,14 @@ def test_load_from_store_transformation():
         def _xun_load_constants():
             from copy import deepcopy  # noqa: F401
             from xun.functions import CallNode as _xun_CallNode
-            from xun.functions import FutureValueNode as _xun_FutureValueNode
-            a = _xun_FutureValueNode(_xun_CallNode('f'))
-            b = _xun_FutureValueNode(_xun_CallNode('f', a))
-            c = _xun_FutureValueNode(_xun_CallNode('f', b))
+            from xun.functions.store import StoreAccessor as _xun_StoreAccessor
+            _xun_store_accessor = _xun_StoreAccessor(_xun_store)
+            a = _xun_CallNode('f')
+            b = _xun_CallNode('f', a)
+            c = _xun_CallNode('f', b)
             return (
-                _xun_store[_xun_FutureValueNode(_xun_CallNode('f'))],
-                _xun_store[_xun_FutureValueNode(_xun_CallNode('f', b))],
+                _xun_store_accessor.load_result(_xun_CallNode('f')),
+                _xun_store_accessor.load_result(_xun_CallNode('f', b)),
             )
         a, c = _xun_load_constants()
         value = a + c

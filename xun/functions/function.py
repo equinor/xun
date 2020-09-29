@@ -1,6 +1,8 @@
 from .blueprint import Blueprint
 from .function_description import describe
 from . import transformations
+import ast
+import hashlib
 
 
 class Function:
@@ -50,15 +52,44 @@ class Function:
     function : Function decorator to create xun functions
     """
 
-    def __init__(self, desc, dependencies, max_parallel):
+    def __init__(self, desc, dependencies, hash, max_parallel):
         self.desc = desc
         self.dependencies = dependencies
         self.max_parallel = max_parallel
+        self.hash = Function.sha256(desc, dependencies)
         self._graph_builder = None
 
     @property
     def name(self):
         return self.desc.name
+
+    @staticmethod
+    def sha256(desc, dependencies):
+        """SHA256
+
+        Calculate a hash identifier for a function with the given description
+        and dependencies.
+
+        Parameters
+        ----------
+        desc : xun.functions.FunctionDescription
+            Description of the hashed function
+        dependencies : mapping of name to Function
+            The dependencies of the hashed function
+
+        Returns
+        -------
+        str
+            Hex digest of function hash
+        """
+        sha256 = hashlib.sha256()
+        for dependency in sorted(dependencies.values(), key=lambda d: d.hash):
+            sha256.update(dependency.hash.encode())
+
+        ast_dump = ast.dump(desc.ast)
+        sha256.update(ast_dump.encode())
+
+        return sha256.hexdigest()
 
     @staticmethod
     def from_function(func, max_parallel=None):
@@ -86,8 +117,9 @@ class Function:
         dependencies = {
             g.name: g for g in desc.globals.values() if isinstance(g, Function)
         }
+        hash = Function.sha256(desc, dependencies)
 
-        f = Function(desc, dependencies, max_parallel)
+        f = Function(desc, dependencies, hash, max_parallel)
 
         # Add f to it's dependencies, to allow recursive dependencies
         f.dependencies[f.name] = f
@@ -169,25 +201,26 @@ class Function:
         """
         xun_function_names = frozenset(self.dependencies.keys())
 
-        fimg = (transformations.FunctionDecomposition(self.desc)
+        decomp = (transformations.FunctionDecomposition(self.desc)
             .apply(transformations.separate_constants)
             .apply(transformations.sort_constants)
             .apply(transformations.copy_only_constants, xun_function_names)
             .apply(transformations.load_from_store, xun_function_names)
         )
 
-        f = fimg.assemble(fimg.load_from_store, fimg.body)
+        f = decomp.assemble(decomp.load_from_store, decomp.body)
 
         # Remove any refernces to function dependencies, they may be
         # unpicklable and their code has been replaced
         new_globals = {
-            name: value for name, value in fimg.desc.globals.items()
+            name: value for name, value in self.desc.globals.items()
             if not isinstance(value, Function)
         }
         if extra_globals is not None:
             new_globals.update(extra_globals)
 
         f.globals = new_globals
+        f.hash = self.hash
 
         return f
 

@@ -166,6 +166,17 @@ def test_store_floordiv_getitem(cls):
 
 
 @pytest.mark.parametrize('cls', stores)
+def test_store_floordiv_getitem(cls):
+    with cls() as store:
+        store.update(a=0, b=1, c=2)
+
+        assert store // 'a' == 0
+        assert store // 'b' == 1
+        assert store // 'c' == 2
+
+
+
+@pytest.mark.parametrize('cls', stores)
 def test_store_mutable_mapping(cls):
     with cls() as store:
         store.update(a=0, b=1, c=2)

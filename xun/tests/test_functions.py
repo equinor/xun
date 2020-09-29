@@ -2,7 +2,9 @@ from .helpers import PickleDriver
 from .helpers import FakeRedis
 from math import radians
 from math import sin
-from xun.functions import CallNode, FutureValueNode, TargetNode
+from xun.functions import CallNode
+from xun.functions import CopyError
+from xun.functions import TargetNode
 import pytest
 import networkx as nx
 import xun
@@ -54,26 +56,26 @@ def test_build_function_graph():
         ),
         (
             TargetNode('messages', call),
-            CallNode('sign', FutureValueNode(CallNode('message', 0)))
+            CallNode('sign', CallNode('message', 0))
         ),
         (
             TargetNode('messages', call),
-            CallNode('sign', FutureValueNode(CallNode('message', 1)))
+            CallNode('sign', CallNode('message', 1))
         ),
         (
             TargetNode('messages', call),
-            CallNode('sign', FutureValueNode(CallNode('message', 2)))
+            CallNode('sign', CallNode('message', 2))
         ),
         (
-            CallNode('sign', FutureValueNode(CallNode('message', 0))),
+            CallNode('sign', CallNode('message', 0)),
             TargetNode('signed', call)
         ),
         (
-            CallNode('sign', FutureValueNode(CallNode('message', 1))),
+            CallNode('sign', CallNode('message', 1)),
             TargetNode('signed', call)
         ),
         (
-            CallNode('sign', FutureValueNode(CallNode('message', 2))),
+            CallNode('sign', CallNode('message', 2)),
             TargetNode('signed', call)
         ),
         (
@@ -187,6 +189,25 @@ def test_blueprint_is_picklable():
     assert result == [
         sin(radians(i / step_size)) + offset for i in range(sample_count)
     ]
+
+
+def test_failure_on_use_of_unresolved_call():
+    def use(value):
+        return value + 1
+
+    @xun.function()
+    def f():
+        pass
+
+    @xun.function()
+    def g():
+        with ...:
+            a = f()
+            b = use(a)
+        return b
+
+    with pytest.raises(CopyError):
+        g.blueprint()
 
 
 def test_function_closures_available():
@@ -340,6 +361,22 @@ def test_nested_calls():
     )
 
     assert result == 'ab'
+
+
+def test_functions_hashes():
+    def f():
+        pass
+
+    def g():
+        pass
+
+    a = xun.functions.Function.from_function(f)
+    b = xun.functions.Function.from_function(f)
+    c = xun.functions.Function.from_function(g)
+
+    assert a.hash == b.hash
+    assert a.hash == b.callable().hash
+    assert a.hash != c.hash
 
 
 def sample_sin_blueprint(offset, sample_count, step_size):

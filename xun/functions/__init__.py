@@ -10,7 +10,6 @@ from .function_description import describe
 from .function_image import FunctionImage
 from .function_image import make_shared
 from .graph import CallNode
-from .graph import FutureValueNode
 from .graph import TargetNameOnlyNode
 from .graph import TargetNode
 from .transformations import FunctionDecomposition

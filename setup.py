@@ -26,6 +26,11 @@ if __name__ == '__main__':
 
         packages = [
             'xun',
+            'xun.functions',
+            'xun.functions.driver',
+            'xun.functions.store',
+            'xun.sima',
+            'xun.zephyre',
         ],
         platforms = 'any',
 
@@ -41,11 +46,12 @@ if __name__ == '__main__':
         setup_requires = [
             'setuptools >=28',
             'setuptools_scm',
-            'pytest-runner'
+            'pytest-runner',
         ],
 
         tests_require = [
             'pytest',
+            'pyshd',
         ],
 
     entry_points = {

@@ -1,5 +1,6 @@
 astor
 astunparse
+fakeredis
 pyshd
 pytest
 pytest-runner

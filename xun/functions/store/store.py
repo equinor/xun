@@ -1,129 +1,149 @@
-from ...memoized import memoized
-from ..errors import CopyError
-from abc import ABCMeta
+from abc import abstractmethod
+from collections.abc import KeysView
 from collections.abc import MutableMapping
-import diskcache
+import copy
 
 
-class StoreMeta(ABCMeta):
-    """StoreMeta
+class Store(MutableMapping):
+    """Store
 
-    Metaclass for stores. Adds immutability and permanent deletion. Any class
-    using this as metaclass will have to satisfy the interface of
-    `collections.abc.MutableMapping`.
+    In xun stores are used to keep track of executed calls, and their results.
+    They implement mutable mappings and are namespaced. Namespaces can be
+    accessed using the true division operator. The floor division operator can
+    be used to access store values, similar to __getitem__.
 
-    Subject to change
+    Values in namespaces are visible only to that particular namespace, meaning
+    that child namespace and their values are not visible to the parent
+    namespace itself.
+
+    Recreating a store, by pickle/unpickle or copy, will result in a store
+    object accessing the _same_ underlying store. That is, changes done to an
+    instance are reflected in any other instances or recreations of this
+    particular store.
+
+    Examples
+    --------
+
+    >>> some_namespace = store / 'some_namespace'
+    >>> namespace_1 = store / 1
+    >>> some_namespace['key'] = 'Value'
+    >>> 'key' in some_namespace
+    True
+    >>> 'key' in namespace_1
+    False
+    >>> store / 'some_namespace' // 'key'
+    'Value'
 
     """
-    def __new__(cls, name, bases, attrib_dict):
-        bases += (MutableMapping,)
+    def __new__(cls, *args, **kwargs):
+        instance = super().__new__(cls)
+        instance._namespace = ()
+        return instance
 
-        if '__init__' in attrib_dict:
-            init = attrib_dict['__init__']
-            def __init__(self, *args, **kwargs):
-                init(self, *args, **kwargs)
-                self._store_deleted = set()
-            attrib_dict['__init__'] = __init__
+    @property
+    @abstractmethod
+    def driver(self):
+        pass
 
-        if '__delitem__' in attrib_dict:
-            delitem = attrib_dict['__delitem__']
-            def __delitem__(self, key):
-                delitem(self, key)
-                self._store_deleted.add(key)
-            attrib_dict['__delitem__'] = __delitem__
-
-        if '__getitem__' in attrib_dict:
-            getitem = attrib_dict['__getitem__']
-            def __getitem__(self, key):
-                if key in self._store_deleted:
-                    raise KeyError('{} has been deleted'.format(key))
-                return getitem(self, key)
-            attrib_dict['__getitem__'] = __getitem__
-
-        if '__setitem__' in attrib_dict:
-            setitem = attrib_dict['__setitem__']
-            def __setitem__(self, key, value):
-                if key in self._store_deleted:
-                    raise KeyError('{} has been deleted'.format(key))
-                if key in self:
-                    raise KeyError('{} already set'.format(key))
-                setitem(self, key, value)
-            attrib_dict['__setitem__'] = __setitem__
-
-        return type.__new__(cls, name, bases, attrib_dict)
-
-
-class Memory(metaclass=StoreMeta):
-    def __init__(self):
-        super().__init__()
-        self.id = id(self)
-        self.dict = Memory.get_dict(self.id)
-
-    @staticmethod
-    @memoized
-    def get_dict(id):
-        return dict()
-
-    def __copy__(self):
-        raise CopyError('Cannot copy memory store')
-
-    def __deepcopy__(self, memo):
-        raise CopyError('Cannot copy memory store')
+    @property
+    def namespace(self):
+        return self._namespace
 
     def __getstate__(self):
-        return (self._store_deleted, self.id)
+        return self._namespace
 
     def __setstate__(self, state):
-        self._store_deleted = state[0]
-        self.id = state[1]
-        self.dict = Memory.get_dict(self.id)
+        self._namespace = state
+
+    def __floordiv__(self, other):
+        return self[other]
+
+    def __truediv__(self, other):
+        new_instance = copy.copy(self)
+        new_instance._namespace = (*self.namespace, other)
+        return new_instance
 
     def __contains__(self, key):
-        return key in self.dict
+        key = NamespacedKey(self.namespace, key)
+        return self.driver.__contains__(key)
 
     def __delitem__(self, key):
-        del self.dict[key]
+        key = NamespacedKey(self.namespace, key)
+        self.driver.__delitem__(key)
+
+    def __eq__(self, other):
+        if type(self) is not type(other):
+            return False
+        return (
+            self.namespace == other.namespace and
+            self.driver == other.driver
+        )
 
     def __getitem__(self, key):
-        return self.dict[key]
+        key = NamespacedKey(self.namespace, key)
+        return self.driver.__getitem__(key)
 
     def __iter__(self):
-        return iter(self.dict)
+        return iter(self.driver.namespace_keys(self.namespace))
 
     def __len__(self):
-        return len(self.dict)
+        return self.driver.namespace__len__(self.namespace)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
     def __setitem__(self, key, value):
-        self.dict[key] = value
+        key = NamespacedKey(self.namespace, key)
+        self.driver.__setitem__(key, value)
+
+    def clear(self):
+        self.driver.namespace_clear(self.namespace)
 
     def __repr__(self):
-        return repr(self.dict)
+        r = repr(self.driver)
+        if len(self.namespace) > 0:
+            r = '({} / {})'.format(
+                r,
+                ' / '.join(repr(n) for n in self.namespace)
+            )
+        return r
 
 
-class DiskCache(metaclass=StoreMeta):
-    def __init__(self, cache_dir):
-        self.cache_dir = cache_dir
+class StoreDriver(MutableMapping):
+    def namespace__len__(self, namespace):
+        return sum(1 for _ in self.namespace_keys(namespace))
 
-    def __contains__(self, key):
-        with diskcache.Cache(self.cache_dir) as cache:
-            return key in cache
+    def namespace_clear(self, namespace):
+        removed = [k for k in self if k.namespace == namespace]
+        for key in removed:
+            del self[key]
 
-    def __delitem__(self, key):
-        with diskcache.Cache(self.cache_dir) as cache:
-            del cache[key]
+    def namespace_keys(self, namespace):
+        filtered = filter(lambda k: k.namespace == namespace, self)
+        return KeysView(k.key for k in filtered)
 
-    def __getitem__(self, key):
-        with diskcache.Cache(self.cache_dir) as cache:
-            return cache[key]
 
-    def __iter__(self):
-        with diskcache.Cache(self.cache_dir) as cache:
-            return iter(cache)
+class NamespacedKey:
+    def __init__(self, namespace, key):
+        if isinstance(key, NamespacedKey):
+            namespace += key.namespace
+            key = key.key
+        self.namespace = namespace
+        self.key = key
 
-    def __len__(self):
-        with diskcache.Cache(self.cache_dir) as cache:
-            return len(cache)
+    def __getstate__(self):
+        return self.namespace, self.key
 
-    def __setitem__(self, key, value):
-        with diskcache.Cache(self.cache_dir) as cache:
-            cache[key] = value
+    def __setstate__(self, state):
+        self.namespace = state[0]
+        self.key = state[1]
+
+    def __eq__(self, other):
+        return self.namespace == other.namespace and self.key == other.key
+
+    def __hash__(self):
+        return hash((self.namespace, self.key))
+
+    def __repr__(self):
+        fmt = 'NamespacedKey(namespace={}, key={})'
+        return fmt.format(repr(self.namespace), repr(self.key))

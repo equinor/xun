@@ -3,3 +3,4 @@ diskcache
 fastavro
 matplotlib
 networkx
+redis

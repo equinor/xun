@@ -41,6 +41,7 @@ if __name__ == '__main__':
             'fastavro',
             'matplotlib',
             'networkx',
+            'redis',
         ],
 
         setup_requires = [
@@ -50,6 +51,7 @@ if __name__ == '__main__':
         ],
 
         tests_require = [
+            'fakeredis',
             'pytest',
             'pyshd',
         ],

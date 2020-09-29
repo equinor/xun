@@ -1,4 +1,5 @@
 from .helpers import PickleDriver
+from .helpers import FakeRedis
 from math import radians
 from math import sin
 from xun.functions import CallNode, FutureValueNode, TargetNode
@@ -90,7 +91,7 @@ def test_build_function_graph():
     )
 
 
-def test_program_graph():
+def test_blueprint_graph():
     @xun.function()
     def start():
         return 2
@@ -154,7 +155,7 @@ def test_program_graph():
     )
 
 
-def test_program():
+def test_blueprint():
     offset = 42
     sample_count = 10
     step_size = 36
@@ -170,16 +171,18 @@ def test_program():
     ]
 
 
-def test_program_is_picklable():
+def test_blueprint_is_picklable():
     offset = 42
     sample_count = 10
     step_size = 36
 
     blueprint = sample_sin_blueprint(offset, sample_count, step_size)
-    result = blueprint.run(
-        driver=PickleDriver(),
-        store=xun.functions.store.Memory(),
-    )
+
+    with FakeRedis() as redis:
+        result = blueprint.run(
+            driver=PickleDriver(),
+            store=redis,
+        )
 
     assert result == [
         sin(radians(i / step_size)) + offset for i in range(sample_count)

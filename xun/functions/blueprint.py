@@ -49,18 +49,27 @@ class Blueprint:
         if store is None:
             raise ValueError("store must be specified")
 
+        # Make sure that everything given to the driver is picklable as a
+        # function precondition
+        if __debug__:
+            import pickle
+            from .store import Memory
+            pickle.loads(pickle.dumps(self.graph))
+            pickle.loads(pickle.dumps(self.call))
+
+            # The callable functions_images of the necessary xun functions
+            # _must_ be picklable
+            pickle.loads(pickle.dumps({
+                name: func.callable()
+                for name, func in self.functions.items()
+            }))
+            if not isinstance(store, Memory):
+                pickle.loads(pickle.dumps(store))
+
         function_images = {
             name: func.callable(extra_globals={'_xun_store': store})
             for name, func in self.functions.items()
         }
-
-        # Make sure that everything given to the driver is picklable
-        if __debug__:
-            import pickle
-            pickle.dumps(self.graph)
-            pickle.dumps(self.call)
-            pickle.dumps(function_images)
-            pickle.dumps(store)
 
         return driver.exec(self.graph, self.call, function_images, store)
 

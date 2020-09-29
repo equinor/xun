@@ -1,6 +1,7 @@
 from io import StringIO
 from itertools import starmap
 from xun.functions.compatibility import ast
+import fakeredis
 import sys
 import xun
 
@@ -39,6 +40,45 @@ class PickleDriver(xun.functions.driver.Sequential):
             function_images=pickle.loads(P['function_images']),
             store=pickle.loads(P['store']),
         )
+
+
+class FakeRedis(xun.functions.store.Redis):
+    _servers = {}
+
+    class Driver(xun.functions.store.redis.RedisDriver):
+        def __init__(self, server):
+            self.redis = fakeredis.FakeStrictRedis(server=server)
+
+    def __init__(self):
+        super().__init__()
+
+        # The ID is used to identify the server that this instance and any
+        # copies of it should connect to
+        self._id = id(self)
+
+    @property
+    def driver(self):
+        try:
+            return self._driver
+        except AttributeError:
+            server = FakeRedis._servers[self._id]
+            self._driver = FakeRedis.Driver(server)
+            return self._driver
+
+    def __getstate__(self):
+        return super().__getstate__(), self._id
+
+    def __setstate__(self, state):
+        super().__setstate__(state[0])
+        self._id = state[1]
+
+    def __enter__(self):
+        FakeRedis._servers.setdefault(self._id, fakeredis.FakeServer())
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        del FakeRedis._servers[self._id]
+        return exc_type is None
 
 
 def compare_ast(a, b):

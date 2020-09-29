@@ -62,15 +62,17 @@ class FunctionImage:
                  tree,
                  name,
                  globals,
-                 referenced_modules):
+                 referenced_modules,
+                 hash=None):
         self.tree = tree
         self.name = name
         self.globals = globals
         self.referenced_modules = referenced_modules
+        self.hash = hash
         self._func = None
 
     @staticmethod
-    def from_function(func):
+    def from_function(func, hash=None):
         """FunctionImage from a function
 
         Create FunctionImage from a python function
@@ -88,10 +90,10 @@ class FunctionImage:
             Serializable representation of the given function
         """
         desc = describe(func)
-        return FunctionImage.from_description(desc)
+        return FunctionImage.from_description(desc, hash=hash)
 
     @staticmethod
-    def from_description(desc):
+    def from_description(desc, hash=None):
         """FunctionImage from description
 
         Create FunctionImage from function description
@@ -113,6 +115,7 @@ class FunctionImage:
             desc.name,
             desc.globals,
             desc.referenced_modules,
+            hash=hash,
         )
 
     def compile(self):
@@ -159,6 +162,7 @@ class FunctionImage:
             self.name,
             self.globals,
             self.referenced_modules,
+            self.hash,
         )
 
     def __setstate__(self, state):
@@ -170,6 +174,7 @@ class FunctionImage:
         self.name = state[1]
         self.globals = state[2]
         self.referenced_modules = state[3]
+        self.hash = state[4]
         self._func = None
 
 

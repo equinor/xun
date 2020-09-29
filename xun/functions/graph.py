@@ -29,6 +29,11 @@ class CallNode:
     store. When a call is executed, the result is stored in the program store
     using the CallNode as key.
 
+    CallNodes are used as sentinel values during scheduling. To protect against
+    attempted modification during scheduling, copying of CallNodes is
+    disallowed. This is because the value a CallNode represents is not known
+    until execution and can therefore not be used.
+
     Attributes
     ----------
     function_name : str
@@ -42,6 +47,12 @@ class CallNode:
         self.function_name = function_name
         self.args = args
         self.kwargs = kwargs
+
+    def __copy__(self):
+        raise CopyError('Cannot copy value')
+
+    def __deepcopy__(self, memo=None):
+        raise CopyError('Cannot copy value')
 
     def __eq__(self, other):
         try:
@@ -67,49 +78,6 @@ class CallNode:
                 '{}={}'.format(k, v) for k, v in self.kwargs.items()
             ))
         return 'CallNode<{}({})>'.format(self.function_name, ', '.join(args))
-
-
-class FutureValueNode:
-    """FutureValueNode
-
-    This node serves two purposes, they are used as sentinel nodes representing
-    future values in the call graph. And are used as guards when building the
-    call graph. When the call graph is built, the functions doing the building
-    will use sentinel nodes as representations for values returned by context
-    functions. This makes let's us use the FutureValueNodes nodes directly in the
-    function dependency graph.
-
-    Another use is that because FutureValueNode are not copyable, and arguments
-    and results to and from calls to functions outside xun functions are copied,
-    they cannot be used for anything other than as arguments to other xun
-    functions. This guards against attempted changes to future values, something
-    that is of course impossible.
-
-    Attributes
-    ----------
-    call : CallNode
-        The CallNode whose result this Node represents
-    """
-    def __init__(self, call):
-        self.call = call
-
-    def __copy__(self):
-        raise CopyError('Cannot copy value')
-
-    def __deepcopy__(self, memo=None):
-        raise CopyError('Cannot copy value')
-
-    def __eq__(self, other):
-        try:
-            return self.call == other.call
-        except AttributeError:
-            return False
-
-    def __hash__(self):
-        return hash(self.call)
-
-    def __repr__(self):
-        return 'FutureValueNode<{}>'.format(self.call)
 
 
 class TargetNode:

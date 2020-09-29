@@ -2,7 +2,9 @@ from .helpers import PickleDriver
 from .helpers import FakeRedis
 from math import radians
 from math import sin
-from xun.functions import CallNode, FutureValueNode, TargetNode
+from xun.functions import CallNode
+from xun.functions import CopyError
+from xun.functions import TargetNode
 import pytest
 import networkx as nx
 import xun
@@ -54,26 +56,26 @@ def test_build_function_graph():
         ),
         (
             TargetNode('messages', call),
-            CallNode('sign', FutureValueNode(CallNode('message', 0)))
+            CallNode('sign', CallNode('message', 0))
         ),
         (
             TargetNode('messages', call),
-            CallNode('sign', FutureValueNode(CallNode('message', 1)))
+            CallNode('sign', CallNode('message', 1))
         ),
         (
             TargetNode('messages', call),
-            CallNode('sign', FutureValueNode(CallNode('message', 2)))
+            CallNode('sign', CallNode('message', 2))
         ),
         (
-            CallNode('sign', FutureValueNode(CallNode('message', 0))),
+            CallNode('sign', CallNode('message', 0)),
             TargetNode('signed', call)
         ),
         (
-            CallNode('sign', FutureValueNode(CallNode('message', 1))),
+            CallNode('sign', CallNode('message', 1)),
             TargetNode('signed', call)
         ),
         (
-            CallNode('sign', FutureValueNode(CallNode('message', 2))),
+            CallNode('sign', CallNode('message', 2)),
             TargetNode('signed', call)
         ),
         (
@@ -187,6 +189,25 @@ def test_blueprint_is_picklable():
     assert result == [
         sin(radians(i / step_size)) + offset for i in range(sample_count)
     ]
+
+
+def test_failure_on_use_of_unresolved_call():
+    def use(value):
+        return value + 1
+
+    @xun.function()
+    def f():
+        pass
+
+    @xun.function()
+    def g():
+        with ...:
+            a = f()
+            b = use(a)
+        return b
+
+    with pytest.raises(CopyError):
+        g.blueprint()
 
 
 def test_function_closures_available():
@@ -340,6 +361,100 @@ def test_nested_calls():
     )
 
     assert result == 'ab'
+
+
+def test_functions_hashes():
+    @xun.function()
+    def f():
+        pass
+    @xun.function()
+    def g():
+        with ...:
+            f()
+    f0 = f.hash
+    g0 = g.hash
+
+    # redefining the same function results in the same hash
+    @xun.function()
+    def g():
+        with ...:
+            f()
+    g1 = g.hash
+    assert g1 == g0
+
+    # redefining the different function with same name results in different
+    # hash
+    @xun.function()
+    def f():
+        return 0
+    f1 = f.hash
+    assert f0 != f1
+
+    # redefining the same function with different dependencies results in
+    # different hash
+    @xun.function()
+    def g():
+        with ...:
+            f()
+    g2 = g.hash
+    assert g2 != g0
+
+
+def test_function_version_completeness():
+    driver = xun.functions.driver.Sequential()
+    store = xun.functions.store.Memory()
+    accessor = xun.functions.store.StoreAccessor(store)
+
+    @xun.function()
+    def f():
+        return 0
+    @xun.function()
+    def workflow():
+        with ...:
+            r = f()
+        return r
+
+    f0 = f
+    w0 = workflow
+
+    assert not accessor.completed(CallNode('f'), hash=f0.hash)
+    assert not accessor.completed(CallNode('workflow'), hash=w0.hash)
+
+    r0 = w0.blueprint().run(driver=driver, store=store)
+
+    assert accessor.completed(CallNode('f'), hash=f0.hash)
+    assert accessor.completed(CallNode('workflow'), hash=w0.hash)
+    assert r0 == 0
+
+    # Redefintion
+
+    @xun.function()
+    def f():
+        return 1
+
+    f1 = f
+
+    w1 = xun.functions.Function(workflow.desc, {'f': f1}, None)
+
+    assert accessor.completed(CallNode('f'), hash=f0.hash)
+    assert accessor.completed(CallNode('workflow'), hash=w0.hash)
+    assert not accessor.completed(CallNode('f'), hash=f1.hash)
+    assert not accessor.completed(CallNode('workflow'), hash=w1.hash)
+
+    r1 = w1.blueprint().run(driver=driver, store=store)
+
+    assert accessor.completed(CallNode('f'), hash=f0.hash)
+    assert accessor.completed(CallNode('workflow'), hash=w0.hash)
+    assert accessor.completed(CallNode('f'), hash=f1.hash)
+    assert accessor.completed(CallNode('workflow'), hash=w1.hash)
+    assert r1 == 1
+
+    # Rerun w0 to overwrite the latest result, this ensures that we test that
+    # the correct hash is used when loading the result of f. To force a rerun
+    # of w0, we scramble the hash using w1's hash (since it is suitably random)
+    w0.hash = bytes(a ^ b for a, b in zip(w0.hash, w1.hash))
+    r2 = w0.blueprint().run(driver=driver, store=store)
+    assert r2 == 0
 
 
 def sample_sin_blueprint(offset, sample_count, step_size):

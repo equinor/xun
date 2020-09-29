@@ -125,19 +125,25 @@ def test_load_from_store_transformation():
         def _xun_load_constants():
             from copy import deepcopy  # noqa: F401
             from xun.functions import CallNode as _xun_CallNode
-            from xun.functions import FutureValueNode as _xun_FutureValueNode
-            a = _xun_FutureValueNode(_xun_CallNode('f'))
-            b = _xun_FutureValueNode(_xun_CallNode('f', a))
-            c = _xun_FutureValueNode(_xun_CallNode('f', b))
+            from xun.functions.store import StoreAccessor as _xun_StoreAccessor
+            _xun_store_accessor = _xun_StoreAccessor(_xun_store)
+            a = _xun_CallNode('f')
+            b = _xun_CallNode('f', a)
+            c = _xun_CallNode('f', b)
             return (
-                _xun_store[_xun_FutureValueNode(_xun_CallNode('f'))],
-                _xun_store[_xun_FutureValueNode(_xun_CallNode('f', b))],
+                _xun_store_accessor.load_result(_xun_CallNode('f')),
+                _xun_store_accessor.load_result(_xun_CallNode('f', b)),
             )
         a, c = _xun_load_constants()
         value = a + c
         return value
 
-    known_functions = {'f'}
+    # Dummy dependency
+    @xun.function()
+    def dummy():
+        pass
+    known_functions = {'f': dummy}
+
     code = (xun.functions.FunctionDecomposition(desc)
         .apply(xun.functions.separate_constants)
         .apply(xun.functions.sort_constants)
@@ -151,6 +157,7 @@ def test_load_from_store_transformation():
         if not compare_ast(a, b):
             raise ValueError('\n{} != \n{}'.format(ast.dump(a), ast.dump(b)))
 
+
 def test_load_from_store_skip_if_unecessary():
     def g(a, b):
         value = a + b
@@ -163,7 +170,12 @@ def test_load_from_store_skip_if_unecessary():
         value = a + b
         return value
 
-    known_functions = {'f'}
+    # Dummy dependency
+    @xun.function()
+    def dummy():
+        pass
+    known_functions = {'f': dummy}
+
     code = (xun.functions.FunctionDecomposition(desc)
         .apply(xun.functions.separate_constants)
         .apply(xun.functions.sort_constants)

@@ -1,5 +1,4 @@
-from .. import CallNode
-from .. import FutureValueNode
+from ..store import StoreAccessor
 from abc import ABC
 from abc import abstractmethod
 
@@ -12,35 +11,14 @@ class Driver(ABC):
     concurrency.
     """
     @abstractmethod
-    def exec(self, graph, entry_call, function_images, store):
+    def _exec(self, graph, entry_call, function_images, store_accessor):
         pass
+
+    def exec(self, graph, entry_call, function_images, store):
+        entry_hash = function_images[entry_call.function_name].hash
+        store_accessor = StoreAccessor(store)
+        self._exec(graph, entry_call, function_images, store_accessor)
+        return store_accessor.load_result(entry_call, hash=entry_hash)
 
     def __call__(self, graph, entry_call, function_images, store):
         return self.exec(graph, entry_call, function_images, store)
-
-
-def replace_futures(store, call):
-    """
-    Given a call, replace any FutureValueNodes with values from the store.
-
-    Parameters
-    ----------
-    store : Store
-        Store to load from
-    call : CallNode
-
-    Returns
-    CallNode
-        Call with FutureValueNodes replaced by the value they represent
-    """
-    args = [
-        store[arg]
-        if isinstance(arg, FutureValueNode) else arg
-        for arg in call.args
-    ]
-    kwargs = {
-        key: store[value]
-        if isinstance(value, FutureValueNode) else value
-        for key, value in call.kwargs.items()
-    }
-    return CallNode(call.function_name, *args, **kwargs)

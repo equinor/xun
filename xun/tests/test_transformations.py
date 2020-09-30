@@ -1,6 +1,6 @@
 from .helpers import compare_ast
 from typing import List
-import ast
+from xun.functions.compatibility import ast
 import astor
 import pytest
 import networkx as nx

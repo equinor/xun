@@ -1,3 +1,4 @@
+from .compatibility import ast
 from .function_description import FunctionDescription
 from .function_description import describe
 from .function_image import FunctionImage
@@ -8,7 +9,6 @@ from .util import sort_constants_ast
 from .util import stmt_external_names
 from .util import stmt_introduced_names
 from itertools import chain
-import ast
 import copy
 import types
 
@@ -272,7 +272,7 @@ def copy_only_constants(
     """
     def gen_deepcopy_expr(expr):
         deepcopy_id = ast.Name(id='deepcopy', ctx=ast.Load())
-        return ast.Call(deepcopy_id, args=[expr], keywords=[])
+        return ast.Call(func=deepcopy_id, args=[expr], keywords=[])
 
     class CallArgumentCopyTransformer(ast.NodeTransformer):
         def visit_Call(self, node):

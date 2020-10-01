@@ -1,3 +1,17 @@
+"""Transformations
+
+This module includes functionality for working with and manipulating function
+code. The FunctionDecomposition class provides a data structure to make
+managing code fragments easier, while the transformation functions are used to
+generate xun scheduling and execution code.
+
+The code is represented by and manipulated with the python ast module [1][2].
+
+.. [1] Python ast documentation: https://docs.python.org/3/library/ast.html
+.. [2] Greentreesnakes: https://greentreesnakes.readthedocs.io/en/latest/
+"""
+
+
 from .compatibility import ast
 from .function_description import FunctionDescription
 from .function_description import describe
@@ -11,20 +25,6 @@ from .util import stmt_introduced_names
 from itertools import chain
 import copy
 import types
-
-
-"""Transformations
-
-This module includes functionality for working with and manipulating function
-code. The FunctionDecomposition class provides a data structure to make managing
-code fragments easier, while the transformation functions are used to generate
-xun scheduling and execution code.
-
-The code is represented by and manipulated with the python ast module [1][2].
-
-.. [1] Python ast documentation: https://docs.python.org/3/library/ast.html
-.. [2] Greentreesnakes: https://greentreesnakes.readthedocs.io/en/latest/
-"""
 
 
 class FunctionDecomposition(types.SimpleNamespace):

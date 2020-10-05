@@ -1,8 +1,8 @@
+from .compatibility import ast
 from .errors import NotDAGError
 from collections import Counter
 from itertools import chain
 from itertools import tee
-import ast
 import copy
 import inspect
 import networkx as nx
@@ -353,7 +353,6 @@ def func_arg_names(fdef):
     CollectArgs().visit(fdef)
 
     return frozenset(args)
-
 
 
 #

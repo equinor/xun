@@ -36,7 +36,6 @@ if __name__ == '__main__':
             'fastavro',
             'matplotlib',
             'networkx',
-            'redis',
         ],
 
         setup_requires = [

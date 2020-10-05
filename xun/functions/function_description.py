@@ -1,9 +1,9 @@
+from .compatibility import ast
 from .util import func_external_names
 from .util import function_ast
 from .util import function_source
 from .util import strip_decorators
 from collections import namedtuple
-import ast
 import inspect
 
 

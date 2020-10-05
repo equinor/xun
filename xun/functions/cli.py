@@ -1,5 +1,5 @@
+from .compatibility import ast
 from pathlib import Path
-import ast
 import importlib
 import inspect
 import networkx as nx

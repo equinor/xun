@@ -1,6 +1,6 @@
 from io import StringIO
 from itertools import starmap
-import ast
+from xun.functions.compatibility import ast
 import sys
 import xun
 
@@ -43,7 +43,7 @@ class PickleDriver(xun.functions.driver.Sequential):
 
 def compare_ast(a, b):
     def is_relevant(node, k, v):
-        ignored_keys=(
+        ignored_keys = (
             'col_offset',
             'ctx',
             'end_col_offset',

@@ -13,6 +13,36 @@ import subprocess
 import xun
 
 
+#
+# DNS Hack
+#
+
+
+from contextlib import contextmanager
+import socket
+
+
+@contextmanager
+def dns_rules(rules):
+    getaddrinfo = socket.getaddrinfo
+
+    def custom_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        if (host, port) in rules:
+            host, port = rules[(host, port)]
+        return getaddrinfo(host, port, family, type, proto, flags)
+
+    socket.getaddrinfo = custom_getaddrinfo
+
+    yield
+
+    socket.getaddrinfo = getaddrinfo
+
+
+#
+# ^ DNS Hack
+#
+
+
 url = 'https://en.wikipedia.org/w/api.php'
 cleanr = re.compile('<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6})|parser|MW|template|output;')
 
@@ -141,22 +171,37 @@ def main():
         const=logging.DEBUG,
         default=logging.WARNING
     )
+    parser.add_argument(
+        '-n', '--no-draw',
+        action='store_true',
+        default=False
+    )
 
     args = parser.parse_args()
 
-    logging.basicConfig(level=args.loglevel)
+    logging.basicConfig(level=logging.WARNING)
+    logging.getLogger('xun').setLevel(args.loglevel)
 
     blueprint = wordcloud.blueprint(
         args.topic,
         max_resolution=args.max_resolution
     )
 
-    image, text = blueprint.run(
-        driver=xun.functions.driver.Celery(),
-        store=xun.functions.store.Redis(host='redis'),
-    )
+    with dns_rules({ ('redis', 6379): ('localhost', 6379),
+                     ('rabbitmq', 5672): ('localhost', 5672) }):
+        # Since redis and celery are run in docker, we need to redirect their
+        # hostnames to localhost for the client process.
 
-    draw(image, text)
+        broker_url = 'amqp://guest:guest@rabbitmq:5672//'
+        redis_hostname = 'redis'
+
+        image, text = blueprint.run(
+            driver=xun.functions.driver.Celery(broker_url=broker_url),
+            store=xun.functions.store.Redis(host=redis_hostname),
+        )
+
+    if not args.no_draw:
+        draw(image, text)
 
 
 if __name__ == '__main__':

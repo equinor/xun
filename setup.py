@@ -27,6 +27,7 @@ if __name__ == '__main__':
         packages = [
             'xun',
             'xun.functions',
+            'xun.functions.compatibility',
             'xun.functions.driver',
             'xun.functions.store',
             'xun.sima',

@@ -27,6 +27,7 @@ from .util import stmt_dag
 from .util import strip_decorators
 
 from . import cli
+from . import compatibility
 from . import driver
 from . import graph
 from . import store

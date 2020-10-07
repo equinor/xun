@@ -8,14 +8,14 @@ minor_version = sys.version_info[1]
 
 
 def test_Constant():
-    constant_int = compat_ast.Constant(5)
-    constant_float = compat_ast.Constant(5.5)
-    constant_complex = compat_ast.Constant(5.5 + 5j)
-    constant_string = compat_ast.Constant("hello")
-    constant_bytes = compat_ast.Constant(b"0042")
-    constant_nameconstant_bool = compat_ast.Constant(True)
-    constant_nameconstant_none = compat_ast.Constant(None)
-    constant_ellipsis = compat_ast.Constant(...)
+    constant_int = compat_ast.Constant(5, None)
+    constant_float = compat_ast.Constant(5.5, None)
+    constant_complex = compat_ast.Constant(5.5 + 5j, None)
+    constant_string = compat_ast.Constant("hello", None)
+    constant_bytes = compat_ast.Constant(b"0042", None)
+    constant_nameconstant_bool = compat_ast.Constant(True, None)
+    constant_nameconstant_none = compat_ast.Constant(None, None)
+    constant_ellipsis = compat_ast.Constant(..., None)
 
     assert isinstance(constant_int, compat_ast.Constant)
     assert isinstance(constant_float, compat_ast.Constant)

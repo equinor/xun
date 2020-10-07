@@ -238,3 +238,21 @@ def test_dependency_without_target():
         store=xun.functions.store.Memory(),
     )
     assert result == 1
+
+
+def test_xun_function_to_source():
+    @xun.function()
+    def f(a='a'):
+        return a*2
+
+    @xun.function()
+    def g():
+        with ...:
+            a = f()
+            b = f(a)
+            c = f(b)
+        value = a + c
+        return value
+
+    tree = g.callable().tree
+    assert isinstance(astor.to_source(tree), str)

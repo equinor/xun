@@ -104,18 +104,22 @@ def interpret_call(call_string):
     if not isinstance(call.func, ast.Name):
         raise SyntaxError('Call must be to a named function')
 
-    keywords = {ast.Constant(value=kw.arg): kw.value for kw in call.keywords}
+    keywords = {
+        ast.Constant(value=kw.arg, kind=None): kw.value for kw in call.keywords
+    }
 
     module = ast.fix_missing_locations(ast.Module(
         type_ignores=[],
         body=[
             ast.Assign(
                 targets=[ast.Name(id='function_name', ctx=ast.Store())],
-                value=ast.Constant(value=call.func.id),
+                value=ast.Constant(value=call.func.id, kind=None),
+                type_comment=None,
             ),
             ast.Assign(
                 targets=[ast.Name(id='args', ctx=ast.Store())],
                 value=ast.List(elts=call.args, ctx=ast.Load()),
+                type_comment=None,
             ),
             ast.Assign(
                 targets=[ast.Name(id='kwargs', ctx=ast.Store())],
@@ -123,6 +127,7 @@ def interpret_call(call_string):
                     keys=list(keywords.keys()),
                     values=list(keywords.values()),
                 ),
+                type_comment=None,
             ),
         ],
     ))

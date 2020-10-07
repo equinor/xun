@@ -155,6 +155,8 @@ class FunctionDecomposition(types.SimpleNamespace):
                     args=args,
                     decorator_list=[],
                     body=body,
+                    returns=None,
+                    type_comment=None,
                 )
             ],
         ))
@@ -298,7 +300,8 @@ def copy_only_constants(
 
     from_copy_import_deepcopy = ast.ImportFrom(
         module='copy',
-        names=[ast.alias(name='deepcopy')],
+        names=[ast.alias(name='deepcopy', asname=None)],
+        level=0
     )
     copy_only_constants = [from_copy_import_deepcopy, *transformed]
 
@@ -380,7 +383,7 @@ def build_xun_graph(
             The list of strings as a list of strings expression
         """
         expr = ast.List(
-            elts=[ast.Constant(el) for el in L],
+            elts=[ast.Constant(value=el, kind=None) for el in L],
             ctx=ast.Load(),
         )
         return expr
@@ -406,7 +409,7 @@ def build_xun_graph(
             new_node = ast.Call(
                 func=ast.Name(id='_xun_register_future_value', ctx=ast.Load()),
                 args=[
-                    ast.Constant(node.func.id),
+                    ast.Constant(value=node.func.id, kind=None),
                     str_list_to_ast(self.external_xun_names),
                     str_list_to_ast(self.targets),
                     *node.args
@@ -506,7 +509,7 @@ def load_from_store(
 
             construct_call = ast.Call(
                 func=ast.Name(id='_xun_CallNode', ctx=ast.Load()),
-                args=[ast.Constant(node.func.id), *node.args],
+                args=[ast.Constant(value=node.func.id, kind=None), *node.args],
                 keywords=node.keywords,
             )
 
@@ -571,6 +574,7 @@ def load_from_store(
                     asname='_xun_CallNode'
                 ),
             ],
+            level=0,
         ),
         ast.ImportFrom(
             module='xun.functions',
@@ -580,6 +584,7 @@ def load_from_store(
                     asname='_xun_FutureValueNode'
                 ),
             ],
+            level=0
         ),
     ]
 
@@ -602,6 +607,8 @@ def load_from_store(
             )
         ],
         decorator_list=[],
+        returns=None,
+        type_comment=None,
     )
 
     load_call = ast.Assign(
@@ -618,6 +625,7 @@ def load_from_store(
             args=[],
             keywords=[],
         ),
+        type_comment=None,
     )
 
     lfs = [

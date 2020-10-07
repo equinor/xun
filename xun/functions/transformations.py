@@ -22,6 +22,7 @@ from .util import separate_constants_ast
 from .util import sort_constants_ast
 from .util import stmt_external_names
 from .util import stmt_introduced_names
+from .util import targets_in_tuple
 from itertools import chain
 import copy
 import types
@@ -474,10 +475,15 @@ def load_from_store(
                 raise NotImplementedError(msg)
 
             target = node.targets[0]
-            if not isinstance(target, ast.Name):
-                raise NotImplementedError('Unsupported target {}'.format(node))
-
-            self.seen_targets.append(target.id)
+            if isinstance(target, ast.Name):
+                self.seen_targets.append(target.id)
+            elif isinstance(target, ast.Tuple):
+                inner_targets = targets_in_tuple(target)
+                self.seen_targets += inner_targets
+            else:
+                raise NotImplementedError(
+                    'Unsupported target {}'.format(target)
+                )
 
             return node
     discovered_reference = DiscoverReferences()

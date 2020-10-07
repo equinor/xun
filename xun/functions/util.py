@@ -431,3 +431,30 @@ def has_reassignments(node):
         if isinstance(assign, ast.Assign)
     ])
     return any(count != 1 for count in Counter(names).values())
+
+
+def targets_in_tuple(tuple_node):
+    """Targets in tuple
+    Given a tuple ast, which can be a nested tuple, return the names of all the
+    individual elements.
+
+    Parameters
+    ----------
+    tuple_node : ast.Tuple
+        The tuple AST
+
+    Returns
+    -------
+    list of str
+        element names
+    """
+    targets = []
+    if isinstance(tuple_node, ast.Tuple):
+        for el in tuple_node.elts:
+            if isinstance(el, ast.Name):
+                targets.append(el.id)
+            elif isinstance(el, ast.Tuple):
+                targets += targets_in_tuple(el)
+            else:
+                raise TypeError('Node {} is neither Name nor Tuple'.format(el))
+    return targets

@@ -1,3 +1,4 @@
+import ast
 import astunparse
 import xun
 
@@ -108,3 +109,10 @@ def test_func_external_references_tuple_unpacking():
     expected = frozenset({'v'})
     external_names = xun.functions.func_external_names(tree.body[0])
     assert external_names == expected
+
+
+def test_targets_in_tuple():
+    tree_of_tuples = ast.parse('(a, b), c, (d,)').body[0].value
+    targets = xun.functions.util.targets_in_tuple(tree_of_tuples)
+
+    assert targets == ['a', 'b', 'c', 'd']

@@ -92,3 +92,9 @@ parser_fgraph = subparsers.add_parser('graph')
 parser_fgraph.set_defaults(func=functions.cli.xun_graph)
 parser_fgraph.add_argument('module')
 parser_fgraph.add_argument('call_string')
+parser_fgraph_action = parser_fgraph.add_mutually_exclusive_group()
+parser_fgraph_action.add_argument('--list-layout',
+                                  action='store_true',
+                                  default=True)
+parser_fgraph_action.add_argument('--dot-layout', action='store_true')
+parser_fgraph_action.add_argument('--dot', action='store_true')

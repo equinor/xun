@@ -40,7 +40,10 @@ def quicksort(hashable_iterable):
 
 
 def main():
-    input = (8, 4, 7, 5, 6, 0, 9, 2, 3, 1)
+    input = (
+        16, 10, 12, 2, 20, 1, 13, 0, 7, 4, 8, 5, 14, 15, 9, 17, 21, 23, 18, 11,
+        19, 22, 6, 3
+    )
 
     print('input:', input)
 

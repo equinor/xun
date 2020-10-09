@@ -4,6 +4,8 @@ from pathlib import Path
 import importlib
 import inspect
 import networkx as nx
+import numpy as np
+import sys
 import xun
 
 
@@ -13,13 +15,125 @@ def xun_graph(args):
     """
     import matplotlib.pyplot as plt
 
+    plt.style.use('dark_background')
+
     call = interpret_call(args.call_string)
     module = load_module(args.module)
     function = identify_function(call, module)
 
     blueprint = function.blueprint(*call.args, **call.kwargs)
 
-    nx.draw_spring(blueprint.graph, with_labels=True)
+    G = blueprint.graph
+
+    if args.dot_layout:
+        draw_dot(plt, G, call)
+    elif args.dot:
+        nx.nx_agraph.write_dot(G, sys.stdout)
+    else: # Draw list is default behavior
+        draw_list(plt, G, call)
+
+
+def draw_list(plt, G, root):
+    cmap = plt.get_cmap('viridis')
+    colors = cmap(np.linspace(0, 1, len(G.nodes())))
+
+    order = list(nx.topological_sort(G))
+    index_of = {node: idx for idx, node in enumerate(order)}
+    color_of = {node: colors[index_of[node]] for node in G.nodes()}
+    colors = [colors[index_of[node]] for node in G.nodes()]
+
+    # Layout
+
+    top_sort_next = {
+        **{
+            node: top_sort_next
+            for node, top_sort_next in zip(order[:-1], order[1:])
+        },
+        root: None
+    }
+
+    pos = {
+        **{node: (0, i) for i, node in enumerate(order[:-1])},
+        root: (-0.1, max(0.0, len(order) - 2))
+    }
+    label_pos = {
+        node: (0.025, y) if node != root else (-0.125, len(order) - 1)
+        for node, (x, y) in pos.items()
+    }
+
+    # Plot
+
+    nx.draw_networkx_nodes(
+        G,
+        pos=pos,
+        node_size=25,
+        node_color=colors,
+    )
+    nx.draw_networkx_labels(
+        nx.subgraph_view(G, filter_node=lambda node: node != root),
+        pos=label_pos,
+        font_size=8,
+        font_color='white',
+        horizontalalignment='left',
+    )
+
+    ax = plt.gca()
+    for edge in G.edges:
+        ax.annotate(
+            "",
+            xy=pos[edge[1]], xycoords='data',
+            xytext=pos[edge[0]], textcoords='data',
+            arrowprops=dict(
+                arrowstyle="->",
+                color=color_of[edge[0]],
+                shrinkA=5,
+                shrinkB=5,
+                patchA=None,
+                patchB=None,
+                connectionstyle=
+                    "arc3,rad=0.0" if edge[1] == top_sort_next[edge[0]]
+                    else "arc3,rad=-0.3",
+                ),
+        )
+
+    ax.set_title(root)
+    ax.axis("off")
+    ax.set_xlim((-0.2, 0.8))
+    ax.set_ylim((-1, len(order) - 1))
+
+    plt.tight_layout()
+    plt.show()
+
+
+def draw_dot(plt, G, root):
+    cmap = plt.get_cmap('viridis')
+    colors = cmap(np.linspace(0, 1, len(G.nodes())))
+
+    order = list(nx.topological_sort(G))
+    index_of = {node: idx for idx, node in enumerate(order)}
+    color_of = {node: colors[index_of[node]] for node in G.nodes()}
+    colors = [colors[index_of[node]] for node in G.nodes()]
+    edge_colors = [color_of[edge[0]] for edge in G.edges()]
+
+    ax = plt.gca()
+    ax.set_title(root)
+    ax.axis("off")
+
+
+    graphviz_args = '-Groot="{}"'.format(repr(root))
+    pos = nx.drawing.nx_agraph.graphviz_layout(
+        G, prog='dot', root=None, args=graphviz_args
+    )
+    pos = {node: (y, x) for node, (x, y) in pos.items()}
+    nx.draw_networkx(
+        G,
+        pos=pos,
+        node_size=50,
+        node_color=colors,
+        edge_color=edge_colors,
+        with_labels=False
+    )
+
     plt.show()
 
 

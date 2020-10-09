@@ -2,6 +2,7 @@ from .compatibility import ast
 from pathlib import Path
 import importlib
 import inspect
+import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import sys
@@ -12,7 +13,7 @@ def xun_graph(args):
     """
     CLI entrypoint for ``xun graph`` command
     """
-    import matplotlib.pyplot as plt
+    plt.style.use('dark_background')
 
     plt.style.use('dark_background')
 

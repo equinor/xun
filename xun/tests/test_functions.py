@@ -4,7 +4,6 @@ from math import radians
 from math import sin
 from xun.functions import CallNode
 from xun.functions import CopyError
-from xun.functions import TargetNode
 import pytest
 import networkx as nx
 import xun
@@ -35,6 +34,7 @@ def test_build_function_graph():
     @xun.function()
     def messages(msg_count):
         with ...:
+            manifest = sign(message('3 messages'))
             signed = [sign(m) for m in messages]
             messages = [message(i) for i in range(msg_count)]
 
@@ -43,44 +43,36 @@ def test_build_function_graph():
 
     expected = nx.DiGraph([
         (
+            CallNode('message', '3 messages'),
+            CallNode('sign', CallNode('message', '3 messages')),
+        ),
+        (
+            CallNode('sign', CallNode('message', '3 messages')),
+            CallNode('messages', 3),
+        ),
+        (
             CallNode('message', 0),
-            TargetNode('messages', call)
+            CallNode('sign', CallNode('message', 0)),
         ),
         (
             CallNode('message', 1),
-            TargetNode('messages', call)
+            CallNode('sign', CallNode('message', 1)),
         ),
         (
             CallNode('message', 2),
-            TargetNode('messages', call)
-        ),
-        (
-            TargetNode('messages', call),
-            CallNode('sign', CallNode('message', 0))
-        ),
-        (
-            TargetNode('messages', call),
-            CallNode('sign', CallNode('message', 1))
-        ),
-        (
-            TargetNode('messages', call),
-            CallNode('sign', CallNode('message', 2))
+            CallNode('sign', CallNode('message', 2)),
         ),
         (
             CallNode('sign', CallNode('message', 0)),
-            TargetNode('signed', call)
+            CallNode('messages', 3),
         ),
         (
             CallNode('sign', CallNode('message', 1)),
-            TargetNode('signed', call)
+            CallNode('messages', 3),
         ),
         (
             CallNode('sign', CallNode('message', 2)),
-            TargetNode('signed', call)
-        ),
-        (
-            TargetNode('signed', call),
-            call,
+            CallNode('messages', 3),
         ),
     ])
 
@@ -133,18 +125,12 @@ def test_blueprint_graph():
     c_node = CallNode('c')
 
     reference_graph = nx.DiGraph([
-        (start_node, TargetNode('repetitions', a_node)),
-        (start_node, TargetNode('repetitions', b_node)),
-        (start_node, TargetNode('repetitions', c_node)),
-        (TargetNode('repetitions', a_node), a_node),
-        (TargetNode('repetitions', b_node), b_node),
-        (TargetNode('repetitions', c_node), c_node),
-        (a_node, TargetNode('_a', end_node)),
-        (b_node, TargetNode('_b', end_node)),
-        (c_node, TargetNode('_c', end_node)),
-        (TargetNode('_a', end_node), end_node),
-        (TargetNode('_b', end_node), end_node),
-        (TargetNode('_c', end_node), end_node),
+        (start_node, a_node),
+        (start_node, b_node),
+        (start_node, c_node),
+        (a_node, end_node),
+        (b_node, end_node),
+        (c_node, end_node),
     ])
 
     assert nx.is_directed_acyclic_graph(bp.graph)
@@ -339,28 +325,28 @@ def test_structured_unpacking_list():
     assert result == 'ab'
 
 
-@pytest.mark.skip(reason="Nested calls not supported yet")
 def test_nested_calls():
     @xun.function()
     def f():
         return 'a'
 
     @xun.function()
-    def g(v):
-        return v + 'b'
+    def g(v, other='b'):
+        return v + other
 
     @xun.function()
     def h():
         with ...:
             r = g(f())
-        return r
+            s = g(g(f()), other=f())
+        return r + '_' + s
 
     result = h.blueprint().run(
         driver=xun.functions.driver.Sequential(),
         store=xun.functions.store.Memory(),
     )
 
-    assert result == 'ab'
+    assert result == 'ab_aba'
 
 
 def test_functions_hashes():

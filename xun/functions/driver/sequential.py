@@ -1,6 +1,10 @@
 from .. import CallNode
 from .driver import Driver
+import logging
 import networkx as nx
+
+
+logger = logging.getLogger(__name__)
 
 
 class Sequential(Driver):
@@ -18,17 +22,26 @@ class Sequential(Driver):
 
         schedule = list(nx.topological_sort(graph))
 
-        for task in schedule:
-            if not isinstance(task, CallNode):
+        for node in schedule:
+            if not isinstance(node, CallNode):
                 continue
 
-            func = function_images[task.function_name]
+            func = function_images[node.function_name]
 
             # Do not rerun finished jobs. For example if a workflow has been
             # stopped and resumed.
-            if store_accessor.completed(task, func.hash):
+            if store_accessor.completed(node, func.hash):
+                logger.info('{} already completed'.format(node))
                 continue
 
-            self.run_and_store(task, func, store_accessor)
+            logger.info('Running {}'.format(node))
+            try:
+                self.run_and_store(node, func, store_accessor)
+            except Exception as e:
+                logger.error(
+                    '{} failed with {}'.format(node, str(e))
+                )
+                raise
+            logger.info('{} succeeded'.format(node))
 
         return store_accessor.load_result(entry_call)

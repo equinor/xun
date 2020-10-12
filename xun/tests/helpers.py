@@ -82,29 +82,21 @@ class FakeRedis(xun.functions.store.Redis):
 
 
 def compare_ast(a, b):
-    def is_relevant(node, k, v):
+    def is_relevant(node, k):
         ignored_keys = (
             'col_offset',
-            'ctx',
             'end_col_offset',
             'end_lineno',
             'lineno',
         )
-
-        if k.startswith('_'):
-            return False
-
-        if isinstance(node, ast.ImportFrom) and k == 'level':
-            return v != 0
-
-        return k not in ignored_keys and v is not None
+        return k not in ignored_keys
 
     if type(a) is not type(b):
         return False
 
     if isinstance(a, ast.AST):
-        a_attrs = {k: v for k, v in vars(a).items() if is_relevant(a, k, v)}
-        b_attrs = {k: v for k, v in vars(b).items() if is_relevant(b, k, v)}
+        a_attrs = {k: v for k, v in vars(a).items() if is_relevant(a, k)}
+        b_attrs = {k: v for k, v in vars(b).items() if is_relevant(b, k)}
 
         if set(a_attrs.keys()) != set(b_attrs.keys()):
             return False

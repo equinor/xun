@@ -16,6 +16,10 @@ class Driver(ABC):
 
     def exec(self, graph, entry_call, function_images, store):
         store_accessor = StoreAccessor(store)
+        store_accessor.store_graph(
+            graph,
+            lambda node: function_images[node.function_name].hash
+        )
         return self._exec(graph, entry_call, function_images, store_accessor)
 
     def __call__(self, graph, entry_call, function_images, store):

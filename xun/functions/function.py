@@ -82,14 +82,11 @@ class Function:
         str
             Hex digest of function hash
         """
-        sha256 = hashlib.sha256()
+        content = ast.dump(desc.ast).encode()
+        sha256 = hashlib.sha256(content).digest()
         for dependency in sorted(dependencies.values(), key=lambda d: d.hash):
-            sha256.update(dependency.hash.encode())
-
-        ast_dump = ast.dump(desc.ast)
-        sha256.update(ast_dump.encode())
-
-        return sha256.hexdigest()
+            sha256 = bytes(a ^ b for a, b in zip(sha256, dependency.hash))
+        return sha256
 
     @staticmethod
     def from_function(func, max_parallel=None):

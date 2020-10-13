@@ -203,6 +203,33 @@ def assignment_target_names(t):
         raise TypeError('Unsupported target {}'.format(type(t)))
 
 
+def assignment_target_shape(t):
+    """Assignment target shape
+    Given a target expression node, return the shape of the target
+    """
+    assert isinstance(t, ast.Tuple)
+
+    inner_tuple = ()
+    count_Names = 0
+    n_elements = len(t.elts)
+    for el in t.elts:
+        if isinstance(el, ast.Name):
+            count_Names += 1
+            inner_tuple += (1, )
+        else:
+            if isinstance(el, ast.Tuple):
+                inner_tuple += (assignment_target_shape(el), )
+            elif isinstance(el, ast.Starred):
+                inner_tuple += (0, )
+            else:
+                raise TypeError("Invalid node in target tuple")
+
+    if count_Names == n_elements:
+        inner_tuple = n_elements
+
+    return inner_tuple
+
+
 def stmt_introduced_names(stmt):
     """
     Return a list of all names introduced by executing the statement

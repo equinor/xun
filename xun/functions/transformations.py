@@ -20,7 +20,6 @@ from .util import body_external_names
 from .util import function_ast
 from .util import separate_constants_ast
 from .util import sort_constants_ast
-from .util import stmt_external_names
 from .util import stmt_introduced_names
 from itertools import chain
 import copy
@@ -337,65 +336,33 @@ def build_xun_graph(
 
     # The following code is never executed here, but is injected into the
     # FunctionDecomposition body. (`xun_graph` attribute). The injected code
-    # provides a graph, and a funtion _xun_register_future_value that is used
-    # to populate the graph.
+    # provides a graph, and a funtion _xun_register_call that is used to
+    # populate the graph.
     @function_ast
     def helper_code():
         from xun.functions import CallNode as _xun_CallNode
-        from xun.functions import TargetNameOnlyNode as _xun_TargetNameOnlyNode
         import networkx as _xun_nx
 
         _xun_graph = _xun_nx.DiGraph()
 
-        def _xun_register_future_value(fname,
-                                       external_names,
-                                       targets,
-                                       *args,
-                                       **kwargs):
-            dependencies = list(
-                filter(
-                    lambda a: a in _xun_graph,
-                    map(_xun_TargetNameOnlyNode, external_names)
-                )
-            )
-            outputs = [_xun_TargetNameOnlyNode(name) for name in targets]
+        def _xun_register_call(fname,
+                               *args,
+                               **kwargs):
+            dependencies = [
+                *(a for a in args if isinstance(a, _xun_CallNode)),
+                *(a for a in kwargs.values() if isinstance(a, _xun_CallNode)),
+            ]
             call = _xun_CallNode(fname, *args, **kwargs)
             _xun_graph.add_node(call)
             _xun_graph.add_edges_from((dep, call) for dep in dependencies)
-            _xun_graph.add_edges_from((call, tar) for tar in outputs)
             return call
 
     header = helper_code.body[0].body
 
-    def str_list_to_ast(L):
-        """str_list_to_ast
-
-        Given a list of strings, return an ast for a list of strings expression.
-
-        Parameters
-        ----------
-        L : list of strings
-
-        Returns
-        -------
-        ast.List
-            The list of strings as a list of strings expression
-        """
-        expr = ast.List(
-            elts=[ast.Constant(value=el, kind=None) for el in L],
-            ctx=ast.Load(),
-        )
-        return expr
-
     class XCall(ast.NodeTransformer):
         """
-        Transformation any calls to a xun function to _xun_register_future_value
+        Transformation any calls to a xun function to _xun_register_call
         """
-
-        def __init__(self, stmt):
-            self.targets = stmt_introduced_names(stmt)
-            self.external_xun_names = stmt_external_names(stmt)
-
         def visit_Call(self, node):
             node = self.generic_visit(node)
 
@@ -406,11 +373,9 @@ def build_xun_graph(
                 return node
 
             new_node = ast.Call(
-                func=ast.Name(id='_xun_register_future_value', ctx=ast.Load()),
+                func=ast.Name(id='_xun_register_call', ctx=ast.Load()),
                 args=[
-                    ast.Constant(value=node.func.id, kind=None),
-                    str_list_to_ast(self.external_xun_names),
-                    str_list_to_ast(self.targets),
+                    ast.Constant(node.func.id, kind=None),
                     *node.args
                 ],
                 keywords=node.keywords,
@@ -422,9 +387,8 @@ def build_xun_graph(
     xun_graph = [
         *header,
         *(
-            XCall(stmt).visit(stmt)
-            if isinstance(stmt, ast.Assign)
-            or isinstance(stmt, ast.Expr)
+            XCall().visit(stmt)
+            if isinstance(stmt, ast.Assign) or isinstance(stmt, ast.Expr)
             else stmt
             for stmt in func.copy_only_constants
         ),

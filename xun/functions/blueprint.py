@@ -1,6 +1,5 @@
 from .errors import NotDAGError
 from .graph import CallNode
-from .graph import TargetNameOnlyNode
 from .graph import sink_nodes
 import networkx as nx
 import queue
@@ -127,18 +126,6 @@ def build_function_call_graph(functions, call):
     """
     func = functions[call.function_name]
     graph = func.graph(*call.args, **call.kwargs)
-
-    # The compiled function does not know itself, so it cannot return
-    # TargetNodes. Instead, it returns TargetNameOnlyNodes, which need to be
-    # converted
-    graph = nx.relabel_nodes(
-        graph,
-        {
-            t: t.to_target_node(call)
-            for t in graph.nodes
-            if isinstance(t, TargetNameOnlyNode)
-        },
-    )
 
     # Connect the function call graph to this call
     graph.add_node(call)

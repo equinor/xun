@@ -1,3 +1,4 @@
+from xun.functions.compatibility import ast
 import astunparse
 import xun
 
@@ -108,3 +109,29 @@ def test_func_external_references_tuple_unpacking():
     expected = frozenset({'v'})
     external_names = xun.functions.func_external_names(tree.body[0])
     assert external_names == expected
+
+
+def test_assign_target_shape():
+    target = ast.parse('a, b, c = f()').body[0].targets[0]
+    shape = xun.functions.util.assignment_target_shape(target)
+    assert shape == 3
+
+    target = ast.parse('a, (b,c) = f()').body[0].targets[0]
+    shape = xun.functions.util.assignment_target_shape(target)
+    assert shape == (1, 2)
+
+    target = ast.parse('a, b, (c, d) = f()').body[0].targets[0]
+    shape = xun.functions.util.assignment_target_shape(target)
+    assert shape == (1, 1, 2)
+
+    target = ast.parse('(a, b), (c, d) = f()').body[0].targets[0]
+    shape = xun.functions.util.assignment_target_shape(target)
+    assert shape == (2, 2)
+
+    target = ast.parse('a, (b, c, (d, e)), f = f()').body[0].targets[0]
+    shape = xun.functions.util.assignment_target_shape(target)
+    assert shape == (1, (1, 1, 2), 1)
+
+    target = ast.parse('a, ((b,c,d), (e,f)), g = f()').body[0].targets[0]
+    shape = xun.functions.util.assignment_target_shape(target)
+    assert shape == (1, (3, 2), 1)

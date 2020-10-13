@@ -93,7 +93,7 @@ class AsyncState:
         if isinstance(node, CallNode):
             func = self.function_images[node.function_name]
 
-            if not self.store_accessor.completed(node, func):
+            if not self.store_accessor.completed(node, func.hash):
                 logger.info('Submitting {}'.format(node))
 
                 try:
@@ -158,7 +158,7 @@ def celery_xun_exec(call, func, store_accessor):
 
     resolved_call = store_accessor.resolve_call(call)
     result = func(*resolved_call.args, **resolved_call.kwargs)
-    store_accessor.store_result(call, func, result)
+    store_accessor.store_result(call, func.hash, result)
 
     logger.info('{} succeeded'.format(call))
     return 0

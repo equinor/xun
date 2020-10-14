@@ -16,6 +16,9 @@ from .compatibility import ast
 from .function_description import FunctionDescription
 from .function_description import describe
 from .function_image import FunctionImage
+from .util import assignment_target_names
+from .util import assignment_target_shape
+from .util import shape_to_ast_tuple
 from .util import body_external_names
 from .util import function_ast
 from .util import separate_constants_ast
@@ -438,10 +441,15 @@ def load_from_store(
                 raise NotImplementedError(msg)
 
             target = node.targets[0]
-            if not isinstance(target, ast.Name):
-                raise NotImplementedError('Unsupported target {}'.format(node))
-
-            self.seen_targets.append(target.id)
+            if isinstance(target, ast.Name):
+                self.seen_targets.append(target.id)
+            elif isinstance(target, ast.Tuple):
+                inner_targets = assignment_target_names(target)
+                self.seen_targets += inner_targets
+            else:
+                raise NotImplementedError(
+                    'Unsupported target {}'.format(target)
+                )
 
             return node
     discovered_reference = DiscoverReferences()
@@ -462,6 +470,20 @@ def load_from_store(
             return [node for node in transformed if node is not None]
 
     class Call2CallNode(NodeMapper):
+        def __init__(self):
+            self.target_shape = 0
+            self.is_target_tuple = False
+
+        def visit_Assign(self, node):
+            target = node.targets[0]
+            if isinstance(target, ast.Name):
+                self.is_target_tuple = False
+                self.target_shape = 1
+            elif isinstance(target, ast.Tuple):
+                self.is_target_tuple = True
+                self.target_shape = assignment_target_shape(target)
+            return self.generic_visit(node)
+
         def visit_Call(self, node):
             node = self.generic_visit(node)
 
@@ -474,16 +496,29 @@ def load_from_store(
                 keywords=node.keywords,
             )
 
-            return construct_call
+            if self.is_target_tuple:
+                call_node_unpack_func = ast.Attribute(
+                    value=construct_call,
+                    attr='unpack',
+                    ctx=ast.Load(),
+                )
+                construct_unpack_call = ast.Call(
+                    func=call_node_unpack_func,
+                    args=[shape_to_ast_tuple(self.target_shape)],
+                    keywords=[],
+                )
+                return construct_unpack_call
+            else:
+                return construct_call
 
     class CallNode2Load(NodeMapper):
-        def __init__(self, output_names=None):
-            self.output_names = output_names if output_names is not None else []
+        def __init__(self, output_targets=[]):
+            self.output_targets = output_targets
 
         def visit_Assign(self, node):
             introduced_names = stmt_introduced_names(node)
             if any(is_referenced_in_body(name) for name in introduced_names):
-                self.output_names.extend(introduced_names)
+                self.output_targets.append(node.targets[0])
                 return self.visit(node.value)
             return None
 
@@ -519,8 +554,8 @@ def load_from_store(
 
     call_nodes = Call2CallNode().map(assignments)
 
-    output_names = []
-    loads = CallNode2Load(output_names=output_names).map(assignments)
+    output_targets = []
+    loads = CallNode2Load(output_targets=output_targets).map(assignments)
 
     imports = [
         *[
@@ -579,9 +614,7 @@ def load_from_store(
     load_call = ast.Assign(
         targets=[
             ast.Tuple(
-                elts=[
-                    ast.Name(id=name, ctx=ast.Store()) for name in output_names
-                ],
+                elts=[target for target in output_targets],
                 ctx=ast.Store(),
             )
         ],

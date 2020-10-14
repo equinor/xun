@@ -1,4 +1,5 @@
 from xun.functions.compatibility import ast
+from .helpers import compare_ast
 import astunparse
 import xun
 
@@ -135,3 +136,27 @@ def test_assign_target_shape():
     target = ast.parse('a, ((b,c,d), (e,f)), g = f()').body[0].targets[0]
     shape = xun.functions.util.assignment_target_shape(target)
     assert shape == (1, (3, 2), 1)
+
+
+def test_shape_to_ast_tuple():
+    shape = 3
+    ast_tuple = xun.functions.util.shape_to_ast_tuple(shape)
+    assert compare_ast(ast_tuple, ast.Constant(value=3, kind=None))
+
+    shape = (1, (1, 1, 2), 1)
+    ast_tuple = xun.functions.util.shape_to_ast_tuple(shape)
+    required_ast = ast.Tuple(
+        elts=[
+            ast.Constant(value=3, kind=None),
+            ast.Tuple(
+                elts=[
+                    ast.Constant(value=1, kind=None),
+                    ast.Constant(value=1, kind=None),
+                    ast.Constant(value=2, kind=None),
+                ],
+                ctx=ast.Load(),
+            ),
+            ast.Constant(value=1, kind=None),
+        ],
+        ctx=ast.Load(),
+    )

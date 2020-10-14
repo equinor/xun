@@ -301,7 +301,8 @@ def copy_only_constants(
 
     from_copy_import_deepcopy = ast.ImportFrom(
         module='copy',
-        names=[ast.alias(name='deepcopy')],
+        names=[ast.alias(name='deepcopy', asname=None)],
+        level=0
     )
     copy_only_constants = [from_copy_import_deepcopy, *transformed]
 
@@ -570,6 +571,7 @@ def load_from_store(
                     asname='_xun_CallNode'
                 ),
             ],
+            level=0
         ),
         ast.ImportFrom(
             module='xun.functions.store',
@@ -579,6 +581,7 @@ def load_from_store(
                     asname='_xun_StoreAccessor'
                 ),
             ],
+            level=0
         ),
     ]
 

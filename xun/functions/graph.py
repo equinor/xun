@@ -73,3 +73,14 @@ class CallNode:
                 '{}={}'.format(k, repr(v)) for k, v in self.kwargs.items()
             ))
         return 'CallNode({})'.format(', '.join(args))
+
+    def unpack(self, shape):
+        if isinstance(shape, int):
+            if shape == 0:
+                return [self]
+            if shape == 1:
+                return self
+            else:
+                return (self, )*shape
+        elif isinstance(shape, tuple):
+            return tuple([self.unpack(s) for s in shape])

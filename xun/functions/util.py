@@ -230,6 +230,17 @@ def assignment_target_shape(t):
     return inner_tuple
 
 
+def shape_to_ast_tuple(shape):
+    if isinstance(shape, int):
+        return ast.Constant(value=shape, kind=None)
+
+    elif isinstance(shape, tuple):
+        return ast.Tuple(
+            elts=[shape_to_ast_tuple(s) for s in shape],
+            ctx=ast.Load()
+        )
+
+
 def stmt_introduced_names(stmt):
     """
     Return a list of all names introduced by executing the statement

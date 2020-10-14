@@ -268,3 +268,46 @@ def test_xun_function_to_source():
 
     tree = g.callable().tree
     assert isinstance(astor.to_source(tree), str)
+
+
+def test_structured_unpacking_transformation():
+    def g():
+        return a * x * y * z * 𝛂 * β * b + something
+        with ...:
+            a, ((x, y, z), (𝛂, β)), b = f()
+            something = h(x, y, z)
+
+    desc = xun.describe(g)
+
+    @xun.function_ast
+    def reference_source():
+        def _xun_load_constants():
+            from copy import deepcopy  # noqa: F401
+            from xun.functions import CallNode as _xun_CallNode
+            from xun.functions.store import StoreAccessor as _xun_StoreAccessor
+            _xun_store_accessor = _xun_StoreAccessor(_xun_store)
+            a, ((x, y, z), (𝛂, β)), b = _xun_CallNode('f').unpack((1, (3, 2), 1))
+            something = _xun_CallNode('h', x, y, z)
+            return (_xun_store_accessor.load_result(_xun_CallNode('f')),
+                    _xun_store_accessor.load_result(_xun_CallNode('h', x, y, z)))
+        (a, ((x, y, z), (𝛂, β)), b), something = _xun_load_constants()
+        return a * x * y * z * 𝛂 * β * b + something
+
+    # Dummy dependency
+    @xun.function()
+    def dummy():
+        pass
+    known_functions = {'f': dummy, 'h': dummy}
+
+    code = (xun.functions.FunctionDecomposition(desc)
+        .apply(xun.functions.separate_constants)
+        .apply(xun.functions.sort_constants)
+        .apply(xun.functions.copy_only_constants, known_functions)
+        .apply(xun.functions.load_from_store, known_functions))
+
+    generated = [*code.load_from_store, *code.body]
+    reference = reference_source.body[0].body
+
+    for a, b in zip(generated, reference):
+        if not compare_ast(a, b):
+            raise ValueError('\n{} != \n{}'.format(ast.dump(a), ast.dump(b)))

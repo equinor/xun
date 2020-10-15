@@ -55,7 +55,7 @@ class CallNode:
         return hash((
             self.function_name,
             tuple(self.args),
-            tuple(self.kwargs.items())
+            frozenset(self.kwargs.items())
         ))
 
     def __repr__(self):

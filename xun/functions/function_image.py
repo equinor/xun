@@ -135,7 +135,7 @@ class FunctionImage:
                 for m in self.referenced_modules
             },
         }
-        exec(function_code, namespace)
+        exec(function_code, namespace)  # nosec
         f = namespace[self.name]
 
         return f

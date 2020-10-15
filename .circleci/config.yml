@@ -65,14 +65,14 @@ commands:
       - run:
           name: Check formatting rules (PEP8)
           command: |
-            git diff HEAD^ | flake8 --diff --per-file-ignores="__init__.py:F401"
+            git diff HEAD^ | flake8 --diff --per-file-ignores="__init__.py:F401" --exclude="setup.py"
 
   bandit-check:
     steps:
       - run:
           name: Bandit security check
           command: |
-            bandit -c bandit.yml -r camille
+            bandit -c bandit.yml -r xun
 
   codacy-check:
     steps:
@@ -109,7 +109,17 @@ commands:
             python3 -m twine upload -u __token__ --skip-existing dist/*
 
 jobs:
-  python-check:
+  python-code-check:
+    docker:
+      - image: "circleci/python:3.8"
+    steps:
+      - checkout
+      - install-python-deps
+      - flake8-req-check
+      - bandit-check
+      - codacy-check
+
+  python-version-check:
     parameters:
       version:
         type: string
@@ -118,10 +128,7 @@ jobs:
     steps:
       - checkout
       - install-python-deps
-      - flake8-req-check
-      - bandit-check
       - python-build-test
-      - codacy-check
 
   python-formatting-check:
     docker:
@@ -182,16 +189,16 @@ workflows:
 
   linux-check:
     jobs:
-      - python-check:
+      - python-version-check:
           name: Python 3.5
           version: "3.5"
-      - python-check:
+      - python-version-check:
           name: Python 3.6
           version: "3.6"
-      - python-check:
+      - python-version-check:
           name: Python 3.7
           version: "3.7"
-      - python-check:
+      - python-version-check:
           name: Python 3.8
           version: "3.8"
 
@@ -239,7 +246,13 @@ workflows:
             branches:
               ignore: /.*/
 
-  optional:
+  code-check:
+    jobs:
+      - python-code-check:
+          name: Python code check
+
+
+  formatting-check:
     jobs:
       - python-formatting-check:
           name: Python formatting check

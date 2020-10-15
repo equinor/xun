@@ -130,7 +130,7 @@ def interpret_call(call_string):
     code = compile(module, '<ast>', 'exec')
 
     scope = {}
-    exec(code, scope)
+    exec(code, scope)  # nosec
 
     return xun.functions.CallNode(
         scope['function_name'],

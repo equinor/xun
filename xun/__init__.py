@@ -15,6 +15,12 @@ from .functions import describe
 from .functions import function_ast
 from .functions import function_source
 from .functions import make_shared
+from .functions import ContextError
+from .functions import CopyError
+from .functions import FunctionDefNotFoundError
+from .functions import FunctionError
+from .functions import NotDAGError
+from .functions import XunSyntaxError
 from .memoized import memoized
 
 

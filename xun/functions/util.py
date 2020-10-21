@@ -1,5 +1,6 @@
 from .compatibility import ast
 from .errors import NotDAGError
+from .errors import XunSyntaxError
 from collections import Counter
 from itertools import chain
 from itertools import tee
@@ -170,6 +171,11 @@ def stmt_dag(stmts):
     for stmt in stmts:
         inputs = stmt_external_names(stmt)
         outputs = stmt_introduced_names(stmt)
+        if inputs & outputs:
+            msg = 'Cannot reassign value(s): {}'.format(
+                ', '.join(inputs & outputs)
+            )
+            raise XunSyntaxError(msg)
         G.add_node(stmt)
         G.add_edges_from((i, stmt) for i in inputs)
         G.add_edges_from((stmt, o) for o in outputs)

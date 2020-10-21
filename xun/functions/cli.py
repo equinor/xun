@@ -1,4 +1,5 @@
 from .compatibility import ast
+from .errors import XunSyntaxError
 from pathlib import Path
 import importlib
 import inspect
@@ -92,17 +93,18 @@ def interpret_call(call_string):
     """
     tree = ast.parse(call_string)
     if len(tree.body) != 1:
-        raise SyntaxError('There must be exactly one statement in call string')
+        msg = 'There must be exactly one statement in call string'
+        raise XunSyntaxError(msg)
 
     expr = tree.body[0]
     if not isinstance(expr, ast.Expr):
-        raise SyntaxError('Call string must be a single expression')
+        raise XunSyntaxError('Call string must be a single expression')
 
     call = expr.value
     if not isinstance(call, ast.Call):
-        raise SyntaxError('Call string is not a call')
+        raise XunSyntaxError('Call string is not a call')
     if not isinstance(call.func, ast.Name):
-        raise SyntaxError('Call must be to a named function')
+        raise XunSyntaxError('Call must be to a named function')
 
     keywords = {
         ast.Constant(value=kw.arg, kind=None): kw.value for kw in call.keywords

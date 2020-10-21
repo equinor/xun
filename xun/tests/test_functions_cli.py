@@ -1,5 +1,6 @@
 from xun.functions import CallNode
 from xun.functions import cli
+from xun import XunSyntaxError
 import pytest
 
 
@@ -24,14 +25,14 @@ def test_syntax_errors():
     with pytest.raises(SyntaxError):
         cli.interpret_call('invalid code')
 
-    with pytest.raises(SyntaxError):
+    with pytest.raises(XunSyntaxError):
         cli.interpret_call('f(); g()')
 
-    with pytest.raises(SyntaxError):
+    with pytest.raises(XunSyntaxError):
         cli.interpret_call('for i in range(5): f(i)')
 
-    with pytest.raises(SyntaxError):
+    with pytest.raises(XunSyntaxError):
         cli.interpret_call('1 + 1')
 
-    with pytest.raises(SyntaxError):
+    with pytest.raises(XunSyntaxError):
         cli.interpret_call('(1 + 1)()')

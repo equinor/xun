@@ -4,6 +4,7 @@ from math import radians
 from math import sin
 from xun.functions import CallNode
 from xun.functions import CopyError
+from xun.functions import XunSyntaxError
 import pytest
 import networkx as nx
 import xun
@@ -441,6 +442,19 @@ def test_function_version_completeness():
     w0.hash = bytes(a ^ b for a, b in zip(w0.hash, w1.hash))
     r2 = w0.blueprint().run(driver=driver, store=store)
     assert r2 == 0
+
+
+def test_fail_on_reasignment():
+    @xun.function()
+    def f():
+        return 'f'
+
+    with pytest.raises(XunSyntaxError):
+        @xun.function()
+        def h():
+            with ...:
+                f = f()
+            return f
 
 
 def sample_sin_blueprint(offset, sample_count, step_size):

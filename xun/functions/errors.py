@@ -16,3 +16,7 @@ class FunctionError(Exception):
 
 class NotDAGError(Exception):
     pass
+
+
+class XunSyntaxError(Exception):
+    pass

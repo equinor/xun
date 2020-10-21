@@ -379,6 +379,7 @@ def build_xun_graph(
                     *node.args
                 ],
                 keywords=node.keywords,
+                type_comment=None,
             )
             return new_node
 

@@ -206,6 +206,14 @@ def assignment_target_names(t):
 def assignment_target_shape(t):
     """Assignment target shape
     Given a target expression node, return the shape of the target
+
+    Examples
+    --------
+    >>> target = 'a, (b, c)'
+    >>> ast_target = ast.parse(target).body[0].value
+    >>> assignment_target_shape(ast_target)
+    (1, (2,))
+
     """
     assert isinstance(t, ast.Tuple)
 
@@ -225,20 +233,17 @@ def assignment_target_shape(t):
                 raise TypeError("Invalid node in target tuple")
 
     if count_Names == n_elements:
-        inner_tuple = n_elements
+        inner_tuple = (n_elements, )
 
     return inner_tuple
 
 
 def shape_to_ast_tuple(shape):
-    if isinstance(shape, int):
-        return ast.Constant(value=shape, kind=None)
-
-    elif isinstance(shape, tuple):
-        return ast.Tuple(
-            elts=[shape_to_ast_tuple(s) for s in shape],
-            ctx=ast.Load()
-        )
+    """
+    Given a tuple shape, return an ast representation of that tuple
+    """
+    assert isinstance(shape, tuple)
+    return ast.parse(str(shape)).body[0].value
 
 
 def stmt_introduced_names(stmt):

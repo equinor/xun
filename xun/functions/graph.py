@@ -48,6 +48,9 @@ class CallNode:
         self.args = args
         self.kwargs = kwargs
 
+    def __getitem__(self, key):
+        return CallNodeSubscript(self, (key,))
+
     def __copy__(self):
         raise CopyError('Cannot copy value')
 
@@ -79,13 +82,72 @@ class CallNode:
             ))
         return 'CallNode({})'.format(', '.join(args))
 
-    def unpack(self, shape):
+    def unpack(self, shape, tupl_idx=()):
+        """
+        Given a tuple shape, the CallNode is unpacked into a tuple of
+        CallNodeSubscripts with this shape.
+
+        Examples
+        --------
+
+        >>> CallNode('f').unpack((1, (2,)))
+        (
+            CallNodeSubscript('f', (0,)),
+            (
+                CallNodeSubscript('f', (1, 0)),
+                CallNodeSubscript('f', (1, 1))
+            )
+        )
+
+        """
         if isinstance(shape, int):
-            if shape == 0:
-                return [self]
             if shape == 1:
-                return self
-            else:
-                return (self, )*shape
-        elif isinstance(shape, tuple):
-            return tuple([self.unpack(s) for s in shape])
+                local_tupl_idx = tupl_idx
+                return CallNodeSubscript(self, local_tupl_idx)
+        else:
+            if len(shape) == 1:
+                inner_tuple = ()
+                for s in range(shape[0]):
+                    local_tupl_idx = tupl_idx + (s, )
+                    inner_tuple += (CallNodeSubscript(self, local_tupl_idx), )
+                return inner_tuple
+            return_tuple = ()
+            for idx, el in enumerate(shape):
+                local_tupl_idx = tupl_idx + (idx, )
+                return_tuple += (self.unpack(el, local_tupl_idx), )
+            return return_tuple
+
+
+class CallNodeSubscript:
+    """CallNodeSubscript
+
+    Representation of a subscripted CallNode.
+
+    Attributes
+    ----------
+    call : CallNode
+        the call that this representation is a subscript of
+    subscript : tuple
+        the subscript index
+
+    """
+    def __init__(self, call, subscript):
+        self.call = call
+        self.subscript = subscript
+
+    def __getitem__(self, key):
+        return CallNodeSubscript(self.call, self.subscript + (key,))
+
+    def __hash__(self):
+        return hash((
+            self.call,
+            self.subscript,
+        ))
+
+    def __eq__(self, other):
+        return self.subscript == other.subscript and self.call == other.call
+
+    def __repr__(self):
+        return "CallNodeSubscript('{}', {})".format(
+            self.call.function_name, self.subscript
+        )

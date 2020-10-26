@@ -115,44 +115,51 @@ def test_func_external_references_tuple_unpacking():
 def test_assign_target_shape():
     target = ast.parse('a, b, c = f()').body[0].targets[0]
     shape = xun.functions.util.assignment_target_shape(target)
-    assert shape == 3
+    assert shape == (3, )
 
     target = ast.parse('a, (b,c) = f()').body[0].targets[0]
     shape = xun.functions.util.assignment_target_shape(target)
-    assert shape == (1, 2)
+    assert shape == (1, (2,))
 
     target = ast.parse('a, b, (c, d) = f()').body[0].targets[0]
     shape = xun.functions.util.assignment_target_shape(target)
-    assert shape == (1, 1, 2)
+    assert shape == (1, 1, (2,))
 
     target = ast.parse('(a, b), (c, d) = f()').body[0].targets[0]
     shape = xun.functions.util.assignment_target_shape(target)
-    assert shape == (2, 2)
+    assert shape == ((2,), (2,))
 
     target = ast.parse('a, (b, c, (d, e)), f = f()').body[0].targets[0]
     shape = xun.functions.util.assignment_target_shape(target)
-    assert shape == (1, (1, 1, 2), 1)
+    assert shape == (1, (1, 1, (2,)), 1)
 
     target = ast.parse('a, ((b,c,d), (e,f)), g = f()').body[0].targets[0]
     shape = xun.functions.util.assignment_target_shape(target)
-    assert shape == (1, (3, 2), 1)
+    assert shape == (1, ((3,), (2,)), 1)
 
 
 def test_shape_to_ast_tuple():
-    shape = 3
+    shape = (3,)
     ast_tuple = xun.functions.util.shape_to_ast_tuple(shape)
-    assert compare_ast(ast_tuple, ast.Constant(value=3, kind=None))
+    required_ast = ast.Tuple(
+        elts=[ast.Constant(value=3, kind=None)],
+        ctx=ast.Load(),
+    )
+    assert compare_ast(ast_tuple, required_ast)
 
-    shape = (1, (1, 1, 2), 1)
+    shape = (1, (1, 1, (2,)), 1)
     ast_tuple = xun.functions.util.shape_to_ast_tuple(shape)
     required_ast = ast.Tuple(
         elts=[
-            ast.Constant(value=3, kind=None),
+            ast.Constant(value=1, kind=None),
             ast.Tuple(
                 elts=[
                     ast.Constant(value=1, kind=None),
                     ast.Constant(value=1, kind=None),
-                    ast.Constant(value=2, kind=None),
+                    ast.Tuple(
+                        elts=[ast.Constant(value=2, kind=None)],
+                        ctx=ast.Load(),
+                    ),
                 ],
                 ctx=ast.Load(),
             ),
@@ -160,3 +167,4 @@ def test_shape_to_ast_tuple():
         ],
         ctx=ast.Load(),
     )
+    assert compare_ast(ast_tuple, required_ast)

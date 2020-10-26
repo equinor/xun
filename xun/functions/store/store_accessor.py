@@ -1,4 +1,5 @@
 from .. import CallNode
+from .. import CallNodeSubscript
 
 
 class StoreAccessor:
@@ -55,25 +56,36 @@ class StoreAccessor:
     def resolve_call_args(self, call):
         """
         Given a call, return its arguments and keyword arguments. If any
-        argument is a CallNode, the CallNode is replaced with a value loaded
-        from the store
+        argument is a CallNode or CallNodeSubscript, the CallNode or
+        CallNodeSubscript is replaced with a value loaded from the store.
 
         Parameters
         ----------
-        call : CallNode
+        call : CallNode or CallNodeSubscript
 
         Returns
         (list, dict)
             Pair of resolved arguments and keyword arguments
         """
+        def load_arg_value(arg):
+            if isinstance(arg, CallNode):
+                return self.load_result(arg)
+            call = arg.call
+            result = iter(self.load_result(call))
+            for subscript in arg.subscript:
+                for _ in range(subscript):
+                    next(result)
+                result = iter(next(result))
+            return next(result)
+
         args = [
-            self.load_result(arg)
-            if isinstance(arg, CallNode) else arg
+            load_arg_value(arg)
+            if isinstance(arg, (CallNode, CallNodeSubscript)) else arg
             for arg in call.args
         ]
         kwargs = {
-            key: self.load_result(value)
-            if isinstance(value, CallNode) else value
+            key: load_arg_value(value)
+            if isinstance(value, (CallNode, CallNodeSubscript)) else value
             for key, value in call.kwargs.items()
         }
         return args, kwargs

@@ -343,7 +343,9 @@ def build_xun_graph(
     # populate the graph.
     @function_ast
     def helper_code():
+        from itertools import chain as _xun_chain
         from xun.functions import CallNode as _xun_CallNode
+        from xun.functions import CallNodeSubscript as _xun_CallNodeSubscript
         import networkx as _xun_nx
 
         _xun_graph = _xun_nx.DiGraph()
@@ -351,10 +353,15 @@ def build_xun_graph(
         def _xun_register_call(fname,
                                *args,
                                **kwargs):
-            dependencies = [
-                *(a for a in args if isinstance(a, _xun_CallNode)),
-                *(a for a in kwargs.values() if isinstance(a, _xun_CallNode)),
-            ]
+
+            dependencies = filter(
+                lambda a: isinstance(a, _xun_CallNode),
+                map(
+                    lambda a:
+                        a.call if isinstance(a, _xun_CallNodeSubscript) else a,
+                    _xun_chain(args, kwargs.values())
+                )
+            )
             call = _xun_CallNode(fname, *args, **kwargs)
             _xun_graph.add_node(call)
             _xun_graph.add_edges_from((dep, call) for dep in dependencies)
@@ -366,6 +373,20 @@ def build_xun_graph(
         """
         Transformation any calls to a xun function to _xun_register_call
         """
+        def __init__(self):
+            self.target_shape = 0
+            self.is_target_tuple = False
+
+        def visit_Assign(self, node):
+            target = node.targets[0]
+            if isinstance(target, ast.Name):
+                self.is_target_tuple = False
+                self.target_shape = 1
+            elif isinstance(target, ast.Tuple):
+                self.is_target_tuple = True
+                self.target_shape = assignment_target_shape(target)
+            return self.generic_visit(node)
+
         def visit_Call(self, node):
             node = self.generic_visit(node)
 
@@ -375,7 +396,7 @@ def build_xun_graph(
             if node.func.id not in dependencies:
                 return node
 
-            new_node = ast.Call(
+            register_call = ast.Call(
                 func=ast.Name(id='_xun_register_call', ctx=ast.Load()),
                 args=[
                     ast.Constant(node.func.id, kind=None),
@@ -384,7 +405,20 @@ def build_xun_graph(
                 keywords=node.keywords,
                 type_comment=None,
             )
-            return new_node
+            if self.is_target_tuple:
+                call_node_unpack_func = ast.Attribute(
+                    value=register_call,
+                    attr='unpack',
+                    ctx=ast.Load(),
+                )
+                unpack_register_call = ast.Call(
+                    func=call_node_unpack_func,
+                    args=[shape_to_ast_tuple(self.target_shape)],
+                    keywords=[],
+                )
+                return unpack_register_call
+            else:
+                return register_call
 
     return_graph = ast.Return(value=ast.Name(id='_xun_graph', ctx=ast.Load()))
 
@@ -505,12 +539,12 @@ def load_from_store(
                     attr='unpack',
                     ctx=ast.Load(),
                 )
-                construct_unpack_call = ast.Call(
+                unpack_construct_call = ast.Call(
                     func=call_node_unpack_func,
                     args=[shape_to_ast_tuple(self.target_shape)],
                     keywords=[],
                 )
-                return construct_unpack_call
+                return unpack_construct_call
             else:
                 return construct_call
 

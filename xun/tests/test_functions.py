@@ -280,7 +280,6 @@ def test_fail_on_mutating_assingment():
                 instance.field = 2
 
 
-@pytest.mark.skip(reason="Structured unpacking is not supported yet")
 def test_structured_unpacking():
     @xun.function()
     def f():
@@ -305,7 +304,7 @@ def test_structured_unpacking():
     assert result == 'abbc'
 
 
-@pytest.mark.skip(reason="Structured unpacking is not supported yet")
+@pytest.mark.skip(reason="Structured unpacking to list is not supported yet")
 def test_structured_unpacking_list():
     @xun.function()
     def f():

@@ -1,4 +1,5 @@
 from .. import CallNode
+from .. import CallNodeSubscript
 from os import urandom
 import networkx as nx
 
@@ -56,25 +57,42 @@ class StoreAccessor:
             self.invalidate(node, hash=node_hash)
 
     def resolve_call(self, call):
-        """
-        Given a call, replace any FutureValueNodes with values from the store.
+        """ Resolve call
 
         Parameters
         ----------
-        call : CallNode
+        call : CallNode or CallNodeSubscript
 
         Returns
+        -------
         CallNode
-            Call with FutureValueNodes replaced by the value they represent
+            CallNode with arguments loaded from the store
+
         """
+        cache = {}
+        def load_arg_value(arg):
+            """
+            Load the argument value if it is not already loaded in the cache.
+
+            """
+            if isinstance(arg, CallNode):
+                return cache.setdefault(arg, self.load_result(arg))
+            call = arg.call
+            result = iter(cache.setdefault(call, self.load_result(call)))
+            for subscript in arg.subscript:
+                for _ in range(subscript):
+                    next(result)
+                result = iter(next(result))
+            return next(result)
+
         args = [
-            self.load_result(arg)
-            if isinstance(arg, CallNode) else arg
+            load_arg_value(arg)
+            if isinstance(arg, (CallNode, CallNodeSubscript)) else arg
             for arg in call.args
         ]
         kwargs = {
-            key: self.load_result(value)
-            if isinstance(value, CallNode) else value
+            key: load_arg_value(value)
+            if isinstance(value, (CallNode, CallNodeSubscript)) else value
             for key, value in call.kwargs.items()
         }
         return CallNode(call.function_name, *args, **kwargs)

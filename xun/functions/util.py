@@ -189,11 +189,11 @@ def stmt_dag(stmts):
 
 def assignment_target_names(t):
     """
-    given a target expression node, return the names of all targets
+    Given a target expression node, return the names of all targets
     """
     if isinstance(t, list):
         return frozenset(chain(*[assignment_target_names(u) for u in t]))
-    elif isinstance(t, ast.Tuple):
+    elif isinstance(t, (ast.Tuple, ast.List)):
         return frozenset(chain(*[assignment_target_names(u) for u in t.elts]))
     elif isinstance(t, ast.Starred):
         return assignment_target_names(t.value)
@@ -205,7 +205,9 @@ def assignment_target_names(t):
 
 def assignment_target_shape(t):
     """Assignment target shape
-    Given a target expression node, return the shape of the target
+
+    Given a target expression node, of type ast.Tuple or ast.List,
+    return the shape of the target.
 
     Examples
     --------
@@ -215,7 +217,7 @@ def assignment_target_shape(t):
     (1, (2,))
 
     """
-    assert isinstance(t, ast.Tuple)
+    assert isinstance(t, (ast.Tuple, ast.List))
 
     inner_tuple = ()
     count_Names = 0
@@ -225,7 +227,7 @@ def assignment_target_shape(t):
             count_Names += 1
             inner_tuple += (1, )
         else:
-            if isinstance(el, ast.Tuple):
+            if isinstance(el, (ast.Tuple, ast.List)):
                 inner_tuple += (assignment_target_shape(el), )
             elif isinstance(el, ast.Starred):
                 inner_tuple += (0, )

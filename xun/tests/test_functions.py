@@ -312,6 +312,47 @@ def test_structured_unpacking_list():
     assert result == 'abc'
 
 
+def test_structured_unpacking_starred():
+    @xun.function()
+    def f():
+        return ('a', 'b', 'c', 'd')
+
+    @xun.function()
+    def h():
+        with ...:
+            a, *bc, d = f()
+        b, c = bc
+        return a + b + c + d
+
+    result = h.blueprint().run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory(),
+    )
+
+    assert result == 'abcd'
+
+
+def test_structured_unpacking_starred_deep():
+    @xun.function()
+    def f():
+        return ('a', ('b', 'c', 'd'), 'e', 'g')
+
+    @xun.function()
+    def h():
+        with ...:
+            a, (b, *cd), *eg = f()
+        c, d = cd
+        e, g = eg
+        return a + b + c + d + e + g
+
+    result = h.blueprint().run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory(),
+    )
+
+    assert result == 'abcdeg'
+
+
 def test_nested_calls():
     @xun.function()
     def f():

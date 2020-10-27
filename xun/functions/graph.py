@@ -101,7 +101,10 @@ class CallNode:
 
         """
         if isinstance(shape, int):
-            if shape == 1:
+            if shape == 0:
+                local_tupl_idx = tupl_idx
+                return CallNodeSubscript([self], local_tupl_idx)
+            elif shape == 1:
                 local_tupl_idx = tupl_idx
                 return CallNodeSubscript(self, local_tupl_idx)
         else:

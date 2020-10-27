@@ -97,13 +97,26 @@ def test_unpack():
     assert a == required
 
 
-@pytest.mark.skip(reason="Starred unpacking is not supported yet")
 def test_unpack_starred():
+    cn = CallNode('f')
+
     shape = (1, 1, 0)
     a = cn.unpack(shape)
     required = (
         CallNodeSubscript(cn, (0, )),
         CallNodeSubscript(cn, (1, )),
+        CallNodeSubscript([cn], (2, )),
+    )
+    assert a == required
+
+    shape = (1, (1, 0), 0)
+    a = cn.unpack(shape)
+    required = (
+        CallNodeSubscript(cn, (0, )),
+        (
+            CallNodeSubscript(cn, (1, 0)),
+            CallNodeSubscript([cn], (1, 1)),
+        ),
         CallNodeSubscript([cn], (2, )),
     )
     assert a == required

@@ -138,6 +138,12 @@ def test_assign_target_shape():
     assert shape == (1, ((3,), (2,)), 1)
 
 
+def test_assign_starred_target_shape():
+    target = ast.parse('a, (b, *cd), *ef, g = f()').body[0].targets[0]
+    shape = xun.functions.util.assignment_target_shape(target)
+    assert shape == (1, (1, 0), 0, 1)
+
+
 def test_shape_to_ast_tuple():
     shape = (3,)
     ast_tuple = xun.functions.util.shape_to_ast_tuple(shape)
@@ -164,6 +170,20 @@ def test_shape_to_ast_tuple():
                 ctx=ast.Load(),
             ),
             ast.Constant(value=1, kind=None),
+        ],
+        ctx=ast.Load(),
+    )
+    assert compare_ast(ast_tuple, required_ast)
+
+
+def test_starred_shape_to_ast_tuple():
+    shape = (1, 1, 0)
+    ast_tuple = xun.functions.util.shape_to_ast_tuple(shape)
+    required_ast = ast.Tuple(
+        elts=[
+            ast.Constant(value=1, kind=None),
+            ast.Constant(value=1, kind=None),
+            ast.Constant(value=0, kind=None),
         ],
         ctx=ast.Load(),
     )

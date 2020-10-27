@@ -381,7 +381,7 @@ def build_xun_graph(
             if isinstance(target, ast.Name):
                 self.is_target_tuple = False
                 self.target_shape = 1
-            elif isinstance(target, ast.Tuple):
+            elif isinstance(target, (ast.Tuple, ast.List)):
                 self.is_target_tuple = True
                 self.target_shape = assignment_target_shape(target)
             return self.generic_visit(node)
@@ -478,7 +478,7 @@ def load_from_store(
             target = node.targets[0]
             if isinstance(target, ast.Name):
                 self.seen_targets.append(target.id)
-            elif isinstance(target, ast.Tuple):
+            elif isinstance(target, (ast.Tuple, ast.List)):
                 inner_targets = assignment_target_names(target)
                 self.seen_targets += inner_targets
             else:
@@ -514,7 +514,7 @@ def load_from_store(
             if isinstance(target, ast.Name):
                 self.is_target_tuple = False
                 self.target_shape = 1
-            elif isinstance(target, ast.Tuple):
+            elif isinstance(target, (ast.Tuple, ast.List)):
                 self.is_target_tuple = True
                 self.target_shape = assignment_target_shape(target)
             return self.generic_visit(node)

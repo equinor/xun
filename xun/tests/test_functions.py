@@ -304,24 +304,23 @@ def test_structured_unpacking():
     assert result == 'abbc'
 
 
-@pytest.mark.skip(reason="Structured unpacking to list is not supported yet")
 def test_structured_unpacking_list():
     @xun.function()
     def f():
-        return ('a', 'b')
+        return ('a', ('b', 'c'))
 
     @xun.function()
     def h():
         with ...:
-            [a, b] = f()
-        return a + b
+            [a, [b, c]] = f()
+        return a + b + c
 
     result = h.blueprint().run(
         driver=xun.functions.driver.Sequential(),
         store=xun.functions.store.Memory(),
     )
 
-    assert result == 'ab'
+    assert result == 'abc'
 
 
 def test_nested_calls():

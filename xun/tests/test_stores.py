@@ -25,6 +25,12 @@ def TmpDiskCache():
         yield xun.functions.store.DiskCache(tmpdirname)
 
 
+@contextmanager
+def TmpDisk():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        yield xun.functions.store.Disk(tmpdirname)
+
+
 def with_namespace(cls, namespace):
     @contextmanager
     def ctx():
@@ -43,9 +49,11 @@ stores = [
     Memory,
     FakeRedis,
     TmpDiskCache,
+    TmpDisk,
     with_namespace(Memory, 'test_namespace'),
     with_namespace(FakeRedis, 'test_namespace'),
     with_namespace(TmpDiskCache, 'test_namespace'),
+    with_namespace(TmpDisk, 'test_namespace'),
 ]
 
 # ^ Stores to test

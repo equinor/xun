@@ -2,6 +2,7 @@ from .blueprint import Blueprint
 from .function_description import describe
 from . import transformations
 import hashlib
+import astor
 
 
 class Function:
@@ -51,12 +52,46 @@ class Function:
     function : Function decorator to create xun functions
     """
 
+    class FunctionCode:
+        """FunctionCode
+
+        Xun function code. Helper for checking/debugging generated code of
+        xun function.
+        """
+        def __init__(self, func):
+            self.owner = func
+
+        @property
+        def graph(self):
+            return self.owner.createGraphBuilder().tree
+
+        @property
+        def graph_str(self):
+            return astor.to_source(self.graph)
+
+        @property
+        def task(self):
+            return self.owner.callable().tree
+
+        @property
+        def task_str(self):
+            return astor.to_source(self.task)
+
+        @property
+        def source(self):
+            return self.owner.desc.ast
+
+        @property
+        def source_str(self):
+            return astor.to_source(self.source)
+
     def __init__(self, desc, dependencies, max_parallel):
         self.desc = desc
         self.dependencies = dependencies
         self.max_parallel = max_parallel
         self.hash = Function.sha256(desc, dependencies)
         self._graph_builder = None
+        self.code = self.FunctionCode(self)
 
     @property
     def name(self):
@@ -142,6 +177,27 @@ class Function:
         """
         return Blueprint(self, *args, **kwargs)
 
+    def createGraphBuilder(self):
+        """CreateGraphBuilder
+
+        Preparation step for Graph function. Build call graph for a call to
+        this function
+
+        Returns
+        FunctionImage
+            Serializable `FunctionImage` representation
+        """
+        if self._graph_builder is None:
+            decomposed = (transformations.FunctionDecomposition(self.desc)
+                .apply(transformations.separate_constants)
+                .apply(transformations.sort_constants)
+                .apply(transformations.copy_only_constants, self.dependencies)
+                .apply(transformations.build_xun_graph, self.dependencies)
+            )
+
+            self._graph_builder = decomposed.assemble(decomposed.xun_graph)
+        return self._graph_builder
+
     def graph(self, *args, **kwargs):
         """Graph
 
@@ -156,17 +212,7 @@ class Function:
         nx.DiGraph
             The call graph for the call
         """
-        if self._graph_builder is None:
-            decomposed = (transformations.FunctionDecomposition(self.desc)
-                .apply(transformations.separate_constants)
-                .apply(transformations.sort_constants)
-                .apply(transformations.copy_only_constants, self.dependencies)
-                .apply(transformations.build_xun_graph, self.dependencies)
-            )
-
-            self._graph_builder = decomposed.assemble(decomposed.xun_graph)
-
-        return self._graph_builder(*args, **kwargs)
+        return self.createGraphBuilder()(*args, **kwargs)
 
     def callable(self, extra_globals=None):
         """Callable

@@ -53,11 +53,13 @@ if __name__ == '__main__':
 
         tests_require = [
             'fakeredis',
+            'mock-ssh-server',
+            'pyshd',
             'pytest',
             'pyshd',
         ],
 
-    entry_points = {
+        entry_points = {
             'console_scripts': [
                 'xun = xun.cli:main',
             ],

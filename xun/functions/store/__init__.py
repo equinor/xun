@@ -6,3 +6,4 @@ from .disk import Disk
 from .diskcache import DiskCache
 from .memory import Memory
 from .redis import Redis
+from .sftp import SFTP

@@ -1,6 +1,7 @@
 astor
 astunparse
 fakeredis
+mock-ssh-server
 pyshd
 pytest
 pytest-runner

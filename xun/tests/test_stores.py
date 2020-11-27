@@ -1,9 +1,13 @@
 from .helpers import FakeRedis
 from collections.abc import MutableMapping
 from contextlib import contextmanager
+from unittest import mock
 from xun.functions import CopyError
 from xun.functions.store import NamespacedKey
+import contextlib
 import copy
+import mockssh
+import paramiko
 import pickle
 import pytest
 import tempfile
@@ -31,6 +35,27 @@ def TmpDisk():
         yield xun.functions.store.Disk(tmpdirname)
 
 
+@contextmanager
+def TmpSFTP():
+    users = {'ssh-user': 'xun/tests/test_data/ssh/id_rsa'}
+    with contextlib.ExitStack() as stack:
+        tmpdirname = stack.enter_context(tempfile.TemporaryDirectory())
+        server = stack.enter_context(mockssh.Server(users))
+        client = stack.enter_context(server.client('ssh-user'))
+
+        ssh_mock = stack.enter_context(
+            mock.patch('xun.functions.store.sftp.SFTPDriver.ssh',
+                       new_callable=mock.PropertyMock))
+        ssh_mock.return_value = client
+
+        store = xun.functions.store.SFTP(
+            '127.0.0.1',
+            tmpdirname,
+            username='ssh-user',
+            missing_host_key_policy=paramiko.MissingHostKeyPolicy())
+        yield store
+
+
 def with_namespace(cls, namespace):
     @contextmanager
     def ctx():
@@ -50,10 +75,12 @@ stores = [
     FakeRedis,
     TmpDiskCache,
     TmpDisk,
+    TmpSFTP,
     with_namespace(Memory, 'test_namespace'),
     with_namespace(FakeRedis, 'test_namespace'),
     with_namespace(TmpDiskCache, 'test_namespace'),
     with_namespace(TmpDisk, 'test_namespace'),
+    with_namespace(TmpSFTP, 'test_namespace'),
 ]
 
 # ^ Stores to test
@@ -266,3 +293,13 @@ def test_memory_store_not_picklable():
         copy.deepcopy(store)
     with pytest.raises(CopyError):
         pickle.dumps(store)
+
+
+def test_sftp_driver_is_complatible_with_disk_driver():
+    with TmpSFTP() as sftp:
+        sftp.update(a=0, b=1, c=2)
+
+        disk = xun.functions.store.Disk(sftp.root)
+        assert disk // 'a' == 0
+        assert disk // 'b' == 1
+        assert disk // 'c' == 2

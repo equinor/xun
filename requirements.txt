@@ -4,3 +4,4 @@ fastavro
 matplotlib
 networkx
 redis
+paramiko

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+	<id>org.equinor.xun</id>
+	<metadata_license>MIT</metadata_license>
+	<project_license>LGPL-2.1</project_license>
+	<name>Xun</name>
+	<summary>Scriptable workflow</summary>
+	<description>
+		<p>Scriptable workflow. This should be longer description.The library is intended for processing of wind timeseries data.Name Xun is based from the bakua wind symbol.</p>
+	</description>
+	<launchable type="desktop-id">org.equinor.xun.desktop</launchable>
+	<url type="homepage">https://github.com/equinor/xun</url>
+	<provides>
+		<id>org.equinor.xun.desktop</id>
+	</provides>
+</component>

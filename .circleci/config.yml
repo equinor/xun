@@ -184,6 +184,57 @@ jobs:
       - create-wheel
       - upload-pypi
 
+  appimage-upload:
+    docker:
+      - image: "circleci/python:3.8"
+    environment:
+      - VERSION: << pipeline.git.tag >>
+      - ARCH: x86_64
+      - TRAVIS_PULL_REQUEST: "false"
+      - TRAVIS_TAG: << pipeline.git.tag >>
+      - TRAVIS_COMMIT: << pipeline.git.revision >>
+    steps:
+      - checkout
+      - run:
+          name: Install missing appstream
+          command: |
+            sudo apt-get update
+            sudo apt-get install appstream
+      - run:
+          name: Create python3.8 based AppImage
+          command: |
+            python -m pip install python_appimage
+            python -m python_appimage build local -d ./python3.8.AppImage -p /usr/local/bin/python
+      - run:
+          name: Install Xun to image
+          command: |
+            ./python3.8.AppImage --appimage-extract
+            ./squashfs-root/AppRun -m pip install .
+      - run: 
+          name: Setup Xun AppImage
+          command: |
+            sed -i -e 's|/opt/python3.8/bin/python3.8|/usr/bin/xun|g' ./squashfs-root/AppRun
+            mv squashfs-root/usr/share/applications/python3.8.7.desktop squashfs-root/usr/share/applications/org.equinor.xun.desktop
+            sed -i -e 's|^Name=.*|Name=Xun|g' squashfs-root/usr/share/applications/*.desktop
+            sed -i -e 's|^Exec=.*|Exec=Xun|g' squashfs-root/usr/share/applications/*.desktop
+            sed -i -e 's|^Icon=.*|Icon=xun|g' squashfs-root/usr/share/applications/*.desktop
+            rm squashfs-root/*.desktop
+            cp squashfs-root/usr/share/applications/*.desktop squashfs-root/
+            mv squashfs-root/python.png squashfs-root/xun.png
+            rm squashfs-root/usr/share/metainfo/*.appdata.xml
+            cp .circleci/org.equinor.xun.appdata.xml squashfs-root/usr/share/metainfo/org.equinor.xun.appdata.xml
+            mv squashfs-root squashfs-root-xun
+      - run:
+          name: Convert back into an AppImage and upload
+          command: |
+            echo "export TRAVIS_REPO_SLUG=${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}" >> $BASH_ENV
+            source $BASH_ENV
+            wget -c https://github.com/$(wget -q https://github.com/probonopd/go-appimage/releases -O - | grep "appimagetool-.*-x86_64.AppImage" | head -n 1 | cut -d '"' -f 2)
+            chmod +x appimagetool-*.AppImage
+            ./appimagetool-*-x86_64.AppImage --appimage-extract
+            ./squashfs-root/AppRun squashfs-root-xun/
+
+
 workflows:
   version: 2
 
@@ -251,8 +302,17 @@ workflows:
       - python-code-check:
           name: Python code check
 
-
   formatting-check:
     jobs:
       - python-formatting-check:
           name: Python formatting check
+  
+  appimage:
+    jobs:
+      - appimage-upload:
+          name: Create and upload appimage 
+          filters:
+            tags:
+              only: /[0-9]+(\.[0-9]+)*/
+            branches:
+              ignore: /.*/

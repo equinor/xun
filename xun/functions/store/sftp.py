@@ -16,9 +16,11 @@ class SFTP(Store):
     def __init__(self,
                  host,
                  root,
+                 port=22,
                  username=None,
                  missing_host_key_policy=paramiko.WarningPolicy()):
         self.host = host
+        self.port = port
         self.root = Path(root)
         self.username = username
         self.missing_host_key_policy = missing_host_key_policy
@@ -28,39 +30,54 @@ class SFTP(Store):
         try:
             return self._driver
         except AttributeError:
-            self._driver = SFTPDriver(self.host, self.root, self.username,
+            self._driver = SFTPDriver(self.host, self.port, self.root,
+                                      self.username,
                                       self.missing_host_key_policy)
             return self._driver
 
     def __getstate__(self):
         return super().__getstate__(
-        ), self.host, self.root, self.username, self.missing_host_key_policy
+        ), self.host, self.port, self.root, self.username, self.missing_host_key_policy
 
     def __setstate__(self, state):
         super().__setstate__(state[0])
         self.host = state[1]
-        self.root = state[2]
-        self.username = state[3]
-        self.missing_host_key_policy = state[4]
+        self.port = state[2]
+        self.root = state[3]
+        self.username = state[4]
+        self.missing_host_key_policy = state[5]
 
 
 class SFTPDriver(StoreDriver):
-    def __init__(self, host, root, username, missing_host_key_policy):
+
+    _connection_pool = {}
+
+    def __init__(self, host, port, root, username, missing_host_key_policy):
         self.host = host
+        self.port = port
         self.root = root
         self.username = username
+        self.missing_host_key_policy = missing_host_key_policy
         self.index = {}
 
-        self._ssh = paramiko.SSHClient()
-        self._ssh.set_missing_host_key_policy(missing_host_key_policy)
-
+        self._ssh = None
         self._sftp = None
 
     @property
     def ssh(self):
+        # We reuse ssh connections, note that these connections are left open
+        # for the duration of the process. We should consider changing store
+        # semantics to make cleanup a part of the natural usage.
+        self._ssh = SFTPDriver._connection_pool.setdefault(
+            hash(self), paramiko.SSHClient())
+
+        self._ssh.set_missing_host_key_policy(self.missing_host_key_policy)
+
         if self._ssh.get_transport() is None or not self._ssh.get_transport(
         ).is_active():
-            self._ssh.connect(self.host, username=self.username)
+            self._ssh.connect(self.host,
+                              port=self.port,
+                              username=self.username)
         return self._ssh
 
     @property
@@ -168,3 +185,6 @@ class SFTPDriver(StoreDriver):
 
         if __debug__:
             self.key_invariant(key)
+
+    def __hash__(self):
+        return hash((self.host, self.port, self.root, self.username))

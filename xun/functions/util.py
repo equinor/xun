@@ -127,6 +127,9 @@ def separate_constants_ast(stmts: [ast.AST]):
         msg = 'Functions must have at most one with constants statement'
         raise ValueError(msg)
 
+    if len(body) == 0:
+        body.append(ast.Pass())
+
     constants = []
     if len(with_constants) == 1:
         check_with_constants(with_constants[0])

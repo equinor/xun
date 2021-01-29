@@ -457,6 +457,22 @@ def test_fail_on_reasignment():
             return f
 
 
+def test_empty_xun_function():
+    @xun.function()
+    def g():
+        return 'a'
+
+    @xun.function()
+    def f():
+        with ...:
+            g()
+
+    f.blueprint().run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory(),
+    )
+
+
 def sample_sin_blueprint(offset, sample_count, step_size):
     @xun.function()
     def mksample(i, step_size):

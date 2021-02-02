@@ -1,7 +1,6 @@
 from .blueprint import Blueprint
 from .function_description import describe
 from . import transformations
-import ast
 import hashlib
 
 
@@ -82,7 +81,7 @@ class Function:
         str
             Hex digest of function hash
         """
-        content = ast.dump(desc.ast).encode()
+        content = desc.src.encode()
         sha256 = hashlib.sha256(content).digest()
         for dependency in dependencies.values():
             sha256 = bytes(a ^ b for a, b in zip(sha256, dependency.hash))

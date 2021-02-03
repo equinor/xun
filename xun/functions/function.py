@@ -4,7 +4,7 @@ from . import transformations
 import hashlib
 
 
-class Function:
+class Function1:
     """Function
 
     Xun functions. These are the distributed functions that xun executes. A xun

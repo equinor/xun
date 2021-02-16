@@ -1,7 +1,6 @@
 from .helpers import PickleDriver
 from .helpers import FakeRedis
-from math import radians
-from math import sin
+from .helpers import sample_sin_blueprint
 from xun.functions import CallNode
 from xun.functions import CopyError
 from xun.functions import XunSyntaxError
@@ -145,27 +144,18 @@ def test_blueprint_graph():
 
 
 def test_blueprint():
-    offset = 42
-    sample_count = 10
-    step_size = 36
+    blueprint, expected = sample_sin_blueprint()
 
-    blueprint = sample_sin_blueprint(offset, sample_count, step_size)
     result = blueprint.run(
         driver=xun.functions.driver.Sequential(),
         store=xun.functions.store.Memory(),
     )
 
-    assert result == [
-        sin(radians(i / step_size)) + offset for i in range(sample_count)
-    ]
+    assert result == expected
 
 
 def test_blueprint_is_picklable():
-    offset = 42
-    sample_count = 10
-    step_size = 36
-
-    blueprint = sample_sin_blueprint(offset, sample_count, step_size)
+    blueprint, expected = sample_sin_blueprint()
 
     with FakeRedis() as redis:
         result = blueprint.run(
@@ -173,9 +163,7 @@ def test_blueprint_is_picklable():
             store=redis,
         )
 
-    assert result == [
-        sin(radians(i / step_size)) + offset for i in range(sample_count)
-    ]
+    assert result == expected
 
 
 def test_failure_on_use_of_unresolved_call():
@@ -471,22 +459,3 @@ def test_empty_xun_function():
         driver=xun.functions.driver.Sequential(),
         store=xun.functions.store.Memory(),
     )
-
-
-def sample_sin_blueprint(offset, sample_count, step_size):
-    @xun.function()
-    def mksample(i, step_size):
-        return i / step_size
-
-    @xun.function()
-    def deg_to_rad(deg):
-        return radians(deg)
-
-    @xun.function()
-    def sample_sin(offset, sample_count, step_size):
-        return [sin(s) + offset for s in radians]
-        with ...:
-            samples = [mksample(i, step_size) for i in range(sample_count)]
-            radians = [deg_to_rad(s) for s in samples]
-
-    return sample_sin.blueprint(offset, sample_count, step_size)

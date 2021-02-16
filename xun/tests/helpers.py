@@ -1,5 +1,7 @@
 from io import StringIO
 from itertools import starmap
+from math import radians
+from math import sin
 from xun.functions.compatibility import ast
 import fakeredis
 import sys
@@ -147,3 +149,27 @@ def compare_ast(a, b):
         return all(starmap(compare_ast, zip(a, b)))
     else:
         return a == b
+
+
+def sample_sin_blueprint(offset=42, sample_count=10, step_size=36):
+    @xun.function()
+    def mksample(i, step_size):
+        return i / step_size
+
+    @xun.function()
+    def deg_to_rad(deg):
+        return radians(deg)
+
+    @xun.function()
+    def sample_sin(offset, sample_count, step_size):
+        return [sin(s) + offset for s in radians]
+        with ...:
+            samples = [mksample(i, step_size) for i in range(sample_count)]
+            radians = [deg_to_rad(s) for s in samples]
+
+    blueprint = sample_sin.blueprint(offset, sample_count, step_size)
+    expected = [
+        sin(radians(i / step_size)) + offset for i in range(sample_count)
+    ]
+
+    return blueprint, expected

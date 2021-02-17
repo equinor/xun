@@ -153,7 +153,7 @@ jobs:
 
   sdist-deploy:
     docker:
-      - image: "circleci/python:3.6"
+      - image: "circleci/python:3.7"
     steps:
       - checkout
       - install-python-deps
@@ -162,9 +162,9 @@ jobs:
 
   wheels-manylinux-deploy:
     docker:
-      - image: "circleci/python:3.6"
+      - image: "circleci/python:3.7"
     environment:
-      - CIBW_BUILD: "cp35-manylinux_x86_64 cp36-manylinux_x86_64 cp37-manylinux_x86_64 cp38-manylinux_x86_64"
+      - CIBW_BUILD: "cp37-manylinux_x86_64 cp38-manylinux_x86_64"
       - CIBW_BEFORE_ALL: "yum install -y gcc ninja-build"
       - CIBW_BEFORE_BUILD: "pip install cmake setuptools-scm -r requirements.txt && pip install -r requirements-dev.txt"
     steps:
@@ -177,7 +177,7 @@ jobs:
     macos:
       xcode: 11.0.0
     environment:
-      - CIBW_BUILD: "cp35-macosx_x86_64 cp36-macosx_x86_64 cp37-macosx_x86_64 cp38-macosx_x86_64"
+      - CIBW_BUILD: "cp37-macosx_x86_64 cp38-macosx_x86_64"
       - CIBW_BEFORE_BUILD: "pip3 install cmake setuptools-scm -r requirements.txt && pip3 install -r requirements-dev.txt"
     steps:
       - checkout
@@ -190,12 +190,6 @@ workflows:
   linux-check:
     jobs:
       - python-version-check:
-          name: Python 3.5
-          version: "3.5"
-      - python-version-check:
-          name: Python 3.6
-          version: "3.6"
-      - python-version-check:
           name: Python 3.7
           version: "3.7"
       - python-version-check:
@@ -204,12 +198,6 @@ workflows:
 
   macos-check:
     jobs:
-      - python-macos-check:
-          name: MacOS Python 3.5
-          python-version: "3.5"
-      - python-macos-check:
-          name: MacOS Python 3.6
-          python-version: "3.6"
       - python-macos-check:
           name: MacOS Python 3.7
           python-version: "3.7"

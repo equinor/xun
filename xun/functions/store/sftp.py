@@ -89,6 +89,7 @@ class SFTPDriver(StoreDriver):
     @property
     def sftp(self):
         if self._sftp is None:
+            assert self.ssh.get_transport() != None
             self._sftp = self.ssh.open_sftp()
             if not self.is_dir(self.root / 'values'):
                 self._sftp.mkdir(str(self.root / 'values'), mode=0o711)

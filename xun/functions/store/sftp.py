@@ -77,7 +77,9 @@ class SFTPDriver(StoreDriver):
         ).is_active():
             self._ssh.connect(self.host,
                               port=self.port,
-                              username=self.username)
+                              username=self.username,
+                              allow_agent=False,
+                              look_for_keys=True)
         return self._ssh
 
     @property

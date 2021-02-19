@@ -6,14 +6,23 @@ import networkx as nx
 logger = logging.getLogger(__name__)
 
 
+class DaskDriverError(Exception):
+    pass
+
+
 def compute_proxy(node, dependencies, func, store_accessor):
     if store_accessor.completed(node, func.hash):
         return store_accessor.load_result(node)
 
     args, kwargs = store_accessor.resolve_call_args(node)
-    result = func(*args, **kwargs)
+    try:
+        result = func(*args, **kwargs)
+    except Exception as e:
+        raise DaskDriverError(f'task {node} failed') from e
+    except:
+        raise ValueError('???')
     store_accessor.store_result(node, func.hash, result)
-    return result
+    return node
 
 
 class Dask(Driver):
@@ -36,4 +45,8 @@ class Dask(Driver):
 
         logger.info('Running dask job')
         future = self.client.compute(output[entry_call], optimize_graph=False)
+
+        e = future.exception()
+        if e:
+            raise DaskDriverError('Job failed') from e
         return future.result()

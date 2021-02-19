@@ -28,21 +28,21 @@ class PickleDriver(xun.functions.driver.Sequential):
     """
     Test driver ensuring that anything touched by the driver can be pickled
     """
-    def exec(self, graph, entry_call, function_images, store):
+    def exec(self, graph, entry_call, function_images, store_accessor):
         import pickle
 
         P = {
             'graph': pickle.dumps(graph),
             'entry_call': pickle.dumps(entry_call),
             'function_images': pickle.dumps(function_images),
-            'store': pickle.dumps(store),
+            'store_accessor': pickle.dumps(store_accessor),
         }
 
         return super().exec(
             graph=pickle.loads(P['graph']),
             entry_call=pickle.loads(P['entry_call']),
             function_images=pickle.loads(P['function_images']),
-            store=pickle.loads(P['store']),
+            store_accessor=pickle.loads(P['store_accessor']),
         )
 
 

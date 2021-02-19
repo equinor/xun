@@ -76,9 +76,8 @@ class SFTPDriver(StoreDriver):
         except KeyError:
             pass
 
-        self._ssh = SFTPDriver._connection_pool.setdefault(
-            hash(self), paramiko.SSHClient())
-
+        self._ssh = SFTPDriver._connection_pool[
+            hash(self)] = paramiko.SSHClient()
         self._ssh.set_missing_host_key_policy(self.missing_host_key_policy)
         self._ssh.connect(self.host,
                           port=self.port,
@@ -90,6 +89,7 @@ class SFTPDriver(StoreDriver):
     @property
     def sftp(self):
         if self._sftp is None:
+            assert self.ssh.get_transport() != None
             self._sftp = self.ssh.open_sftp()
             if not self.is_dir(self.root / 'values'):
                 self._sftp.mkdir(str(self.root / 'values'), mode=0o711)

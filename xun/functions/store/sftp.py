@@ -68,16 +68,25 @@ class SFTPDriver(StoreDriver):
         # We reuse ssh connections, note that these connections are left open
         # for the duration of the process. We should consider changing store
         # semantics to make cleanup a part of the natural usage.
+        try:
+            return self._ssh
+        except AttributeError:
+            pass
+        try:
+            self._ssh = SFTPDriver._connection_pool[hash(self)]
+            return self._ssh
+        except KeyError:
+            pass
+
         self._ssh = SFTPDriver._connection_pool.setdefault(
             hash(self), paramiko.SSHClient())
 
         self._ssh.set_missing_host_key_policy(self.missing_host_key_policy)
-
-        if self._ssh.get_transport() is None or not self._ssh.get_transport(
-        ).is_active():
-            self._ssh.connect(self.host,
-                              port=self.port,
-                              username=self.username)
+        self._ssh.connect(self.host,
+                          port=self.port,
+                          username=self.username,
+                          allow_agent=False,
+                          look_for_keys=True)
         return self._ssh
 
     @property

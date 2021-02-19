@@ -68,10 +68,8 @@ class SFTPDriver(StoreDriver):
         # We reuse ssh connections, note that these connections are left open
         # for the duration of the process. We should consider changing store
         # semantics to make cleanup a part of the natural usage.
-        try:
+        if self._ssh is not None:
             return self._ssh
-        except AttributeError:
-            pass
         try:
             self._ssh = SFTPDriver._connection_pool[hash(self)]
             return self._ssh

@@ -130,37 +130,7 @@ With constants statements allows xun to figure out the order of calls needed to 
 
 ## Stores
 
-```python
-class DiskCache(metaclass=StoreMeta):
-    def __init__(self, cache_dir):
-        self.cache_dir = cache_dir
-
-    def __contains__(self, key):
-        with diskcache.Cache(self.cache_dir) as cache:
-            return key in cache
-
-    def __delitem__(self, key):
-        with diskcache.Cache(self.cache_dir) as cache:
-            del cache[key]
-
-    def __getitem__(self, key):
-        with diskcache.Cache(self.cache_dir) as cache:
-            return cache[key]
-
-    def __iter__(self):
-        with diskcache.Cache(self.cache_dir) as cache:
-            return iter(cache)
-
-    def __len__(self):
-        with diskcache.Cache(self.cache_dir) as cache:
-            return len(cache)
-
-    def __setitem__(self, key, value):
-        with diskcache.Cache(self.cache_dir) as cache:
-            cache[key] = value
-```
-
-As calls to context functions are executed and finished, the results are saved in the store of the context. Stores are classes that satisfy the requirements of `collections.abc.MutableMapping`, are pickleable, and whos state is shared between all instances. Stores can be defined by users by specifying a class with metaclass `xun.functions.store.StoreMeta`. The above code is in fact the entire implementation of the `xun.functions.store.DiskCache` store.
+As calls to context functions are executed and finished, the results are saved in the store of the context. Stores are classes that satisfy the requirements of `collections.abc.MutableMapping`, are pickleable, and whos state is shared between all instances. Stores can be defined by users by specifying a class with metaclass `xun.functions.store.StoreMeta`.
 
 ## Drivers
 

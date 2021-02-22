@@ -14,3 +14,4 @@ def test_dask_driver():
         result = blueprint.run(driver=dask_driver, store=store)
 
     assert result == expected
+    client.close()

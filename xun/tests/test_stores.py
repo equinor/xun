@@ -24,12 +24,6 @@ def Memory():
 
 
 @contextmanager
-def TmpDiskCache():
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        yield xun.functions.store.DiskCache(tmpdirname)
-
-
-@contextmanager
 def TmpDisk():
     with tempfile.TemporaryDirectory() as tmpdirname:
         yield xun.functions.store.Disk(tmpdirname)
@@ -73,12 +67,10 @@ def with_namespace(cls, namespace):
 stores = [
     Memory,
     FakeRedis,
-    TmpDiskCache,
     TmpDisk,
     TmpSFTP,
     with_namespace(Memory, 'test_namespace'),
     with_namespace(FakeRedis, 'test_namespace'),
-    with_namespace(TmpDiskCache, 'test_namespace'),
     with_namespace(TmpDisk, 'test_namespace'),
     with_namespace(TmpSFTP, 'test_namespace'),
 ]
@@ -114,6 +106,7 @@ def test_store_is_collection(cls):
         assert store['c'] == 2
 
         assert set(store.keys()) >= {'a', 'b', 'c'}
+
 
 @pytest.mark.parametrize('cls', stores)
 def test_store_driver_is_collection(cls):

@@ -33,7 +33,7 @@ def main():
     blueprint = fibonacci_sequence.blueprint(10)
     sequence = blueprint.run(
         driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.DiskCache('store'),
+        store=xun.functions.store.Disk('store'),
     )
     for num in sequence:
         print(num)

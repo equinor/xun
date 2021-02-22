@@ -84,11 +84,10 @@ class SFTPDriver(StoreDriver):
     def sftp(self):
         if self._sftp is None:
             self._sftp = self.ssh.open_sftp()
-            self._sftp.chdir(str(self.root))
             if not self.is_dir(self.root / 'values'):
-                self._sftp.mkdir('values', mode=0o711)
+                self._sftp.mkdir(str(self.root / 'values'), mode=0o711)
             if not self.is_dir(self.root / 'keys'):
-                self._sftp.mkdir('keys', mode=0o711)
+                self._sftp.mkdir(str(self.root / 'keys'), mode=0o711)
         return self._sftp
 
     def is_dir(self, path):

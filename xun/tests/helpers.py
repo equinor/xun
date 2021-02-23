@@ -154,7 +154,7 @@ def compare_ast(a, b):
 def sample_sin_blueprint(offset=42, sample_count=10, step_size=36):
     @xun.function()
     def mksample(i, step_size):
-        return i / step_size
+        return i * step_size
 
     @xun.function()
     def deg_to_rad(deg):
@@ -169,7 +169,7 @@ def sample_sin_blueprint(offset=42, sample_count=10, step_size=36):
 
     blueprint = sample_sin.blueprint(offset, sample_count, step_size)
     expected = [
-        sin(radians(i / step_size)) + offset for i in range(sample_count)
+        sin(radians(i * step_size)) + offset for i in range(sample_count)
     ]
 
     return blueprint, expected

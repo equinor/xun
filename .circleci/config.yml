@@ -1,5 +1,8 @@
 version: 2.1
 
+orbs:
+  win: circleci/windows@2.2.0
+
 commands:
 
   bootstrap-macos:
@@ -24,9 +27,30 @@ commands:
       - run:
           name: Setup Win environment
           command: |
+            choco install --no-progress cmake --version 3.14.7
             conda init powershell
             conda create -y -n py-<< parameters.python-version >> python=<< parameters.python-version >>
             conda activate py-<< parameters.python-version >>
+
+  python-win-test:
+    parameters:
+      python-version:
+        type: string
+    steps:
+      - run:
+          name: Install Python dependencies
+          command: |
+            $env:CMAKE_GENERATOR = "Visual Studio 16 2019"
+            conda activate py-<< parameters.python-version >>
+            python -m pip install cmake scikit-build pybind11
+            python -m pip install -r requirements-dev.txt
+            python -m pip install -r requirements.txt
+            
+      - run:
+          name: Test python
+          command: |
+            conda activate py-<< parameters.python-version >>
+            python setup.py test --verbose
 
   install-python-deps:
     steps:
@@ -151,6 +175,20 @@ jobs:
       - install-python-deps
       - python-build-test
 
+  python-win-check:
+    parameters:
+      python-version:
+        type: string
+    executor:
+      name: win/default
+      shell: powershell.exe
+    steps:
+      - checkout
+      - bootstrap-win:
+          python-version: << parameters.python-version >>
+      - python-win-test:
+          python-version: << parameters.python-version >>
+
   sdist-deploy:
     docker:
       - image: "circleci/python:3.7"
@@ -205,6 +243,15 @@ workflows:
           name: MacOS Python 3.8
           python-version: "3.8"
 
+  windows-check:
+    jobs:
+      - python-win-check:
+          name: Win Python 3.7
+          python-version: "3.7"
+      - python-win-check:
+          name: Win Python 3.8
+          python-version: "3.8"
+
   linux-deploy:
     jobs:
       - sdist-deploy:
@@ -238,7 +285,6 @@ workflows:
     jobs:
       - python-code-check:
           name: Python code check
-
 
   formatting-check:
     jobs:

@@ -15,6 +15,8 @@
 https://en.wikipedia.org/wiki/Bagua
 ```
 
+[![equinor](https://circleci.com/gh/equinor/xun.svg?style=shield)](https://app.circleci.com/pipelines/github/equinor/xun)
+
 # Tutorial
 
 ## Quick Start

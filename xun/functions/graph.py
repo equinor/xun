@@ -14,7 +14,7 @@ def sink_nodes(dag):
 
 def source_nodes(dag):
     """
-    Given a directed acyclic graph, return a list of it's sink nodes.
+    Given a directed acyclic graph, return a list of it's source nodes.
     """
     if not nx.is_directed_acyclic_graph(dag):
         raise NotDAGError

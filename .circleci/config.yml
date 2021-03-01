@@ -133,6 +133,21 @@ commands:
             python3 -m twine upload -u __token__ --skip-existing dist/*
 
 jobs:
+
+  repo-health-check:
+    docker:
+      - image: "circleci/python:3.8"
+    steps:
+      - checkout
+      - install-python-deps
+      - run:
+          name: Test check
+          command: |
+            python3 setup.py test --verbose
+      - flake8-req-check
+      - bandit-check
+      - codacy-check
+
   python-code-check:
     docker:
       - image: "circleci/python:3.8"
@@ -290,3 +305,14 @@ workflows:
     jobs:
       - python-formatting-check:
           name: Python formatting check
+
+  health-check:
+    triggers:
+      - schedule:
+          cron: "0 0 * * *"
+          filters:
+            branches:
+              only:
+                - master
+    jobs:
+      - repo-health-check

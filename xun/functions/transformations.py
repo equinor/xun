@@ -18,10 +18,10 @@ from .function_description import describe
 from .function_image import FunctionImage
 from .util import assignment_target_names
 from .util import assignment_target_shape
-from .util import shape_to_ast_tuple
 from .util import body_external_names
 from .util import function_ast
 from .util import separate_constants_ast
+from .util import shape_to_ast_tuple
 from .util import sort_constants_ast
 from .util import stmt_introduced_names
 from itertools import chain
@@ -195,6 +195,49 @@ class FunctionDecomposition(types.SimpleNamespace):
         return FunctionDecomposition(self.desc, attrs)
 
 
+def unpack_unpacking_assignments(nodes):
+    """
+    For all nodes of type ast.Assign, where the target is iterable and the
+    value is a call, the .unpack() attribute is added to the call.
+
+    Example
+    a, b, (c, d) = _xun_CallNode('f')
+    ->
+    a, b, (c, d) = _xun_CallNode('f').unpack((2, (2,)))
+    """
+    def add_unpack_to_callnode(node):
+        target_shape = assignment_target_shape(node.targets[0])
+        unpacked_call = ast.Call(
+            func=ast.Attribute(
+                value=node.value,
+                attr='unpack',
+                ctx=ast.Load(),
+            ),
+            args=[shape_to_ast_tuple(target_shape)],
+            keywords=[],
+        )
+        return ast.Assign(
+            targets=node.targets,
+            value=unpacked_call,
+            type_comment=None,
+        )
+
+    def assignment_left_side_is_iterable(node):
+        return isinstance(node.targets[0], (ast.Tuple, ast.List))
+
+    def assignment_right_side_is_callnode(node):
+        return isinstance(node.value, ast.Call)
+
+    return [
+        add_unpack_to_callnode(node)
+        if isinstance(node, ast.Assign)
+        and assignment_left_side_is_iterable(node)
+        and assignment_right_side_is_callnode(node)
+        else node
+        for node in nodes
+    ]
+
+
 #
 # Transformations
 #
@@ -317,10 +360,9 @@ def build_xun_graph(
     """Build Xun Graph Transformation
 
     This transformation will generate code from a FunctionDecompositions
-    copy_only_constants such that any call to a xun function is replaced by an
-    uncopyable FutureValueNode and registered in a graph. The new code will
-    return a dependency graph for the function assembled from the
-    FunctionDecomposition.
+    copy_only_constants such that any call to a xun function is registered in a
+    graph. The new code will return a dependency graph for the function
+    assembled from the FunctionDecomposition.
 
     This version of the code is final and will be run during scheduling.
 
@@ -354,6 +396,7 @@ def build_xun_graph(
                                *args,
                                **kwargs):
 
+            # Any references to results from other xun functions must be loaded
             dependencies = filter(
                 lambda a: isinstance(a, _xun_CallNode),
                 map(
@@ -369,24 +412,10 @@ def build_xun_graph(
 
     header = helper_code.body[0].body
 
-    class XCall(ast.NodeTransformer):
+    class RegisterCallWrapper(ast.NodeTransformer):
         """
         Transformation any calls to a xun function to _xun_register_call
         """
-        def __init__(self):
-            self.target_shape = 0
-            self.is_target_tuple = False
-
-        def visit_Assign(self, node):
-            target = node.targets[0]
-            if isinstance(target, ast.Name):
-                self.is_target_tuple = False
-                self.target_shape = 1
-            elif isinstance(target, (ast.Tuple, ast.List)):
-                self.is_target_tuple = True
-                self.target_shape = assignment_target_shape(target)
-            return self.generic_visit(node)
-
         def visit_Call(self, node):
             node = self.generic_visit(node)
 
@@ -405,31 +434,22 @@ def build_xun_graph(
                 keywords=node.keywords,
                 type_comment=None,
             )
-            if self.is_target_tuple:
-                call_node_unpack_func = ast.Attribute(
-                    value=register_call,
-                    attr='unpack',
-                    ctx=ast.Load(),
-                )
-                unpack_register_call = ast.Call(
-                    func=call_node_unpack_func,
-                    args=[shape_to_ast_tuple(self.target_shape)],
-                    keywords=[],
-                )
-                return unpack_register_call
-            else:
-                return register_call
+            return register_call
 
     return_graph = ast.Return(value=ast.Name(id='_xun_graph', ctx=ast.Load()))
 
+    body = [
+        RegisterCallWrapper().visit(stmt)
+        if isinstance(stmt, ast.Assign) or isinstance(stmt, ast.Expr)
+        else stmt
+        for stmt in func.copy_only_constants
+    ]
+
+    resolved_body = unpack_unpacking_assignments(body)
+
     xun_graph = [
         *header,
-        *(
-            XCall().visit(stmt)
-            if isinstance(stmt, ast.Assign) or isinstance(stmt, ast.Expr)
-            else stmt
-            for stmt in func.copy_only_constants
-        ),
+        *resolved_body,
         return_graph
     ]
 
@@ -472,22 +492,11 @@ def load_from_store(
 
         def visit_Assign(self, node):
             self.generic_visit(node)
-
-            if len(node.targets) != 1:
-                msg = 'Structured unpacking is not supported'
-                raise NotImplementedError(msg)
-
             target = node.targets[0]
-            if isinstance(target, ast.Name):
-                self.seen_targets.append(target.id)
-            elif isinstance(target, (ast.Tuple, ast.List)):
-                inner_targets = assignment_target_names(target)
-                self.seen_targets += inner_targets
-            else:
-                raise NotImplementedError(
-                    'Unsupported target {}'.format(target)
-                )
-
+            self.seen_targets.extend(
+                assignment_target_names(target)
+                if isinstance(target, (ast.Tuple, ast.List)) else [target.id]
+            )
             return node
     discovered_reference = DiscoverReferences()
 
@@ -507,20 +516,6 @@ def load_from_store(
             return [node for node in transformed if node is not None]
 
     class Call2CallNode(NodeMapper):
-        def __init__(self):
-            self.target_shape = 0
-            self.is_target_tuple = False
-
-        def visit_Assign(self, node):
-            target = node.targets[0]
-            if isinstance(target, ast.Name):
-                self.is_target_tuple = False
-                self.target_shape = 1
-            elif isinstance(target, (ast.Tuple, ast.List)):
-                self.is_target_tuple = True
-                self.target_shape = assignment_target_shape(target)
-            return self.generic_visit(node)
-
         def visit_Call(self, node):
             node = self.generic_visit(node)
 
@@ -532,30 +527,16 @@ def load_from_store(
                 args=[ast.Constant(value=node.func.id, kind=None), *node.args],
                 keywords=node.keywords,
             )
-
-            if self.is_target_tuple:
-                call_node_unpack_func = ast.Attribute(
-                    value=construct_call,
-                    attr='unpack',
-                    ctx=ast.Load(),
-                )
-                unpack_construct_call = ast.Call(
-                    func=call_node_unpack_func,
-                    args=[shape_to_ast_tuple(self.target_shape)],
-                    keywords=[],
-                )
-                return unpack_construct_call
-            else:
-                return construct_call
+            return construct_call
 
     class CallNode2Load(NodeMapper):
-        def __init__(self, output_targets=[]):
+        def __init__(self, output_targets):
             self.output_targets = output_targets
 
         def visit_Assign(self, node):
             introduced_names = stmt_introduced_names(node)
             if any(is_referenced_in_body(name) for name in introduced_names):
-                self.output_targets.append(node.targets[0])
+                self.output_targets.extend(node.targets)
                 return self.visit(node.value)
             return None
 
@@ -566,7 +547,7 @@ def load_from_store(
             call_node = Call2CallNode().visit(node)
 
             hash = dependencies[node.func.id].hash
-            hash_expr = ast.Constant(value=hash)
+            hash_expr = ast.Constant(value=hash, kind=None)
 
             store_accessor_load_func = ast.Attribute(
                 value=ast.Name(id='_xun_store_accessor', ctx=ast.Load()),
@@ -595,6 +576,7 @@ def load_from_store(
 
     # Converts calls to xun functions to CallNodes
     call_nodes = Call2CallNode().map(assignments)
+    call_nodes = unpack_unpacking_assignments(call_nodes)
 
     output_targets = []
     loads = CallNode2Load(output_targets=output_targets).map(assignments)

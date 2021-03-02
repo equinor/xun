@@ -1,5 +1,5 @@
 from xun.functions.compatibility import ast
-from .helpers import compare_ast
+from .helpers import check_ast_equals
 import astunparse
 import xun
 
@@ -112,7 +112,7 @@ def test_func_external_references_tuple_unpacking():
     assert external_names == expected
 
 
-def test_assign_target_shape():
+def test_assignment_target_shape():
     target = ast.parse('a, b, c = f()').body[0].targets[0]
     shape = xun.functions.util.assignment_target_shape(target)
     assert shape == (3, )
@@ -123,7 +123,7 @@ def test_assign_target_shape():
 
     target = ast.parse('a, b, (c, d) = f()').body[0].targets[0]
     shape = xun.functions.util.assignment_target_shape(target)
-    assert shape == (1, 1, (2,))
+    assert shape == (2, (2,))
 
     target = ast.parse('(a, b), (c, d) = f()').body[0].targets[0]
     shape = xun.functions.util.assignment_target_shape(target)
@@ -131,37 +131,45 @@ def test_assign_target_shape():
 
     target = ast.parse('a, (b, c, (d, e)), f = f()').body[0].targets[0]
     shape = xun.functions.util.assignment_target_shape(target)
-    assert shape == (1, (1, 1, (2,)), 1)
+    assert shape == (1, (2, (2,)), 1)
 
     target = ast.parse('a, ((b,c,d), (e,f)), g = f()').body[0].targets[0]
     shape = xun.functions.util.assignment_target_shape(target)
     assert shape == (1, ((3,), (2,)), 1)
 
 
-def test_assign_starred_target_shape():
-    target = ast.parse('a, (b, *cd), *ef, g = f()').body[0].targets[0]
+def test_assignment_starred_target_shape():
+    target = ast.parse('a, *bc = f()').body[0].targets[0]
     shape = xun.functions.util.assignment_target_shape(target)
-    assert shape == (1, (1, 0), 0, 1)
+    assert shape == (1, Ellipsis)
+
+    target = ast.parse('a, b, c, *de, f = g()').body[0].targets[0]
+    shape = xun.functions.util.assignment_target_shape(target)
+    assert shape == (3, Ellipsis, 1)
+
+    target = ast.parse('a, (b, *cd), e, f = g()').body[0].targets[0]
+    shape = xun.functions.util.assignment_target_shape(target)
+    assert shape == (1, (1, Ellipsis), 2)
 
 
 def test_shape_to_ast_tuple():
     shape = (3,)
     ast_tuple = xun.functions.util.shape_to_ast_tuple(shape)
-    required_ast = ast.Tuple(
+    expected_ast = ast.Tuple(
         elts=[ast.Constant(value=3, kind=None)],
         ctx=ast.Load(),
     )
-    assert compare_ast(ast_tuple, required_ast)
+    ok, diff = check_ast_equals(ast_tuple, expected_ast)
+    assert ok, diff
 
-    shape = (1, (1, 1, (2,)), 1)
+    shape = (1, (2, (2,)), 1)
     ast_tuple = xun.functions.util.shape_to_ast_tuple(shape)
-    required_ast = ast.Tuple(
+    expected_ast = ast.Tuple(
         elts=[
             ast.Constant(value=1, kind=None),
             ast.Tuple(
                 elts=[
-                    ast.Constant(value=1, kind=None),
-                    ast.Constant(value=1, kind=None),
+                    ast.Constant(value=2, kind=None),
                     ast.Tuple(
                         elts=[ast.Constant(value=2, kind=None)],
                         ctx=ast.Load(),
@@ -173,18 +181,20 @@ def test_shape_to_ast_tuple():
         ],
         ctx=ast.Load(),
     )
-    assert compare_ast(ast_tuple, required_ast)
+    ok, diff = check_ast_equals(ast_tuple, expected_ast)
+    assert ok, diff
 
 
 def test_starred_shape_to_ast_tuple():
-    shape = (1, 1, 0)
+    shape = (1, 1, Ellipsis)
     ast_tuple = xun.functions.util.shape_to_ast_tuple(shape)
-    required_ast = ast.Tuple(
+    expected_ast = ast.Tuple(
         elts=[
             ast.Constant(value=1, kind=None),
             ast.Constant(value=1, kind=None),
-            ast.Constant(value=0, kind=None),
+            ast.Constant(value=Ellipsis, kind=None),
         ],
         ctx=ast.Load(),
     )
-    assert compare_ast(ast_tuple, required_ast)
+    ok, diff = check_ast_equals(ast_tuple, expected_ast)
+    assert ok, diff

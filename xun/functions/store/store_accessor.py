@@ -56,7 +56,7 @@ class StoreAccessor:
     def resolve_call_args(self, call):
         """
         Given a call, return its arguments and keyword arguments. If any
-        argument is a CallNode or CallNodeSubscript, the CallNode or
+        argument is a CallNode or a CallNodeSubscript, the CallNode or
         CallNodeSubscript is replaced with a value loaded from the store.
 
         Parameters
@@ -67,25 +67,36 @@ class StoreAccessor:
         (list, dict)
             Pair of resolved arguments and keyword arguments
         """
+        cache = {}
+
         def load_arg_value(arg):
+            """
+            The argument can be either a CallNode or a CallNodeSubscript. If
+            so, the result must be loaded from store, unless it is already
+            loaded in the cache.
+            """
             if isinstance(arg, CallNode):
-                return self.load_result(arg)
-            call = arg.call
-            result = iter(self.load_result(call))
-            for subscript in arg.subscript:
-                for _ in range(subscript):
-                    next(result)
-                result = iter(next(result))
-            return next(result)
+                return cache.setdefault(arg, self.load_result(arg))
+            elif isinstance(arg, CallNodeSubscript):
+                # Load the result from the parent CallNode
+                call = arg.call
+                result = iter(cache.setdefault(call, self.load_result(call)))
+                # Find the value at the correct subscript by iterating through
+                # the result
+                for subscript in arg.subscript:
+                    for _ in range(subscript):
+                        next(result)
+                    result = iter(next(result))
+                return next(result)
+            else:
+                return arg
 
         args = [
             load_arg_value(arg)
-            if isinstance(arg, (CallNode, CallNodeSubscript)) else arg
             for arg in call.args
         ]
         kwargs = {
-            key: load_arg_value(value)
-            if isinstance(value, (CallNode, CallNodeSubscript)) else value
-            for key, value in call.kwargs.items()
+            key: load_arg_value(arg)
+            for key, arg in call.kwargs.items()
         }
         return args, kwargs

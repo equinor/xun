@@ -82,43 +82,43 @@ class CallNode:
             ))
         return 'CallNode({})'.format(', '.join(args))
 
-    def unpack(self, shape, tupl_idx=()):
+    def unpack(self, shape, *, _subscript=()):
         """
-        Given a tuple shape, the CallNode is unpacked into a tuple of
-        CallNodeSubscripts with this shape.
+        Unpacks a CallNode into a tuple of CallNodeSubscripts with a given
+        shape using recursion. Every CallNodeSubscript holds the parent
+        CallNode along with its respective subscript index.
 
         Examples
         --------
-
-        >>> CallNode('f').unpack((1, (2,)))
+        >>> CallNode('f').unpack((2, (2,)))
         (
             CallNodeSubscript('f', (0,)),
+            CallNodeSubscript('f', (1,)),
             (
-                CallNodeSubscript('f', (1, 0)),
-                CallNodeSubscript('f', (1, 1))
+                CallNodeSubscript('f', (2, 0)),
+                CallNodeSubscript('f', (2, 1))
             )
         )
-
         """
-        if isinstance(shape, int):
-            if shape == 0:
-                local_tupl_idx = tupl_idx
-                return CallNodeSubscript([self], local_tupl_idx)
-            elif shape == 1:
-                local_tupl_idx = tupl_idx
-                return CallNodeSubscript(self, local_tupl_idx)
-        else:
-            if len(shape) == 1:
-                inner_tuple = ()
-                for s in range(shape[0]):
-                    local_tupl_idx = tupl_idx + (s, )
-                    inner_tuple += (CallNodeSubscript(self, local_tupl_idx), )
-                return inner_tuple
-            return_tuple = ()
-            for idx, el in enumerate(shape):
-                local_tupl_idx = tupl_idx + (idx, )
-                return_tuple += (self.unpack(el, local_tupl_idx), )
-            return return_tuple
+        output = ()
+        idx = 0
+        for element in shape:
+            if isinstance(element, int):
+                for _ in range(element):
+                    subscript = _subscript + (idx, )
+                    idx += 1
+                    output += (CallNodeSubscript(self, subscript), )
+            elif isinstance(element, tuple):
+                subscript = _subscript + (idx, )
+                idx += 1
+                output += (self.unpack(shape=element, _subscript=subscript), )
+            elif isinstance(element, type(Ellipsis)):
+                subscript = _subscript + (idx, )
+                idx += 1
+                output += (CallNodeSubscript(self, subscript), )
+            else:
+                raise TypeError("Invalid content in shape tuple")
+        return output
 
 
 class CallNodeSubscript:
@@ -152,5 +152,5 @@ class CallNodeSubscript:
 
     def __repr__(self):
         return "CallNodeSubscript('{}', {})".format(
-            self.call.function_name, self.subscript
+            self.call, self.subscript
         )

@@ -312,10 +312,26 @@ def test_structured_unpacking_list():
     assert result == 'abc'
 
 
-def test_structured_unpacking_starred():
+def test_starred_unpacking_from_list():
     @xun.function()
     def f():
-        return ('a', 'b', 'c', 'd')
+        with ...:
+            head, *body, foot = [1, 2, 3, 4, 5, 6]
+        return head, body, foot
+
+    head, body, foot = f.blueprint().run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory(),
+    )
+    assert head == 1
+    assert body == [2, 3, 4, 5]
+    assert foot == 6
+
+
+def test_starred_unpacking_from_function():
+    @xun.function()
+    def f():
+        return 'a', 'b', 'c', 'd'
 
     @xun.function()
     def h():
@@ -330,6 +346,48 @@ def test_structured_unpacking_starred():
     )
 
     assert result == 'abcd'
+
+
+def test_nested_unpacking():
+    @xun.function()
+    def f(arg):
+        return 'a', 'b', arg
+
+    @xun.function()
+    def g():
+        return 'c'
+
+    @xun.function()
+    def h():
+        with ...:
+            a, b, c = f(g())
+        return a + b + c
+
+    result = h.blueprint().run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory(),
+    )
+
+    assert result == 'abc'
+
+
+def test_subscripted_function():
+    @xun.function()
+    def f():
+        return 'a', 'b'
+
+    @xun.function()
+    def h():
+        with ...:
+            b = f()[1]
+        return b
+
+    result = h.blueprint().run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory(),
+    )
+
+    assert result == 'b'
 
 
 def test_structured_unpacking_starred_deep():

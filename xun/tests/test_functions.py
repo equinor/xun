@@ -390,6 +390,69 @@ def test_subscripted_function():
     assert result == 'b'
 
 
+@pytest.mark.xfail(reason="Subscript result not implemented")
+def test_subscript_result():
+    @xun.function()
+    def f():
+        return 'a', 'b'
+
+    @xun.function()
+    def h():
+        with ...:
+            r = f()
+            b, c = r
+            c = r[1]
+        return b + c
+
+    result = h.blueprint().run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory(),
+    )
+
+    assert result == 'bc'
+
+
+@pytest.mark.xfail(reason="Unpack from subscripted function not implemented")
+def test_unpack_subscripted_function():
+    @xun.function()
+    def f():
+        return 'a', ('b', 'c')
+
+    @xun.function()
+    def h():
+        with ...:
+            b, c = f()[1]
+        return b, c
+
+    result = h.blueprint().run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory(),
+    )
+
+    assert result == ('b', 'c')
+
+
+@pytest.mark.xfail(reason="Multiple targets not implemented")
+def test_multiple_targets():
+    @xun.function()
+    def f():
+        return 'a', 'b'
+
+    @xun.function()
+    def h():
+        with ...:
+            r = a, b = f()
+        return r, a + b
+
+    r, ab = h.blueprint().run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory(),
+    )
+
+    assert r == ('a', 'b')
+    assert ab == 'ab'
+
+
 def test_structured_unpacking_starred_deep():
     @xun.function()
     def f():

@@ -31,6 +31,13 @@ class StoreAccessor:
     def __init__(self, store):
         self.store = store
 
+    @property
+    def client(self):
+        if self.store.client_store is not None:
+            return StoreAccessor(self.store.client_store)
+        else:
+            return self
+
     def load_result(self, call, hash=None):
         namespace = self.store / 'results' / call
         hash = hash if hash is not None else namespace['latest']

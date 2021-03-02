@@ -1,8 +1,10 @@
 from io import StringIO
-from itertools import starmap
 from math import radians
 from math import sin
 from xun.functions.compatibility import ast
+import astor
+import astunparse
+import difflib
 import fakeredis
 import sys
 import xun
@@ -121,36 +123,6 @@ class FakeRedis(xun.functions.store.Redis):
         return exc_type is None
 
 
-def compare_ast(a, b):
-    def is_relevant(node, k):
-        ignored_keys = (
-            'col_offset',
-            'end_col_offset',
-            'end_lineno',
-            'lineno',
-        )
-        return k not in ignored_keys
-
-    if type(a) is not type(b):
-        return False
-
-    if isinstance(a, ast.AST):
-        a_attrs = {k: v for k, v in vars(a).items() if is_relevant(a, k)}
-        b_attrs = {k: v for k, v in vars(b).items() if is_relevant(b, k)}
-
-        if set(a_attrs.keys()) != set(b_attrs.keys()):
-            return False
-
-        for key in a_attrs.keys():
-            if not compare_ast(a_attrs[key], b_attrs[key]):
-                return False
-        return True
-    elif isinstance(a, list):
-        return all(starmap(compare_ast, zip(a, b)))
-    else:
-        return a == b
-
-
 def sample_sin_blueprint(offset=42, sample_count=10, step_size=36):
     @xun.function()
     def mksample(i, step_size):
@@ -173,3 +145,20 @@ def sample_sin_blueprint(offset=42, sample_count=10, step_size=36):
     ]
 
     return blueprint, expected
+
+
+def check_ast_equals(a, b):
+    if isinstance(a, list):
+        assert isinstance(b, list)
+        a = ast.Module(body=a)
+        b = ast.Module(body=b)
+    if not ast.dump(a) == ast.dump(b):
+        differ = difflib.Differ()
+        a_ast = astunparse.dump(a).splitlines(keepends=True)
+        b_ast = astunparse.dump(b).splitlines(keepends=True)
+        a_src = astor.to_source(a).splitlines(keepends=True)
+        b_src = astor.to_source(b).splitlines(keepends=True)
+        diff = ''.join(differ.compare(a_src, b_src)
+            ) if a_src != b_src else ''.join(differ.compare(a_ast, b_ast))
+        return False, diff
+    return True, ''

@@ -1,4 +1,4 @@
-from .helpers import compare_ast
+from .helpers import check_ast_equals
 from typing import List
 from xun.functions.compatibility import ast
 import astor
@@ -131,8 +131,8 @@ def test_load_from_store_transformation():
             b = _xun_CallNode('f', a)
             c = _xun_CallNode('f', b)
             return (
-                _xun_store_accessor.load_result(_xun_CallNode('f')),
-                _xun_store_accessor.load_result(_xun_CallNode('f', b)),
+                _xun_store_accessor.load_result(_xun_CallNode('f'), hash=b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a'),
+                _xun_store_accessor.load_result(_xun_CallNode('f', b), hash=b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a'),
             )
         a, c = _xun_load_constants()
         value = a + c
@@ -153,9 +153,8 @@ def test_load_from_store_transformation():
     generated = [*code.load_from_store, *code.body]
     reference = reference_source.body[0].body
 
-    for a, b in zip(generated, reference):
-        if not compare_ast(a, b):
-            raise ValueError('\n{} != \n{}'.format(ast.dump(a), ast.dump(b)))
+    ok, diff = check_ast_equals(generated, reference)
+    assert ok, diff
 
 
 def test_load_from_store_skip_if_unecessary():
@@ -185,9 +184,8 @@ def test_load_from_store_skip_if_unecessary():
     generated = [*code.load_from_store, *code.body]
     reference = reference_source.body[0].body
 
-    for a, b in zip(generated, reference):
-        if not compare_ast(a, b):
-            raise ValueError('\n{} != \n{}'.format(ast.dump(a), ast.dump(b)))
+    ok, diff = check_ast_equals(generated, reference)
+    assert ok, diff
 
 
 def test_FunctionDecomposition():
@@ -272,26 +270,12 @@ def test_xun_function_to_source():
 
 def test_structured_unpacking_transformation():
     def g():
-        return a * x * y * z * 𝛂 * β * b + something
         with ...:
-            a, ((x, y, z), (𝛂, β)), b = f()
+            a, b, ((x, y, z), (𝛂, β)), c, d = f()
             something = h(x, y, z)
+        return a * b * x * y * z * 𝛂 * β * c * d + something
 
     desc = xun.describe(g)
-
-    @xun.function_ast
-    def reference_source():
-        def _xun_load_constants():
-            from copy import deepcopy  # noqa: F401
-            from xun.functions import CallNode as _xun_CallNode
-            from xun.functions.store import StoreAccessor as _xun_StoreAccessor
-            _xun_store_accessor = _xun_StoreAccessor(_xun_store)
-            a, ((x, y, z), (𝛂, β)), b = _xun_CallNode('f').unpack((1, ((3,), (2,)), 1))
-            something = _xun_CallNode('h', x, y, z)
-            return (_xun_store_accessor.load_result(_xun_CallNode('f')),
-                    _xun_store_accessor.load_result(_xun_CallNode('h', x, y, z)))
-        (a, ((x, y, z), (𝛂, β)), b), something = _xun_load_constants()
-        return a * x * y * z * 𝛂 * β * b + something
 
     # Dummy dependency
     @xun.function()
@@ -305,9 +289,70 @@ def test_structured_unpacking_transformation():
         .apply(xun.functions.copy_only_constants, known_functions)
         .apply(xun.functions.load_from_store, known_functions))
 
+    @xun.function_ast
+    def reference_source():
+        def _xun_load_constants():
+            from copy import deepcopy  # noqa: F401
+            from xun.functions import CallNode as _xun_CallNode
+            from xun.functions.store import StoreAccessor as _xun_StoreAccessor
+            _xun_store_accessor = _xun_StoreAccessor(_xun_store)
+            a, b, ((x, y, z), (𝛂, β)), c, d = _xun_CallNode('f').unpack(
+                (2, ((3,), (2,)), 2))
+            something = _xun_CallNode('h', x, y, z)
+            return (
+                _xun_store_accessor.load_result(_xun_CallNode('f'), hash=b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a'),
+                _xun_store_accessor.load_result(_xun_CallNode('h', x, y, z), hash=b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a'),
+            )
+        (a, b, ((x, y, z), (𝛂, β)), c, d), something = _xun_load_constants()
+        return a * b * x * y * z * 𝛂 * β * c * d + something
+
     generated = [*code.load_from_store, *code.body]
     reference = reference_source.body[0].body
 
-    for a, b in zip(generated, reference):
-        if not compare_ast(a, b):
-            raise ValueError('\n{} != \n{}'.format(ast.dump(a), ast.dump(b)))
+    ok, diff = check_ast_equals(generated, reference)
+    assert ok, diff
+
+
+def test_unreferenced_names_are_not_loaded():
+    def func():
+        with ...:
+            a = f()
+            b = h(a)
+            c = g(b)
+        return a + c
+
+    desc = xun.describe(func)
+
+    # Dummy dependency
+    @xun.function()
+    def dummy():
+        pass
+    known_functions = {'f': dummy, 'h': dummy, 'g': dummy}
+
+    code = (xun.functions.FunctionDecomposition(desc)
+        .apply(xun.functions.separate_constants)
+        .apply(xun.functions.sort_constants)
+        .apply(xun.functions.copy_only_constants, known_functions)
+        .apply(xun.functions.load_from_store, known_functions))
+
+    @xun.function_ast
+    def reference_source():
+        def _xun_load_constants():
+            from copy import deepcopy  # noqa: F401
+            from xun.functions import CallNode as _xun_CallNode
+            from xun.functions.store import StoreAccessor as _xun_StoreAccessor
+            _xun_store_accessor = _xun_StoreAccessor(_xun_store)
+            a = _xun_CallNode('f')
+            b = _xun_CallNode('h', a)
+            c = _xun_CallNode('g', b)
+            return (_xun_store_accessor.load_result(_xun_CallNode('f'), hash=b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a'),
+                    _xun_store_accessor.load_result(_xun_CallNode('g', b), hash=b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a'),
+            )
+        a, c = _xun_load_constants()
+        return a + c
+
+    generated = [*code.load_from_store, *code.body]
+    reference = reference_source.body[0].body
+
+    ok, diff = check_ast_equals(generated, reference)
+    assert ok, diff

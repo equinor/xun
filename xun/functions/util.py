@@ -203,11 +203,19 @@ def assignment_target_names(t):
         raise TypeError('Unsupported target {}'.format(type(t)))
 
 
-def assignment_target_shape(t):
-    """Assignment target shape
+def assignment_target_shape(target):
+    """
+    Find the shape of a target expression node.
 
-    Given a target expression node, of type ast.Tuple or ast.List,
-    return the shape of the target.
+    Parameters
+    ----------
+    target : ast.Tuple or ast.List
+        Target expression node
+
+    Returns
+    -------
+    target_shape: tuple
+        The shape of the target expression node
 
     Examples
     --------
@@ -215,37 +223,45 @@ def assignment_target_shape(t):
     >>> ast_target = ast.parse(target).body[0].value
     >>> assignment_target_shape(ast_target)
     (1, (2,))
-
     """
-    assert isinstance(t, (ast.Tuple, ast.List))
-
-    inner_tuple = ()
-    count_Names = 0
-    n_elements = len(t.elts)
-    for el in t.elts:
+    target_shape = ()
+    count_names = 0
+    for el in target.elts:
         if isinstance(el, ast.Name):
-            count_Names += 1
-            inner_tuple += (1, )
+            count_names += 1
         else:
+            if count_names > 0:
+                target_shape += (count_names, )
+                count_names = 0
             if isinstance(el, (ast.Tuple, ast.List)):
-                inner_tuple += (assignment_target_shape(el), )
+                target_shape += (assignment_target_shape(el), )
             elif isinstance(el, ast.Starred):
-                inner_tuple += (0, )
+                # The Ellipsis object is used to represent a starred expression
+                target_shape += (Ellipsis, )
             else:
                 raise TypeError("Invalid node in target tuple")
+    # Include any remaining ast.Names at the end
+    if count_names > 0:
+        target_shape += (count_names, )
 
-    if count_Names == n_elements:
-        inner_tuple = (n_elements, )
-
-    return inner_tuple
+    return target_shape
 
 
 def shape_to_ast_tuple(shape):
     """
     Given a tuple shape, return an ast representation of that tuple
     """
-    assert isinstance(shape, tuple)
-    return ast.parse(str(shape)).body[0].value
+    if isinstance(shape, int):
+        return ast.Constant(value=shape, kind=None)
+    if isinstance(shape, type(Ellipsis)):
+        # The Ellipsis object is used to represent a starred expression
+        return ast.Constant(value=Ellipsis, kind=None)
+    if isinstance(shape, tuple):
+        tuple_elements = []
+        for element in shape:
+            tuple_elements.append(shape_to_ast_tuple(element))
+        return ast.Tuple(elts=tuple_elements, ctx=ast.Load())
+    raise TypeError("Shape must be tuple or integer")
 
 
 def stmt_introduced_names(stmt):

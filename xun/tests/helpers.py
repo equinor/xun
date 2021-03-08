@@ -123,6 +123,13 @@ class FakeRedis(xun.functions.store.Redis):
         return exc_type is None
 
 
+def run_in_process(blueprint):
+    return blueprint.run(
+        driver=xun.functions.driver.Sequential(),
+        store=xun.functions.store.Memory()
+    )
+
+
 def sample_sin_blueprint(offset=42, sample_count=10, step_size=36):
     @xun.function()
     def mksample(i, step_size):

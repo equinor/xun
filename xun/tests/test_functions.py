@@ -1,6 +1,7 @@
 from .helpers import PickleDriver
 from .helpers import FakeRedis
 from .helpers import sample_sin_blueprint
+from .helpers import run_in_process
 from xun.functions import CallNode
 from xun.functions import CopyError
 from xun.functions import XunSyntaxError
@@ -13,10 +14,7 @@ def test_functions():
     from .reference import decending_fibonacci
 
     blueprint = decending_fibonacci.blueprint(6)
-    result = blueprint.run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    result = run_in_process(blueprint)
 
     expected = [5, 3, 2, 1, 1, 0]
     assert result == expected
@@ -145,11 +143,7 @@ def test_blueprint_graph():
 
 def test_blueprint():
     blueprint, expected = sample_sin_blueprint()
-
-    result = blueprint.run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    result = run_in_process(blueprint)
 
     assert result == expected
 
@@ -192,10 +186,7 @@ def test_function_closures_available():
     def f():
         return a
 
-    result = f.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    result = run_in_process(f.blueprint())
 
     assert result == a
 
@@ -213,14 +204,8 @@ def test_function_with_keywords():
         with ...:
             r = f(a=a, b=b)
 
-    assert g.blueprint(1).run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    ) == 1
-    assert g.blueprint(1, 2).run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    ) == 2
+    assert run_in_process(g.blueprint(1)) == 1
+    assert run_in_process(g.blueprint(1, 2)) == 2
 
 
 def test_module_imports():
@@ -232,10 +217,7 @@ def test_module_imports():
     def f():
         return maths.floor(pi) + math.floor(math.e)
 
-    result = f.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    result = run_in_process(f.blueprint())
 
     assert result == 5
 
@@ -285,10 +267,7 @@ def test_structured_unpacking():
             new_b = g(b)
         return a + new_b + c
 
-    result = h.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    result = run_in_process(h.blueprint())
 
     assert result == 'abbc'
 
@@ -304,10 +283,7 @@ def test_structured_unpacking_list():
             [a, [b, c]] = f()
         return a + b + c
 
-    result = h.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    result = run_in_process(h.blueprint())
 
     assert result == 'abc'
 
@@ -319,10 +295,8 @@ def test_starred_unpacking_from_list():
             head, *body, foot = [1, 2, 3, 4, 5, 6]
         return head, body, foot
 
-    head, body, foot = f.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    head, body, foot = run_in_process(f.blueprint())
+
     assert head == 1
     assert body == [2, 3, 4, 5]
     assert foot == 6
@@ -340,10 +314,7 @@ def test_starred_unpacking_from_function():
         b, c = bc
         return a + b + c + d
 
-    result = h.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    result = run_in_process(h.blueprint())
 
     assert result == 'abcd'
 
@@ -363,10 +334,7 @@ def test_nested_unpacking():
             a, b, c = f(g())
         return a + b + c
 
-    result = h.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    result = run_in_process(h.blueprint())
 
     assert result == 'abc'
 
@@ -382,10 +350,7 @@ def test_subscripted_function():
             b = f()[1]
         return b
 
-    result = h.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    result = run_in_process(h.blueprint())
 
     assert result == 'b'
 
@@ -404,10 +369,7 @@ def test_subscript_result():
             c = r[1]
         return b + c
 
-    result = h.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    result = run_in_process(h.blueprint())
 
     assert result == 'bc'
 
@@ -424,10 +386,7 @@ def test_unpack_subscripted_function():
             b, c = f()[1]
         return b, c
 
-    result = h.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    result = run_in_process(h.blueprint())
 
     assert result == ('b', 'c')
 
@@ -444,10 +403,7 @@ def test_multiple_targets():
             r = a, b = f()
         return r, a + b
 
-    r, ab = h.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    r, ab = run_in_process(h.blueprint())
 
     assert r == ('a', 'b')
     assert ab == 'ab'
@@ -466,10 +422,7 @@ def test_structured_unpacking_starred_deep():
         e, g = eg
         return a + b + c + d + e + g
 
-    result = h.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    result = run_in_process(h.blueprint())
 
     assert result == 'abcdeg'
 
@@ -490,10 +443,7 @@ def test_nested_calls():
             s = g(g(f()), other=f())
         return r + '_' + s
 
-    result = h.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    result = run_in_process(h.blueprint())
 
     assert result == 'ab_aba'
 
@@ -615,7 +565,4 @@ def test_empty_xun_function():
         with ...:
             g()
 
-    f.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    run_in_process(f.blueprint())

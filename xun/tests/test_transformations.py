@@ -1,4 +1,5 @@
 from .helpers import check_ast_equals
+from .helpers import run_in_process
 from typing import List
 from xun.functions.compatibility import ast
 import astor
@@ -243,10 +244,7 @@ def test_dependency_without_target():
 
     assert 'procedure' in workflow.dependencies
 
-    result = workflow.blueprint().run(
-        driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory(),
-    )
+    result = run_in_process(workflow.blueprint())
     assert result == 1
 
 

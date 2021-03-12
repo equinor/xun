@@ -1,7 +1,6 @@
 from .compatibility import ast
 from .errors import NotDAGError
 from .errors import XunSyntaxError
-from collections import Counter
 from itertools import chain
 from itertools import tee
 import copy
@@ -187,20 +186,30 @@ def stmt_dag(stmts):
     return G
 
 
-def assignment_target_names(t):
+def flatten_assignment_targets(t):
     """
-    Given a target expression node, return the names of all targets
+    Given a target expression node, flatten expressions to a flat generator
     """
-    if isinstance(t, list):
-        return frozenset(chain(*[assignment_target_names(u) for u in t]))
+    if isinstance(t, ast.Assign):
+        return flatten_assignment_targets(t.targets)
+    elif isinstance(t, list):
+        return chain(*(flatten_assignment_targets(u) for u in t))
     elif isinstance(t, (ast.Tuple, ast.List)):
-        return frozenset(chain(*[assignment_target_names(u) for u in t.elts]))
+        return chain(*(flatten_assignment_targets(u) for u in t.elts))
     elif isinstance(t, ast.Starred):
-        return assignment_target_names(t.value)
-    elif isinstance(t, ast.Name):
-        return frozenset({t.id})
+        return flatten_assignment_targets(t.value)
+    elif isinstance(t, (ast.Name, ast.Attribute, ast.Subscript)):
+        return [t]
     else:
-        raise TypeError('Unsupported target {}'.format(type(t)))
+        raise TypeError(f'{type(t)} cannot be used as an assignment target')
+
+
+def assignment_target_introduced_names(t):
+    """
+    Given a target expression node, return the introduced names of all targets
+    """
+    return frozenset(target.id for target in flatten_assignment_targets(t)
+                     if not isinstance(target, (ast.Attribute, ast.Subscript)))
 
 
 def assignment_target_shape(target):
@@ -276,9 +285,9 @@ def stmt_introduced_names(stmt):
         )
     try:
         targets = stmt.targets
-        return assignment_target_names(targets)
     except AttributeError:
         return frozenset()
+    return assignment_target_introduced_names(targets)
 
 
 def stmt_external_names(stmt):
@@ -292,7 +301,7 @@ def stmt_external_names(stmt):
     def comp_targets(node):
         targets = frozenset()
         for gen in node.generators:
-            targets |= assignment_target_names(gen.target)
+            targets |= assignment_target_introduced_names(gen.target)
         return targets
 
     def visit_children(node, locals):
@@ -329,7 +338,7 @@ def stmt_external_names(stmt):
             return visit_children(e, new_locals)
 
         elif isinstance(e, ast.For):
-            new_locals = locals | assignment_target_names(e.target)
+            new_locals = locals | assignment_target_introduced_names(e.target)
             return ( external_names(e.iter, locals) # Independed of new scope
                    | body_external_names(e.body, new_locals)
                    | body_external_names(e.orelse, new_locals)
@@ -445,9 +454,9 @@ def check_with_constants(node):
         msg = ('With constants statement can only contain assignments and '
                'expressions: {}')
         raise ValueError(msg.format(node))
-    if has_reassignments(node):
-        msg = 'Reassigments not allowed in with constants statement: {}'
-        raise ValueError(msg.format(node))
+    if has_mutating_assignments(node):
+        raise ValueError('Mutating assignments not allowed in with constants '
+                         f'statement: {node}')
 
 
 def is_with_constants(node):
@@ -487,17 +496,22 @@ def is_assignments_and_expressions(node):
     return all(isinstance(node, (ast.Assign, ast.Expr)) for node in node.body)
 
 
-def has_reassignments(node):
-    """Has re-assignments
+def has_mutating_assignments(node):
+    """Has mutating assignments
 
     Returns
     -------
     bool
-        Whether or not the node re-assigns a name
+        Whether or not the node re-assigns a name or mutates an object
     """
-    names = chain(*[
-        assignment_target_names(assign.targets)
-        for assign in node.body
-        if isinstance(assign, ast.Assign)
-    ])
-    return any(count != 1 for count in Counter(names).values())
+    scope = set()
+    for assignment in (a for a in node.body if isinstance(a, ast.Assign)):
+        targets = flatten_assignment_targets(assignment)
+        if any(isinstance(t, (ast.Attribute, ast.Subscript)) for t in targets):
+            return True
+
+        names = assignment_target_introduced_names(assignment)
+        if any(name in scope for name in names):
+            return True
+        scope.update(names)
+    return False

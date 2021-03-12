@@ -28,13 +28,14 @@ class StoreAccessor:
         supplied, we check against the latest stored result.
     """
 
-    def __init__(self, store):
+    def __init__(self, store, client_store=None):
         self.store = store
+        self.client_store = client_store
 
     @property
     def client(self):
-        if self.store.client_store is not None:
-            return StoreAccessor(self.store.client_store)
+        if self.client_store is not None:
+            return StoreAccessor(self.client_store)
         else:
             return self
 

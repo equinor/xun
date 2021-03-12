@@ -38,7 +38,6 @@ class Store(MutableMapping):
     def __new__(cls, *args, **kwargs):
         instance = super().__new__(cls)
         instance._namespace = ()
-        instance.client_store = None
         return instance
 
     @property

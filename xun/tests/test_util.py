@@ -1,7 +1,17 @@
-from xun.functions.compatibility import ast
 from .helpers import check_ast_equals
+from xun.functions import FunctionDescription
+from xun.functions import describe
+from xun.functions import func_arg_names
+from xun.functions import function_ast
+from xun.functions import function_source
+from xun.functions.compatibility import ast
+from xun.functions.util import assignment_target_introduced_names
+from xun.functions.util import assignment_target_shape
+from xun.functions.util import func_external_names
+from xun.functions.util import overwrite_scope
+from xun.functions.util import shape_to_ast_tuple
+from xun.functions.util import strip_decorators
 import astunparse
-import xun
 
 
 global_c = 3
@@ -14,7 +24,7 @@ def test_overwrite_scope():
     def f():
         return a + b + global_c
 
-    g = xun.functions.util.overwrite_scope(f, globals={'global_c': 4})
+    g = overwrite_scope(f, globals={'global_c': 4})
 
     assert f() == 6
     assert g() == 7
@@ -22,19 +32,20 @@ def test_overwrite_scope():
 
 def test_describe_function():
     some_value = None
+
     def f(a, b, c):
         return some_value
 
-    expected = xun.functions.FunctionDescription(
-        src=xun.functions.function_source(f),
-        ast=xun.functions.function_ast(f),
+    expected = FunctionDescription(
+        src=function_source(f),
+        ast=function_ast(f),
         name='f',
         defaults=f.__defaults__,
         globals={'some_value': None},
         referenced_modules=frozenset(),
         module=f.__module__,
     )
-    decomposed = xun.functions.describe(f)
+    decomposed = describe(f)
 
     assert (astunparse.dump(expected.ast) ==
             astunparse.dump(decomposed.ast))
@@ -44,8 +55,8 @@ def test_describe_function():
 
 def test_argnames():
     def argnames(f):
-        fdef = xun.functions.function_ast(f).body[0]
-        return xun.functions.func_arg_names(fdef)
+        fdef = function_ast(f).body[0]
+        return func_arg_names(fdef)
 
     def no_args():
         pass
@@ -71,7 +82,6 @@ def test_argnames():
     )
 
 
-
 def test_func_external_references():
     shadowed_external = None
     default = None
@@ -86,7 +96,7 @@ def test_func_external_references():
             print(local_a, local_b)
         return external_result
 
-    tree = xun.functions.function_ast(f)
+    tree = function_ast(f)
     func = tree.body[0]
 
     expected = frozenset({
@@ -96,7 +106,7 @@ def test_func_external_references():
         'external_value',
         'print',
     })
-    external_names = xun.functions.func_external_names(func)
+    external_names = func_external_names(func)
     assert external_names == expected
 
 
@@ -104,57 +114,57 @@ def test_func_external_references_tuple_unpacking():
     def f():
         (a, b), c = v
 
-    tree = xun.functions.function_ast(f)
-    tree = xun.functions.strip_decorators(tree)
+    tree = function_ast(f)
+    tree = strip_decorators(tree)
 
     expected = frozenset({'v'})
-    external_names = xun.functions.func_external_names(tree.body[0])
+    external_names = func_external_names(tree.body[0])
     assert external_names == expected
 
 
 def test_assignment_target_shape():
     target = ast.parse('a, b, c = f()').body[0].targets[0]
-    shape = xun.functions.util.assignment_target_shape(target)
+    shape = assignment_target_shape(target)
     assert shape == (3, )
 
     target = ast.parse('a, (b,c) = f()').body[0].targets[0]
-    shape = xun.functions.util.assignment_target_shape(target)
+    shape = assignment_target_shape(target)
     assert shape == (1, (2,))
 
     target = ast.parse('a, b, (c, d) = f()').body[0].targets[0]
-    shape = xun.functions.util.assignment_target_shape(target)
+    shape = assignment_target_shape(target)
     assert shape == (2, (2,))
 
     target = ast.parse('(a, b), (c, d) = f()').body[0].targets[0]
-    shape = xun.functions.util.assignment_target_shape(target)
+    shape = assignment_target_shape(target)
     assert shape == ((2,), (2,))
 
     target = ast.parse('a, (b, c, (d, e)), f = f()').body[0].targets[0]
-    shape = xun.functions.util.assignment_target_shape(target)
+    shape = assignment_target_shape(target)
     assert shape == (1, (2, (2,)), 1)
 
     target = ast.parse('a, ((b,c,d), (e,f)), g = f()').body[0].targets[0]
-    shape = xun.functions.util.assignment_target_shape(target)
+    shape = assignment_target_shape(target)
     assert shape == (1, ((3,), (2,)), 1)
 
 
 def test_assignment_starred_target_shape():
     target = ast.parse('a, *bc = f()').body[0].targets[0]
-    shape = xun.functions.util.assignment_target_shape(target)
+    shape = assignment_target_shape(target)
     assert shape == (1, Ellipsis)
 
     target = ast.parse('a, b, c, *de, f = g()').body[0].targets[0]
-    shape = xun.functions.util.assignment_target_shape(target)
+    shape = assignment_target_shape(target)
     assert shape == (3, Ellipsis, 1)
 
     target = ast.parse('a, (b, *cd), e, f = g()').body[0].targets[0]
-    shape = xun.functions.util.assignment_target_shape(target)
+    shape = assignment_target_shape(target)
     assert shape == (1, (1, Ellipsis), 2)
 
 
 def test_shape_to_ast_tuple():
     shape = (3,)
-    ast_tuple = xun.functions.util.shape_to_ast_tuple(shape)
+    ast_tuple = shape_to_ast_tuple(shape)
     expected_ast = ast.Tuple(
         elts=[ast.Constant(value=3, kind=None)],
         ctx=ast.Load(),
@@ -163,7 +173,7 @@ def test_shape_to_ast_tuple():
     assert ok, diff
 
     shape = (1, (2, (2,)), 1)
-    ast_tuple = xun.functions.util.shape_to_ast_tuple(shape)
+    ast_tuple = shape_to_ast_tuple(shape)
     expected_ast = ast.Tuple(
         elts=[
             ast.Constant(value=1, kind=None),
@@ -187,7 +197,7 @@ def test_shape_to_ast_tuple():
 
 def test_starred_shape_to_ast_tuple():
     shape = (1, 1, Ellipsis)
-    ast_tuple = xun.functions.util.shape_to_ast_tuple(shape)
+    ast_tuple = shape_to_ast_tuple(shape)
     expected_ast = ast.Tuple(
         elts=[
             ast.Constant(value=1, kind=None),
@@ -198,3 +208,20 @@ def test_starred_shape_to_ast_tuple():
     )
     ok, diff = check_ast_equals(ast_tuple, expected_ast)
     assert ok, diff
+
+
+def test_assignment_target_introduced_names():
+    @function_ast
+    def _():
+        a = 0
+        b, c, *xs = 1, 2, 3, 4
+        [d, e] = 3, 4
+        f = g = 5
+        h, I.attr, L[0] = 6
+    stmts = _.body[0].body
+
+    assert assignment_target_introduced_names(stmts[0]) == {'a'}
+    assert assignment_target_introduced_names(stmts[1]) == {'b', 'c', 'xs'}
+    assert assignment_target_introduced_names(stmts[2]) == {'d', 'e'}
+    assert assignment_target_introduced_names(stmts[3]) == {'f', 'g'}
+    assert assignment_target_introduced_names(stmts[4]) == {'h'}

@@ -254,14 +254,14 @@ def test_fail_on_mutating_assingment():
     class MyClass:
         pass
 
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError):
         @xun.function()
         def f():
             with ...:
                 L = [1]
                 L[0] = 2
 
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError):
         @xun.function()
         def g():
             with ...:

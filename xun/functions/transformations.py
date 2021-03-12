@@ -16,7 +16,7 @@ from .compatibility import ast
 from .function_description import FunctionDescription
 from .function_description import describe
 from .function_image import FunctionImage
-from .util import assignment_target_names
+from .util import assignment_target_introduced_names
 from .util import assignment_target_shape
 from .util import body_external_names
 from .util import function_ast
@@ -494,7 +494,7 @@ def load_from_store(
             self.generic_visit(node)
             target = node.targets[0]
             self.seen_targets.extend(
-                assignment_target_names(target)
+                assignment_target_introduced_names(target)
                 if isinstance(target, (ast.Tuple, ast.List)) else [target.id]
             )
             return node

@@ -19,6 +19,7 @@ from .function_image import FunctionImage
 from .util import assignment_target_introduced_names
 from .util import assignment_target_shape
 from .util import body_external_names
+from .util import flatten_assignment_targets
 from .util import function_ast
 from .util import separate_constants_ast
 from .util import shape_to_ast_tuple
@@ -532,18 +533,32 @@ def load_from_store(
     class CallNode2Load(NodeMapper):
         def __init__(self, output_targets):
             self.output_targets = output_targets
+            self.known_call_nodes = {}
 
         def visit_Assign(self, node):
             introduced_names = stmt_introduced_names(node)
             if any(is_referenced_in_body(name) for name in introduced_names):
                 self.output_targets.extend(node.targets)
                 return self.visit(node.value)
+            if is_xun_call(node.value):
+                target_names = list(
+                    target.id for target in flatten_assignment_targets(node))
+                self.known_call_nodes.update(
+                    dict.fromkeys(target_names, node.value))
             return None
 
         def visit_Call(self, node):
             if not is_xun_call(node):
                 return self.generic_visit(node)
+            return self.add_loading_from_store(node)
 
+        def visit_Name(self, node):
+            if node.id in self.known_call_nodes:
+                call_node = self.known_call_nodes[node.id]
+                return self.add_loading_from_store(call_node)
+            return self.generic_visit(node)
+
+        def add_loading_from_store(self, node):
             call_node = Call2CallNode().visit(node)
 
             hash = dependencies[node.func.id].hash

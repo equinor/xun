@@ -566,3 +566,45 @@ def test_empty_xun_function():
             g()
 
     run_in_process(f.blueprint())
+
+
+def test_symbolic_result_in_dictionary():
+    @xun.function()
+    def g():
+        return 'a'
+
+    @xun.function()
+    def h():
+        return 'b'
+
+    @xun.function()
+    def f():
+        return params
+        with ...:
+            params = {
+                'direct': g(),
+                'indirect': indirect_value
+            }
+            indirect_value = h()
+
+    assert run_in_process(f.blueprint()) == {'direct': 'a', 'indirect': 'b'}
+
+
+def test_symbolic_result_in_variable():
+    @xun.function()
+    def g():
+        return 'a'
+
+    @xun.function()
+    def h():
+        return 'b'
+
+    @xun.function()
+    def f():
+        return a + b
+        with ...:
+            a = g()
+            b = indirect_value
+            indirect_value = h()
+
+    assert run_in_process(f.blueprint()) == 'ab'

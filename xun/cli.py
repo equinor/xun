@@ -21,6 +21,7 @@ import sys
 from . import functions
 from . import sima
 from . import zephyre
+from . import init
 from .cli_helpers import schema_action
 from .cli_helpers import valid_date
 from .cli_helpers import struct_fmt
@@ -98,3 +99,13 @@ parser_fgraph_action.add_argument('--list-layout',
                                   default=True)
 parser_fgraph_action.add_argument('--dot-layout', action='store_true')
 parser_fgraph_action.add_argument('--dot', action='store_true')
+
+
+#
+# create new project from cookiecutter template
+#
+parser_template = subparsers.add_parser('init')
+parser_template.set_defaults(func=init.cli.main)
+parser_template.add_argument('--path',
+                             help='where to output the generated project',
+                             default='.')

@@ -30,10 +30,12 @@ if __name__ == '__main__':
             'xun.functions.compatibility',
             'xun.functions.driver',
             'xun.functions.store',
+            'xun.init',
             'xun.sima',
             'xun.zephyre',
         ],
         platforms = 'any',
+        include_package_data=True,
 
         install_requires = [
             'camille',

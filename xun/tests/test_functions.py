@@ -251,10 +251,10 @@ def test_fail_on_mutating_assingment():
                 instance.field = 2
 
 
-def test_structured_unpacking():
+def test_structured_unpacking_with_arguments():
     @xun.function()
-    def f():
-        return ('a', 'b'), 'c'
+    def f(a, b):
+        return (a, b), 'c'
 
     @xun.function()
     def g(v):
@@ -263,7 +263,7 @@ def test_structured_unpacking():
     @xun.function()
     def h():
         with ...:
-            (a, b), c = f()
+            (a, b), c = f('a', b='b')
             new_b = g(b)
         return a + new_b + c
 
@@ -374,21 +374,22 @@ def test_subscript_result():
     assert result == 'bc'
 
 
-@pytest.mark.xfail(reason="Unpack from subscripted function not implemented")
 def test_unpack_subscripted_function():
     @xun.function()
-    def f():
-        return 'a', ('b', 'c')
+    def g():
+        return 'a', 'b', ('c', 'd')
 
     @xun.function()
     def h():
         with ...:
-            b, c = f()[1]
-        return b, c
+            a, b = g()[:2]
+            c, d = g()[2][0:2]
+            e, f = ('d', ('e', 'f'))[1]
+        return a + b + c + d + e + f
 
     result = run_in_process(h.blueprint())
 
-    assert result == ('b', 'c')
+    assert result == 'abcdef'
 
 
 @pytest.mark.xfail(reason="Multiple targets not implemented")

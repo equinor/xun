@@ -199,7 +199,8 @@ class FunctionDecomposition(types.SimpleNamespace):
 def unpack_unpacking_assignments(nodes):
     """
     For all nodes of type ast.Assign, where the target is iterable and the
-    value is a call, the .unpack() attribute is added to the call.
+    value is either a call or a subscripted call, the .unpack() attribute is
+    added to the call.
 
     Example
     a, b, (c, d) = _xun_CallNode('f')
@@ -229,12 +230,16 @@ def unpack_unpacking_assignments(nodes):
     def assignment_right_side_is_callnode(node):
         return isinstance(node.value, ast.Call)
 
+    def assignment_right_side_is_subscripted_callnode(node):
+        if isinstance(node.value, ast.Subscript):
+            return assignment_right_side_is_subscripted_callnode(node.value)
+        return isinstance(node.value, ast.Call)
+
     return [
-        add_unpack_to_callnode(node)
-        if isinstance(node, ast.Assign)
-        and assignment_left_side_is_iterable(node)
-        and assignment_right_side_is_callnode(node)
-        else node
+        add_unpack_to_callnode(node) if isinstance(node, ast.Assign)
+        and assignment_left_side_is_iterable(node) and
+        (assignment_right_side_is_callnode(node)
+         or assignment_right_side_is_subscripted_callnode(node)) else node
         for node in nodes
     ]
 
@@ -388,7 +393,6 @@ def build_xun_graph(
     def helper_code():
         from itertools import chain as _xun_chain
         from xun.functions import CallNode as _xun_CallNode
-        from xun.functions import CallNodeSubscript as _xun_CallNodeSubscript
         import networkx as _xun_nx
 
         _xun_graph = _xun_nx.DiGraph()
@@ -400,11 +404,7 @@ def build_xun_graph(
             # Any references to results from other xun functions must be loaded
             dependencies = filter(
                 lambda a: isinstance(a, _xun_CallNode),
-                map(
-                    lambda a:
-                        a.call if isinstance(a, _xun_CallNodeSubscript) else a,
-                    _xun_chain(args, kwargs.values())
-                )
+                _xun_chain(args, kwargs.values())
             )
             call = _xun_CallNode(fname, *args, **kwargs)
             _xun_graph.add_node(call)

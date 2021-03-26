@@ -1,5 +1,4 @@
 from .. import CallNode
-from .. import CallNodeSubscript
 
 
 class StoreAccessor:
@@ -56,12 +55,12 @@ class StoreAccessor:
     def resolve_call_args(self, call):
         """
         Given a call, return its arguments and keyword arguments. If any
-        argument is a CallNode or a CallNodeSubscript, the CallNode or
-        CallNodeSubscript is replaced with a value loaded from the store.
+        argument is a CallNode, the CallNode is replaced with a value loaded
+        from the store.
 
         Parameters
         ----------
-        call : CallNode or CallNodeSubscript
+        call : CallNode
 
         Returns
         (list, dict)
@@ -71,18 +70,15 @@ class StoreAccessor:
 
         def load_arg_value(arg):
             """
-            The argument can be either a CallNode or a CallNodeSubscript. If
-            so, the result must be loaded from store, unless it is already
-            loaded in the cache.
+            If the argument is a Callnode, the result must be loaded from the
+            store, unless it is already loaded in the cache.
             """
             if isinstance(arg, CallNode):
-                return cache.setdefault(arg, self.load_result(arg))
-            elif isinstance(arg, CallNodeSubscript):
-                # Load the result from the parent CallNode
-                call = arg.call
-                result = iter(cache.setdefault(call, self.load_result(call)))
-                # Find the value at the correct subscript by iterating through
-                # the result
+                if len(arg.subscript) == 0:
+                    return cache.setdefault(arg, self.load_result(arg))
+                # In case subscript is specified, find the value at the correct
+                # subscript by iterating thgough the result
+                result = iter(cache.setdefault(arg, self.load_result(arg)))
                 for subscript in arg.subscript:
                     for _ in range(subscript):
                         next(result)

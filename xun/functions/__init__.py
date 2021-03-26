@@ -13,7 +13,6 @@ from .function_description import describe
 from .function_image import FunctionImage
 from .function_image import make_shared
 from .graph import CallNode
-from .graph import CallNodeSubscript
 from .transformations import FunctionDecomposition
 from .transformations import build_xun_graph
 from .transformations import copy_only_constants

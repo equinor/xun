@@ -21,6 +21,7 @@ from .functions import FunctionDefNotFoundError
 from .functions import FunctionError
 from .functions import NotDAGError
 from .functions import XunSyntaxError
+from .init import init_notebook
 from .memoized import memoized
 
 

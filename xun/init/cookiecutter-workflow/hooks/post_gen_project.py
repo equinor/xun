@@ -13,6 +13,9 @@ make_runnable = '{{cookiecutter.make_runnable}}' in [
 ]
 
 if not make_runnable:
-    remove_filepath = os.path.join(os.getcwd(), '__main__.py')
-    if os.path.isfile(remove_filepath):
-        os.remove(remove_filepath)
+    for path in (
+        os.path.join(os.getcwd(), '__main__.py'),
+        os.path.join(os.getcwd(), '{{cookiecutter.module_name}}.ipynb'),
+    ):
+        if os.path.isfile(path):
+            os.remove(path)

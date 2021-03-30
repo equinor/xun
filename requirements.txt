@@ -4,5 +4,6 @@ cookiecutter
 dask
 fastavro
 matplotlib
+nbformat
 networkx
 redis

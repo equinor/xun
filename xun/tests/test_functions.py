@@ -291,11 +291,15 @@ def test_structured_unpacking_list():
 def test_starred_unpacking_from_list():
     @xun.function()
     def f():
+        return [1, 2, 3, 4, 5, 6]
+
+    @xun.function()
+    def h():
         with ...:
-            head, *body, foot = [1, 2, 3, 4, 5, 6]
+            head, *body, foot = f()
         return head, body, foot
 
-    head, body, foot = run_in_process(f.blueprint())
+    head, body, foot = run_in_process(h.blueprint())
 
     assert head == 1
     assert body == [2, 3, 4, 5]

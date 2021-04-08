@@ -61,9 +61,9 @@ commands:
               . py_venv/bin/activate
             fi
             python3 --version
+            python3 -m pip install cmake flake8 bandit setuptools-scm
             python3 -m pip install -r requirements.txt
             python3 -m pip install -r requirements-dev.txt
-            python3 -m pip install cmake flake8 bandit setuptools-scm
             # python3 -m pip install coverage codacy-coverage
 
   python-build-test:
@@ -217,8 +217,7 @@ jobs:
     docker:
       - image: "circleci/python:3.7"
     environment:
-      - CIBW_BUILD: "cp37-manylinux_x86_64 cp38-manylinux_x86_64"
-      - CIBW_BEFORE_ALL: "yum install -y gcc ninja-build"
+      - CIBW_BUILD: "cp37-manylinux_x86_64 cp38-manylinux_x86_64 cp39-manylinux_x86_64"
       - CIBW_BEFORE_BUILD: "pip install cmake setuptools-scm -r requirements.txt && pip install -r requirements-dev.txt"
     steps:
       - checkout
@@ -230,7 +229,7 @@ jobs:
     macos:
       xcode: 11.0.0
     environment:
-      - CIBW_BUILD: "cp37-macosx_x86_64 cp38-macosx_x86_64"
+      - CIBW_BUILD: "cp37-macosx_x86_64 cp38-macosx_x86_64  cp39-macosx_x86_64"
       - CIBW_BEFORE_BUILD: "pip3 install cmake setuptools-scm -r requirements.txt && pip3 install -r requirements-dev.txt"
     steps:
       - checkout
@@ -248,6 +247,9 @@ workflows:
       - python-version-check:
           name: Python 3.8
           version: "3.8"
+      - python-version-check:
+          name: Python 3.9
+          version: "3.9"
 
   macos-check:
     jobs:
@@ -257,6 +259,9 @@ workflows:
       - python-macos-check:
           name: MacOS Python 3.8
           python-version: "3.8"
+      - python-macos-check:
+          name: MacOS Python 3.9
+          python-version: "3.9"
 
   windows-check:
     jobs:
@@ -266,6 +271,9 @@ workflows:
       - python-win-check:
           name: Win Python 3.8
           python-version: "3.8"
+      - python-win-check:
+          name: Win Python 3.9
+          python-version: "3.9"
 
   linux-deploy:
     jobs:

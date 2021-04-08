@@ -45,7 +45,7 @@ commands:
             python -m pip install cmake scikit-build pybind11
             python -m pip install -r requirements-dev.txt
             python -m pip install -r requirements.txt
-            
+
       - run:
           name: Test python
           command: |
@@ -248,6 +248,9 @@ workflows:
       - python-version-check:
           name: Python 3.8
           version: "3.8"
+      - python-version-check:
+          name: Python 3.9
+          version: "3.9"
 
   macos-check:
     jobs:
@@ -257,6 +260,9 @@ workflows:
       - python-macos-check:
           name: MacOS Python 3.8
           python-version: "3.8"
+      - python-macos-check:
+          name: MacOS Python 3.9
+          python-version: "3.9"
 
   windows-check:
     jobs:
@@ -266,6 +272,9 @@ workflows:
       - python-win-check:
           name: Win Python 3.8
           python-version: "3.8"
+      - python-win-check:
+          name: Win Python 3.9
+          python-version: "3.9"
 
   linux-deploy:
     jobs:

@@ -1,6 +1,6 @@
 from .. import filename_from_args
 from ..memoized import memoized
-from camille.source import Zephyre
+from camille.source.zephyre import Zephyre
 import fastavro
 import json
 import numpy as np

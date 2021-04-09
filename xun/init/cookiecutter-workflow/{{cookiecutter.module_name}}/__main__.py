@@ -5,9 +5,9 @@ For more info, read:
     - https://docs.python.org/3/using/cmdline.html#cmdoption-m
 """
 
-from .{{cookiecutter.module_name}} import capitalize
-import argparse
+from nbconvert.preprocessors import ExecutePreprocessor
 import logging
+import nbformat
 import xun
 
 
@@ -21,18 +21,21 @@ store = xun.functions.store.Memory()
 
 def main():
     """
-    If this workflow is to be executable, this is where the setup for the
-    driver and the store should go, along with the entrypoint function(s).
+    If this workflow is to be executable, the
+    {{cookiecutter.module_name}}.ipynb notebook is executed from here and the
+    executed notebook is then stored in executed_notebook.ipynb.
     """
 
-    @xun.function()
-    def entry_point_workflow(name):
-        print(f'Hello {capitalized_name}')
-        with ...:
-            """Set up your workflow here"""
-            capitalized_name = capitalize(name)
+    with open('{{cookiecutter.module_name}}/{{cookiecutter.module_name}}.ipynb') as f:
+        nb = nbformat.read(f, as_version=4)
 
-    entry_point_workflow.blueprint("world").run(driver=driver, store=store)
+    ep = ExecutePreprocessor(timeout=600, kernel_name='python3')
+    ep.preprocess(nb, {'metadata': {'path': '{{cookiecutter.module_name}}/'}})
+
+    with open('{{cookiecutter.module_name}}/executed_notebook.ipynb',
+              'w',
+              encoding='utf-8') as f:
+        nbformat.write(nb, f)
 
 
 if __name__ == '__main__':

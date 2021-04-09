@@ -32,7 +32,7 @@ logging.getLogger('xun').setLevel(logging.DEBUG)
 
 # Add any paths to xun function collections here.
 xun.init_notebook(repositories=[
-    '/paths/to/my/xun/modoles/collection/',
+    '/paths/to/my/xun/modules/collection/',
     ...
 ])"""),
 
@@ -64,7 +64,7 @@ new_markdown_cell("""\
 ## Workflow"""),
 
 new_code_cell("""\
-from test_module.test_module import capitalize"""),
+from {{cookiecutter.module_name}} import capitalize"""),
 
 new_code_cell("""\
 @xun.function()
@@ -87,8 +87,6 @@ def create_jupyter_notebook():
 
     with open(notebook_fname, 'w') as f:
         nbwrite(nb, f)
-
-    print(nb)
 
 
 create_jupyter_notebook()

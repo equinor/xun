@@ -398,6 +398,7 @@ def build_xun_graph(
         _xun_graph = _xun_nx.DiGraph()
 
         def _xun_register_call(fname,
+                               fhash,
                                *args,
                                **kwargs):
 
@@ -406,7 +407,7 @@ def build_xun_graph(
                 lambda a: isinstance(a, _xun_CallNode),
                 _xun_chain(args, kwargs.values())
             )
-            call = _xun_CallNode(fname, *args, **kwargs)
+            call = _xun_CallNode(fname, fhash, *args, **kwargs)
             _xun_graph.add_node(call)
             _xun_graph.add_edges_from((dep, call) for dep in dependencies)
             return call
@@ -430,6 +431,7 @@ def build_xun_graph(
                 func=ast.Name(id='_xun_register_call', ctx=ast.Load()),
                 args=[
                     ast.Constant(node.func.id, kind=None),
+                    ast.Constant(dependencies[node.func.id].hash, kind=None),
                     *node.args
                 ],
                 keywords=node.keywords,
@@ -525,7 +527,11 @@ def load_from_store(
 
             construct_call = ast.Call(
                 func=ast.Name(id='_xun_CallNode', ctx=ast.Load()),
-                args=[ast.Constant(value=node.func.id, kind=None), *node.args],
+                args=[
+                    ast.Constant(node.func.id, kind=None),
+                    ast.Constant(dependencies[node.func.id].hash, kind=None),
+                    *node.args
+                ],
                 keywords=node.keywords,
             )
             return construct_call
@@ -561,9 +567,6 @@ def load_from_store(
         def add_loading_from_store(self, node):
             call_node = Call2CallNode().visit(node)
 
-            hash = dependencies[node.func.id].hash
-            hash_expr = ast.Constant(value=hash, kind=None)
-
             store_accessor_load_func = ast.Attribute(
                 value=ast.Name(id='_xun_store_accessor', ctx=ast.Load()),
                 attr='load_result',
@@ -573,7 +576,7 @@ def load_from_store(
             store_accessor_load_call = ast.Call(
                 func=store_accessor_load_func,
                 args=[call_node],
-                keywords=[ast.keyword('hash', hash_expr)],
+                keywords=[],
             )
 
             return store_accessor_load_call

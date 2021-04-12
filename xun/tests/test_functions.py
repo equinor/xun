@@ -41,36 +41,36 @@ def test_build_function_graph():
 
     expected = nx.DiGraph([
         (
-            CallNode('message', '3 messages'),
-            CallNode('sign', CallNode('message', '3 messages')),
+            message.callnode('3 messages'),
+            sign.callnode(message.callnode('3 messages')),
         ),
         (
-            CallNode('sign', CallNode('message', '3 messages')),
-            CallNode('messages', 3),
+            sign.callnode(message.callnode('3 messages')),
+            messages.callnode(3),
         ),
         (
-            CallNode('message', 0),
-            CallNode('sign', CallNode('message', 0)),
+            message.callnode(0),
+            sign.callnode(message.callnode(0)),
         ),
         (
-            CallNode('message', 1),
-            CallNode('sign', CallNode('message', 1)),
+            message.callnode(1),
+            sign.callnode(message.callnode(1)),
         ),
         (
-            CallNode('message', 2),
-            CallNode('sign', CallNode('message', 2)),
+            message.callnode(2),
+            sign.callnode(message.callnode(2)),
         ),
         (
-            CallNode('sign', CallNode('message', 0)),
-            CallNode('messages', 3),
+            sign.callnode(message.callnode(0)),
+            messages.callnode(3),
         ),
         (
-            CallNode('sign', CallNode('message', 1)),
-            CallNode('messages', 3),
+            sign.callnode(message.callnode(1)),
+            messages.callnode(3),
         ),
         (
-            CallNode('sign', CallNode('message', 2)),
-            CallNode('messages', 3),
+            sign.callnode(message.callnode(2)),
+            messages.callnode(3),
         ),
     ])
 
@@ -114,21 +114,15 @@ def test_blueprint_graph():
             _b = b()
             _c = c()
 
-    end_node = CallNode('end')
     bp = end.blueprint()
 
-    start_node = CallNode('start')
-    a_node = CallNode('a')
-    b_node = CallNode('b')
-    c_node = CallNode('c')
-
     reference_graph = nx.DiGraph([
-        (start_node, a_node),
-        (start_node, b_node),
-        (start_node, c_node),
-        (a_node, end_node),
-        (b_node, end_node),
-        (c_node, end_node),
+        (start.callnode(), a.callnode()),
+        (start.callnode(), b.callnode()),
+        (start.callnode(), c.callnode()),
+        (a.callnode(), end.callnode()),
+        (b.callnode(), end.callnode()),
+        (c.callnode(), end.callnode()),
     ])
 
     assert nx.is_directed_acyclic_graph(bp.graph)
@@ -507,13 +501,13 @@ def test_function_version_completeness():
     f0 = f
     w0 = workflow
 
-    assert not accessor.completed(CallNode('f'), hash=f0.hash)
-    assert not accessor.completed(CallNode('workflow'), hash=w0.hash)
+    assert not accessor.completed(f0.callnode())
+    assert not accessor.completed(w0.callnode())
 
     r0 = w0.blueprint().run(driver=driver, store=store)
 
-    assert accessor.completed(CallNode('f'), hash=f0.hash)
-    assert accessor.completed(CallNode('workflow'), hash=w0.hash)
+    assert accessor.completed(f0.callnode())
+    assert accessor.completed(w0.callnode())
     assert r0 == 0
 
     # Redefintion
@@ -526,17 +520,17 @@ def test_function_version_completeness():
 
     w1 = xun.functions.Function(workflow.desc, {'f': f1}, None)
 
-    assert accessor.completed(CallNode('f'), hash=f0.hash)
-    assert accessor.completed(CallNode('workflow'), hash=w0.hash)
-    assert not accessor.completed(CallNode('f'), hash=f1.hash)
-    assert not accessor.completed(CallNode('workflow'), hash=w1.hash)
+    assert accessor.completed(f0.callnode())
+    assert accessor.completed(w0.callnode())
+    assert not accessor.completed(f1.callnode())
+    assert not accessor.completed(w1.callnode())
 
     r1 = w1.blueprint().run(driver=driver, store=store)
 
-    assert accessor.completed(CallNode('f'), hash=f0.hash)
-    assert accessor.completed(CallNode('workflow'), hash=w0.hash)
-    assert accessor.completed(CallNode('f'), hash=f1.hash)
-    assert accessor.completed(CallNode('workflow'), hash=w1.hash)
+    assert accessor.completed(f0.callnode())
+    assert accessor.completed(w0.callnode())
+    assert accessor.completed(f1.callnode())
+    assert accessor.completed(w1.callnode())
     assert r1 == 1
 
     # Rerun w0 to overwrite the latest result, this ensures that we test that
@@ -613,3 +607,44 @@ def test_symbolic_result_in_variable():
             indirect_value = h()
 
     assert run_in_process(f.blueprint()) == 'ab'
+
+
+def test_rerun_on_changed_indirect_dependency():
+    """
+    An edit to g (in this test defined as before_edit and after_edit) does not
+    change the hash of f. But the edit should still cause a rerun of f, as the
+    result of f is dependent on a result from g.
+    """
+
+    @xun.function()
+    def f(val):
+        return val.capitalize()
+
+    @xun.function()
+    def before_edit():
+        return '{name}'
+    before_edit.desc = before_edit.desc._replace(name='g')
+
+    @xun.function()
+    def after_edit():
+        return 'world'
+    after_edit.desc = after_edit.desc._replace(name='g')
+
+    @xun.function()
+    def script():
+        with ...:
+            a = g()
+            b = f(a)
+        return b
+
+    store = xun.functions.store.Memory()
+    driver = xun.functions.driver.Sequential()
+
+    dependencies = script.dependencies
+    dependencies['g'] = before_edit
+    script.__init__(script.desc, dependencies, script.max_parallel)
+    assert '{name}' == script.blueprint().run(driver=driver, store=store)
+
+    dependencies['g'] = after_edit
+    script.__init__(script.desc, dependencies, script.max_parallel)
+    assert 'World' == script.blueprint().run(driver=driver, store=store)

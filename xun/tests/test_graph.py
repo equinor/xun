@@ -2,7 +2,7 @@ from xun.functions.graph import CallNode
 
 
 def test_unpack():
-    cn = CallNode('f')
+    cn = CallNode('f', None)
 
     assert cn[0] == cn[0]
     assert not cn[0] == cn[1]
@@ -85,7 +85,7 @@ def test_unpack():
 
 
 def test_unpack_starred():
-    cn = CallNode('f')
+    cn = CallNode('f', None)
 
     shape = (2, Ellipsis)
     a = cn.unpack(shape)

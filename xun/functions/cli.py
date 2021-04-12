@@ -17,8 +17,8 @@ def xun_graph(args):
 
     plt.style.use('dark_background')
 
-    call = interpret_call(args.call_string)
     module = load_module(args.module)
+    call = interpret_call(args.call_string, module)
     function = identify_function(call, module)
 
     blueprint = function.blueprint(*call.args, **call.kwargs)
@@ -159,29 +159,30 @@ def load_module(path):
     return module
 
 
-def identify_function(call, module):
-    """Identify context
+def identify_function(function_name, module):
+    """Identify function
 
-    Given a module, extract the context object from it
+    Given a function name and module, extract Function object from it
 
     Parameters
     ----------
+    function_name : str
+        name of the xun.Function to find
     module : module
         xun project module
 
     Returns
     -------
-    xun.context
-        The context specified in the module
+    xun.Function
     """
     found = inspect.getmembers(
         module,
-        lambda m: isinstance(m, xun.Function) and m.name == call.function_name
+        lambda m: isinstance(m, xun.Function) and m.name == function_name
     )
     return found[0][1]
 
 
-def interpret_call(call_string):
+def interpret_call(call_string, module):
     """Interpret call
 
     Given a call string, return a call node representing the call. Expressions
@@ -224,12 +225,19 @@ def interpret_call(call_string):
         ast.Constant(value=kw.arg, kind=None): kw.value for kw in call.keywords
     }
 
+    function = identify_function(call.func.id, module)
+
     module = ast.fix_missing_locations(ast.Module(
         type_ignores=[],
         body=[
             ast.Assign(
                 targets=[ast.Name(id='function_name', ctx=ast.Store())],
-                value=ast.Constant(value=call.func.id, kind=None),
+                value=ast.Constant(value=function.name, kind=None),
+                type_comment=None,
+            ),
+            ast.Assign(
+                targets=[ast.Name(id='function_hash', ctx=ast.Store())],
+                value=ast.Constant(value=function.hash, kind=None),
                 type_comment=None,
             ),
             ast.Assign(
@@ -255,6 +263,7 @@ def interpret_call(call_string):
 
     return xun.functions.CallNode(
         scope['function_name'],
+        scope['function_hash'],
         *scope['args'],
         **scope['kwargs'],
     )

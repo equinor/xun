@@ -16,3 +16,13 @@ def hello_world(receiver):
     return '{} {}!'.format(a, receiver)
     with ...:
         a = hello()
+
+
+@xun.function()
+def f(*args, **kwargs):
+    pass
+
+
+@xun.function()
+def g(*args, **kwargs):
+    pass

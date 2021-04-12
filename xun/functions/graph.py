@@ -38,13 +38,16 @@ class CallNode:
     ----------
     function_name : str
         name of the function this representation is a call to
+    function_hash : bytes
+        SHA256 identifier of the function
     args : lists of arguments
         the arguments of this call
     kwargs : mapping of str to arguments
         the keyword arguments of this call
     """
-    def __init__(self, function_name, *args, **kwargs):
+    def __init__(self, function_name, function_hash, *args, **kwargs):
         self.function_name = function_name
+        self.function_hash = function_hash
         self.subscript = ()
         self.args = args
         self.kwargs = kwargs
@@ -61,6 +64,7 @@ class CallNode:
     def __eq__(self, other):
         try:
             return (self.function_name == other.function_name
+                and self.function_hash == other.function_hash
                 and self.subscript == other.subscript
                 and self.args == other.args
                 and self.kwargs == other.kwargs)
@@ -70,22 +74,22 @@ class CallNode:
     def __hash__(self):
         return hash((
             self.function_name,
+            self.function_hash,
             self.subscript,
             tuple(self.args),
             frozenset(self.kwargs.items())
         ))
 
     def __repr__(self):
-        args = [repr(self.function_name)]
-        if len(self.subscript) > 0:
-            args.append(str(self.subscript))
+        args = [repr(self.function_name), repr(self.function_hash)]
         if len(self.args) > 0:
             args.append(', '.join(repr(a) for a in self.args))
         if len(self.kwargs) > 0:
             args.append(', '.join(
                 '{}={}'.format(k, repr(v)) for k, v in self.kwargs.items()
             ))
-        return 'CallNode({})'.format(', '.join(args))
+        subscript = ''.join(f'[{s}]' for s in self.subscript)
+        return f'CallNode({", ".join(args)}){subscript}'
 
     def _replace(self, **kwargs):
         """

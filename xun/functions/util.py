@@ -275,19 +275,73 @@ def shape_to_ast_tuple(shape):
 
 def stmt_introduced_names(stmt):
     """
-    Return a list of all names introduced by executing the statement
+    Return a list of all names introduced by executing the statement,
+    assuming the statement is run in isolation
     """
+
+    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return frozenset({stmt.name})
+    if isinstance(stmt, ast.ClassDef):
+        return frozenset({stmt.name})
+    if isinstance(stmt, ast.Return):
+        return frozenset()
+    if isinstance(stmt, ast.Delete):
+        return frozenset()
+    if isinstance(stmt, ast.Assign):
+        return assignment_target_introduced_names(stmt.targets)
+    if isinstance(stmt, ast.AugAssign):
+        return frozenset()
+    if isinstance(stmt, ast.AnnAssign):
+        return assignment_target_introduced_names(stmt.target)
+    if isinstance(stmt, (ast.For, ast.AsyncFor)):
+        names = frozenset()
+        names |= assignment_target_introduced_names(stmt.target)
+        for s in stmt.body:
+            names |= stmt_introduced_names(s)
+        return names
+    if isinstance(stmt, (ast.While, ast.If)):
+        names = frozenset()
+        for s in stmt.body:
+            names |= stmt_introduced_names(s)
+        return names
+    if isinstance(stmt, (ast.With, ast.AsyncWith)):
+        names = frozenset()
+        for item in stmt.items:
+            if item.optional_vars is not None:
+                names |= assignment_target_introduced_names(item.optional_vars)
+        for s in stmt.body:
+            names |= stmt_introduced_names(s)
+        return names
+    if isinstance(stmt, ast.Raise):
+        return frozenset()
+    if isinstance(stmt, ast.Try):
+        names = frozenset()
+        for s in stmt.body:
+            names |= stmt_introduced_names(s)
+        for h in stmt.handlers:
+            for s in h.body:
+                names |= stmt_introduced_names(s)
+        for s in stmt.orelse:
+            names |= stmt_introduced_names(s)
+        for s in stmt.finalbody:
+            names |= stmt_introduced_names(s)
+        return names
+    if isinstance(stmt, ast.Assert):
+        return frozenset()
     if isinstance(stmt, (ast.Import, ast.ImportFrom)):
         return frozenset(
             n.asname if n.asname is not None
             else n.name
             for n in stmt.names
         )
-    try:
-        targets = stmt.targets
-    except AttributeError:
+    if isinstance(stmt, (ast.Global, ast.Nonlocal)):
         return frozenset()
-    return assignment_target_introduced_names(targets)
+    if isinstance(stmt, ast.Expr):
+        return frozenset()
+    if isinstance(stmt, (ast.Pass, ast.Break, ast.Continue)):
+        return frozenset()
+    else:
+        raise TypeError(f'Invalid AST type {type(stmt)}')
 
 
 def stmt_external_names(stmt):

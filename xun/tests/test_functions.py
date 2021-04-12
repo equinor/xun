@@ -10,6 +10,9 @@ import networkx as nx
 import xun
 
 
+global_variable = 'global_variable'
+
+
 def test_functions():
     from .reference import decending_fibonacci
 
@@ -648,3 +651,173 @@ def test_rerun_on_changed_indirect_dependency():
     dependencies['g'] = after_edit
     script.__init__(script.desc, dependencies, script.max_parallel)
     assert 'World' == script.blueprint().run(driver=driver, store=store)
+
+
+def test_stmt_introduced_names():
+    nonlocal_variable = 'nonlocal_variable'
+
+    @xun.functions.function_ast
+    async def f():
+        # FunctionDef statement
+        def d():
+            pass
+
+        # AsyncFunctionDef statement
+        async def e():
+            pass
+
+        # ClassDef statement
+        class MyClass:
+            pass
+
+        # Return statement
+        return 0
+
+        # Delete statement
+        del a
+        del a, b
+
+        # Assign statement
+        a = 1
+        b, c = 2, 3
+
+        # AugAssign statement
+        a += 1
+
+        # AnnAssign statement
+        i: int = 1
+
+        # For statement
+        for i in range(2):
+            x = 1
+            y = 2
+
+        # For statement with a tuple target
+        for i, k in {}.items():
+            x = 1
+            y = 2
+
+        # AsyncFor statement
+        async for k in range(2):
+            z = 1
+            w = 2
+
+        # AsyncFor statement with a tuple target
+        async for i, k in {}.items():
+            z = 1
+            w = 2
+
+        # While statement
+        while False:
+            x = 1
+            y = 2
+
+        # If statement
+        if False:
+            z = 1
+            w = 2
+
+        # With statement
+        with open('a') as a, open('b') as b:
+            x = 1
+            y = 2
+
+        # With statement with a tuple target
+        with open('e') as (a, c), open('f') as b:
+            x = 1
+            y = 2
+
+        # AsyncWith statement
+        async with open('a') as a, open('b') as b:
+            x = 1
+            y = 2
+
+        # AsyncWith statement with a tuple target
+        async with open('e') as (a, c), open('f') as b:
+            x = 1
+            y = 2
+
+        # Raise statement
+        raise Exception
+
+        # Try statement
+        try:
+            a = 1
+        except Exception as e0:
+            b = 2
+        except ValueError as e1:
+            c = 2
+        else:
+            d = 3
+        finally:
+            e = 4
+
+        # Assert statement
+        assert False
+
+        # Import statement
+        import xun  # noqa: F401
+
+        # Import statement with a tuple
+        import xun, numpy  # noqa: F401
+
+        # ImportFrom statement
+        from xun import function  # noqa: F401
+
+        # ImportFrom statement with a tuple
+        from xun import function, util  # noqa: F401
+
+        # Global statement
+        global global_variable
+
+        # Nonlocal statement
+        nonlocal nonlocal_variable
+
+        # Expr statement
+        1
+
+        # Pass, break, continue statements
+        pass
+        while False:
+            break
+            continue
+
+    stmt_introduced_names = list(map(xun.functions.util.stmt_introduced_names,
+                                     f.body[0].body))
+    expected = {
+        'FunctionDef': {'d'},
+        'AsyncFunctionDef': {'e'},
+        'ClassDef': {'MyClass'},
+        'Return': set(),
+        'Delete_0': set(),
+        'Delete_1': set(),
+        'Assign_0': {'a'},
+        'Assign_1': {'b', 'c'},
+        'AugAssign': set(),
+        'AnnAssign': {'i'},
+        'For': {'i', 'x', 'y'},
+        'For with tuple target': {'i', 'k', 'x', 'y'},
+        'AsyncFor': {'k', 'z', 'w'},
+        'AsyncFor with tuple target': {'i', 'k', 'z', 'w'},
+        'While': {'x', 'y'},
+        'If': {'z', 'w'},
+        'With': {'a', 'b', 'x', 'y'},
+        'With with tuple target': {'a', 'c', 'b', 'x', 'y'},
+        'AsyncWith': {'a', 'b', 'x', 'y'},
+        'AsyncWith with tuple target': {'a', 'c', 'b', 'x', 'y'},
+        'Raise': set(),
+        'Try': {'a', 'b', 'c', 'd', 'e'},
+        'Assert': set(),
+        'Import': {'xun'},
+        'Import with tuple target': {'xun', 'numpy'},
+        'ImportFrom': {'function'},
+        'ImportFrom with tuple target': {'function', 'util'},
+        'Global': set(),
+        'Nonlocal': set(),
+        'Expr': set(),
+        'Pass': set(),
+        'Break|Continue': set(),
+    }
+
+    for i, (statement_type, e) in zip(stmt_introduced_names, expected.items()):
+        assert i == e, statement_type

@@ -24,7 +24,7 @@ class Blueprint:
     """
 
     def __init__(self, func, *args, **kwargs):
-        self.call = CallNode(func.name, *args, **kwargs)
+        self.call = func.callnode(*args, **kwargs)
         self.functions = discover_functions(func)
         self.graph = build_call_graph(self.functions, self.call)
 

@@ -16,15 +16,13 @@ class StoreAccessor:
 
     Methods
     -------
-    load_result(call, hash=None)
-        Loads a result for a call, use hash to specify a specific function
-        version
-    store_result(call, hash, result)
-        Stores a result for a call and function hash. The latest reference is
-        updated to point to this result
-    completed(call, hash=None)
-        True if there is a value stored for a given call. If hash is not
-        supplied, we check against the latest stored result.
+    load_result(call)
+        Loads a result for a call
+    store_result(call, result)
+        Stores a result for a call. The latest reference is updated to point to
+        this result
+    completed(call)
+        True if there is a value stored for a given call.
     """
 
     def __init__(self, store, client_store=None):
@@ -38,27 +36,18 @@ class StoreAccessor:
         else:
             return self
 
-    def load_result(self, call, hash=None):
+    def load_result(self, call):
         namespace = self.store / 'results' / call
-        hash = hash if hash is not None else namespace['latest']
-        return namespace[hash]
+        return namespace[call.function_hash]
 
-    def store_result(self, call, hash, result):
+    def store_result(self, call, result):
         namespace = self.store / 'results' / call
-        namespace[hash] = result
-        namespace['latest'] = hash
+        namespace[call.function_hash] = result
+        namespace['latest'] = call.function_hash
 
-    def completed(self, call, hash=None):
+    def completed(self, call):
         namespace = self.store / 'results' / call
-
-        if hash is not None:
-            return hash in namespace
-
-        if 'latest' in namespace:
-            hash = namespace['latest']
-            return hash in namespace
-
-        return False
+        return call.function_hash in namespace
 
     def resolve_call_args(self, call):
         """

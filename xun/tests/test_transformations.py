@@ -128,12 +128,12 @@ def test_load_from_store_transformation():
             from xun.functions import CallNode as _xun_CallNode
             from xun.functions.store import StoreAccessor as _xun_StoreAccessor
             _xun_store_accessor = _xun_StoreAccessor(_xun_store)
-            a = _xun_CallNode('f')
-            b = _xun_CallNode('f', a)
-            c = _xun_CallNode('f', b)
+            a = _xun_CallNode('f', b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a')
+            b = _xun_CallNode('f', b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a', a)
+            c = _xun_CallNode('f', b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a', b)
             return (
-                _xun_store_accessor.load_result(_xun_CallNode('f'), hash=b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a'),
-                _xun_store_accessor.load_result(_xun_CallNode('f', b), hash=b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a'),
+                _xun_store_accessor.load_result(_xun_CallNode('f', b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a')),
+                _xun_store_accessor.load_result(_xun_CallNode('f', b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a', b)),
             )
         a, c = _xun_load_constants()
         value = a + c
@@ -294,12 +294,12 @@ def test_structured_unpacking_transformation():
             from xun.functions import CallNode as _xun_CallNode
             from xun.functions.store import StoreAccessor as _xun_StoreAccessor
             _xun_store_accessor = _xun_StoreAccessor(_xun_store)
-            a, b, ((x, y, z), (𝛂, β)), c, d = _xun_CallNode('f').unpack(
+            a, b, ((x, y, z), (𝛂, β)), c, d = _xun_CallNode('f', b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a').unpack(
                 (2, ((3,), (2,)), 2))
-            something = _xun_CallNode('h', x, y, z)
+            something = _xun_CallNode('h', b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a', x, y, z)
             return (
-                _xun_store_accessor.load_result(_xun_CallNode('f'), hash=b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a'),
-                _xun_store_accessor.load_result(_xun_CallNode('h', x, y, z), hash=b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a'),
+                _xun_store_accessor.load_result(_xun_CallNode('f', b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a')),
+                _xun_store_accessor.load_result(_xun_CallNode('h', b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a', x, y, z)),
             )
         (a, b, ((x, y, z), (𝛂, β)), c, d), something = _xun_load_constants()
         return a * b * x * y * z * 𝛂 * β * c * d + something
@@ -340,11 +340,11 @@ def test_unreferenced_names_are_not_loaded():
             from xun.functions import CallNode as _xun_CallNode
             from xun.functions.store import StoreAccessor as _xun_StoreAccessor
             _xun_store_accessor = _xun_StoreAccessor(_xun_store)
-            a = _xun_CallNode('f')
-            b = _xun_CallNode('h', a)
-            c = _xun_CallNode('g', b)
-            return (_xun_store_accessor.load_result(_xun_CallNode('f'), hash=b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a'),
-                    _xun_store_accessor.load_result(_xun_CallNode('g', b), hash=b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a'),
+            a = _xun_CallNode('f', b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a')
+            b = _xun_CallNode('h', b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a', a)
+            c = _xun_CallNode('g', b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a', b)
+            return (_xun_store_accessor.load_result(_xun_CallNode('f', b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a')),
+                    _xun_store_accessor.load_result(_xun_CallNode('g', b'+\xd6n\xc40\xf9\xc7\xa6\xad.C]\xbc\x98\x99\x1c\x8b\xebj\xef\xd3\x82*\x8a\xa0\xe4\xc7\x1b\xf7\xc3\xbe\x8a', b)),
             )
         a, c = _xun_load_constants()
         return a + c

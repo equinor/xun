@@ -14,9 +14,8 @@ class Driver(ABC):
         pass
 
     def exec(self, graph, entry_call, function_images, store_accessor):
-        entry_hash = function_images[entry_call.function_name].hash
         self._exec(graph, entry_call, function_images, store_accessor)
-        return store_accessor.client.load_result(entry_call, hash=entry_hash)
+        return store_accessor.client.load_result(entry_call)
 
     def __call__(self, graph, entry_call, function_images, store_accessor):
         return self.exec(graph, entry_call, function_images, store_accessor)

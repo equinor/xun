@@ -1,5 +1,6 @@
 from .blueprint import Blueprint
 from .function_description import describe
+from .graph import CallNode
 from . import transformations
 import hashlib
 import astor
@@ -176,6 +177,27 @@ class Function:
         Blueprint : Comprises the call, call graph, and required functions
         """
         return Blueprint(self, *args, **kwargs)
+
+    def callnode(self, *args, **kwargs):
+        """Call Node
+
+        Create a CallNode for a call to this function
+
+        Parameters
+        ----------
+        *args
+        **kwargs
+
+        Returns
+        -------
+        CallNode
+            CallNode representing a call to this function
+
+        See Also
+        --------
+        CallNode : Symbolic representation of a call to this function
+        """
+        return CallNode(self.name, self.hash, *args, **kwargs)
 
     def createGraphBuilder(self):
         """CreateGraphBuilder

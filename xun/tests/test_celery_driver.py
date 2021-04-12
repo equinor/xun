@@ -1,5 +1,4 @@
 from .helpers import PicklableMemoryStore
-from xun.functions import CallNode
 import gc
 import threading
 import time
@@ -99,7 +98,7 @@ def test_celery_concurrency(xun_celery_worker):
             ) and obj.visited == {
                 # There might be more than one state object alive, so we need
                 # to identify ours
-                CallNode('a')
+                a.callnode()
             }:
             acs = obj
 
@@ -111,18 +110,18 @@ def test_celery_concurrency(xun_celery_worker):
     # If the b _and_ c are visited, the program is concurrent.
     waited = 0.0
     while acs.visited != {
-            CallNode('a'),
-            CallNode('b'),
-            CallNode('c'),
+            a.callnode(),
+            b.callnode(),
+            c.callnode(),
         } and waited < 10.0:
         time.sleep(0.01)
         waited += 0.01
 
     # d should be the only node left unvisited
     assert acs.visited == {
-            CallNode('a'),
-            CallNode('b'),
-            CallNode('c'),
+            a.callnode(),
+            b.callnode(),
+            c.callnode(),
         }
 
     # Let b and c complete, d should then finish

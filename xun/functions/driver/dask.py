@@ -11,7 +11,7 @@ class DaskDriverError(Exception):
 
 
 def compute_proxy(node, dependencies, func, store_accessor):
-    if store_accessor.completed(node, func.hash):
+    if store_accessor.completed(node):
         return store_accessor.load_result(node)
 
     args, kwargs = store_accessor.resolve_call_args(node)
@@ -21,7 +21,7 @@ def compute_proxy(node, dependencies, func, store_accessor):
         raise DaskDriverError(f'task {node} failed') from e
     except:
         raise ValueError('???')
-    store_accessor.store_result(node, func.hash, result)
+    store_accessor.store_result(node, result)
     return node
 
 

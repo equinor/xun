@@ -129,7 +129,7 @@ class AsyncCeleryState:
 
             func = self.function_images[node.function_name]
 
-            if self.store_accessor.completed(node, func.hash):
+            if self.store_accessor.completed(node):
                 logger.info('{} already completed'.format(node))
             else:
                 logger.info('Submitting {}'.format(node))
@@ -203,7 +203,7 @@ def celery_xun_exec(call, func, store_accessor):
 
     args, kwargs = store_accessor.resolve_call_args(call)
     result = func(*args, **kwargs)
-    store_accessor.store_result(call, func.hash, result)
+    store_accessor.store_result(call, result)
 
     logger.info('{} succeeded'.format(call))
     return 0

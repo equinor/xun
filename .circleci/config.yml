@@ -45,7 +45,7 @@ commands:
             python -m pip install cmake scikit-build pybind11
             python -m pip install -r requirements-dev.txt
             python -m pip install -r requirements.txt
-            
+
       - run:
           name: Test python
           command: |
@@ -89,7 +89,7 @@ commands:
       - run:
           name: Check formatting rules (PEP8)
           command: |
-            git diff HEAD^ | flake8 --diff --per-file-ignores="__init__.py:F401" --exclude="setup.py"
+            git diff origin/master | flake8 --diff --per-file-ignores="__init__.py:F401" --exclude="setup.py"
 
   bandit-check:
     steps:

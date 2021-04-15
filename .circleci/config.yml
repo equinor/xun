@@ -42,10 +42,9 @@ commands:
           command: |
             $env:CMAKE_GENERATOR = "Visual Studio 16 2019"
             conda activate py-<< parameters.python-version >>
-            python -m pip install cmake scikit-build pybind11 rainflow pandas scipy
+            python -m pip install cmake scikit-build pybind11
             python -m pip install -r requirements-dev.txt
             python -m pip install -r requirements.txt
-            python -m pip install -i https://test.pypi.org/simple/ camille==1.0.6b0
 
       - run:
           name: Test python
@@ -62,10 +61,9 @@ commands:
               . py_venv/bin/activate
             fi
             python3 --version
-            python3 -m pip install cmake flake8 bandit setuptools-scm rainflow pandas scipy
+            python3 -m pip install cmake flake8 bandit setuptools-scm
             python3 -m pip install -r requirements.txt
             python3 -m pip install -r requirements-dev.txt
-            python3 -m pip install -i https://test.pypi.org/simple/ camille==1.0.6b0
             # python3 -m pip install coverage codacy-coverage
 
   python-build-test:
@@ -219,8 +217,7 @@ jobs:
     docker:
       - image: "circleci/python:3.7"
     environment:
-      - CIBW_BUILD: "cp37-manylinux_x86_64 cp38-manylinux_x86_64"
-      - CIBW_BEFORE_ALL: "yum install -y gcc ninja-build"
+      - CIBW_BUILD: "cp37-manylinux_x86_64 cp38-manylinux_x86_64 cp39-manylinux_x86_64"
       - CIBW_BEFORE_BUILD: "pip install cmake setuptools-scm -r requirements.txt && pip install -r requirements-dev.txt"
     steps:
       - checkout
@@ -232,7 +229,7 @@ jobs:
     macos:
       xcode: 11.0.0
     environment:
-      - CIBW_BUILD: "cp37-macosx_x86_64 cp38-macosx_x86_64"
+      - CIBW_BUILD: "cp37-macosx_x86_64 cp38-macosx_x86_64  cp39-macosx_x86_64"
       - CIBW_BEFORE_BUILD: "pip3 install cmake setuptools-scm -r requirements.txt && pip3 install -r requirements-dev.txt"
     steps:
       - checkout

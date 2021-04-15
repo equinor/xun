@@ -62,10 +62,10 @@ commands:
               . py_venv/bin/activate
             fi
             python3 --version
+            python3 -m pip install cmake flake8 bandit setuptools-scm rainflow
             python3 -m pip install -r requirements.txt
             python3 -m pip install -r requirements-dev.txt
             python3 -m pip install -i https://test.pypi.org/simple/ camille==1.0.6b0
-            python3 -m pip install cmake flake8 bandit setuptools-scm
             # python3 -m pip install coverage codacy-coverage
 
   python-build-test:
@@ -254,29 +254,29 @@ workflows:
           name: Python 3.9
           version: "3.9"
 
-  macos-check:
-    jobs:
-      - python-macos-check:
-          name: MacOS Python 3.7
-          python-version: "3.7"
-      - python-macos-check:
-          name: MacOS Python 3.8
-          python-version: "3.8"
-      - python-macos-check:
-          name: MacOS Python 3.9
-          python-version: "3.9"
+  # macos-check:
+  #   jobs:
+  #     - python-macos-check:
+  #         name: MacOS Python 3.7
+  #         python-version: "3.7"
+  #     - python-macos-check:
+  #         name: MacOS Python 3.8
+  #         python-version: "3.8"
+  #     - python-macos-check:
+  #         name: MacOS Python 3.9
+  #         python-version: "3.9"
 
-  windows-check:
-    jobs:
-      - python-win-check:
-          name: Win Python 3.7
-          python-version: "3.7"
-      - python-win-check:
-          name: Win Python 3.8
-          python-version: "3.8"
-      - python-win-check:
-          name: Win Python 3.9
-          python-version: "3.9"
+  # windows-check:
+  #   jobs:
+  #     - python-win-check:
+  #         name: Win Python 3.7
+  #         python-version: "3.7"
+  #     - python-win-check:
+  #         name: Win Python 3.8
+  #         python-version: "3.8"
+  #     - python-win-check:
+  #         name: Win Python 3.9
+  #         python-version: "3.9"
 
   linux-deploy:
     jobs:

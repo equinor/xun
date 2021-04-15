@@ -43,6 +43,7 @@ commands:
             $env:CMAKE_GENERATOR = "Visual Studio 16 2019"
             conda activate py-<< parameters.python-version >>
             python -m pip install cmake scikit-build pybind11
+            python3 -m pip install -r requirements-test.txt
             python -m pip install -r requirements-dev.txt
             python -m pip install -r requirements.txt
 
@@ -61,6 +62,7 @@ commands:
               . py_venv/bin/activate
             fi
             python3 --version
+            python3 -m pip install -r requirements-test.txt
             python3 -m pip install -r requirements.txt
             python3 -m pip install -r requirements-dev.txt
             python3 -m pip install cmake flake8 bandit setuptools-scm

@@ -1,3 +1,4 @@
+camille
 celery==4.4.7
 cookiecutter
 dask
@@ -6,5 +7,3 @@ matplotlib
 nbformat
 networkx
 redis
--i https://testpypi.python.org/pypi
-camille

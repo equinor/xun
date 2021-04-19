@@ -1,2 +1,0 @@
--i https://testpypi.python.org/pypi
-camille

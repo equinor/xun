@@ -571,3 +571,58 @@ def has_mutating_assignments(node):
             return True
         scope.update(names)
     return False
+
+
+def structure_from_shape(shape, _structure=()):
+    idx = 0
+    output = ()
+    for element in shape:
+        if isinstance(element, int):
+            for _ in range(element):
+                structure = _structure + (idx,)
+                output += (structure,)
+                idx += 1
+        elif isinstance(element, (tuple, list)):
+            structure = _structure + (idx,)
+            idx += 1
+            output += structure_from_shape(shape=element, _structure=structure)
+        elif isinstance(element, type(Ellipsis)):
+            structure = _structure + (idx,)
+            output += (structure,)
+            idx += 1
+        else:
+            raise TypeError("Invalid content in shape tuple")
+    return output
+
+
+def extraction_from_structure(structure, value_expr):
+    def make_iter_call(argument):
+        iter_call = ast.Call()
+        iter_call.func = ast.Name(id='iter', ctx=ast.Load())
+        iter_call.args = [argument]
+        iter_call.keywords = []
+        return iter_call
+
+    def make_take_next_call(n_times, iterator):
+        take_next_call = ast.Call()
+        take_next_call.func = ast.Name(id='take_next', ctx=ast.Load())
+        take_next_call.args = [
+            ast.Constant(value=n_times, kind=None),
+            iterator,
+        ]
+        take_next_call.keywords = []
+        return take_next_call
+
+    if len(structure) == 1:
+        return make_take_next_call(
+            n_times=structure[0]+1,
+            iterator=make_iter_call(value_expr),
+        )
+    else:
+        return make_take_next_call(
+            n_times=structure[-1]+1,
+            iterator=make_iter_call(extraction_from_structure(
+                structure=structure[:-1],
+                value_expr=value_expr,
+            )),
+        )

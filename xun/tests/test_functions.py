@@ -821,3 +821,31 @@ def test_stmt_introduced_names():
 
     for i, (statement_type, e) in zip(stmt_introduced_names, expected.items()):
         assert i == e, statement_type
+
+
+def test_graph_generation():
+    @xun.function()
+    def f(arg):
+        return 'd'
+
+    @xun.function()
+    def g():
+        return 'a', 'c'
+
+    @xun.function()
+    def h():
+        with ...:
+            (r_a, c), r_b = g(), 'b'
+            inter_a = r_a
+            a, b = inter_a, r_b
+            d = f(c)
+        return a + b + c + d
+
+    print(h.code.task_str)
+
+    h.callable()
+
+    # result = run_in_process(h.blueprint())
+
+    assert False
+    assert result == 'abcd'

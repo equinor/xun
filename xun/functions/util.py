@@ -605,7 +605,7 @@ def extraction_from_structure(structure, value_expr):
 
     def make_take_next_call(n_times, iterator):
         take_next_call = ast.Call()
-        take_next_call.func = ast.Name(id='take_next', ctx=ast.Load())
+        take_next_call.func = ast.Name(id='_xun_take_next', ctx=ast.Load())
         take_next_call.args = [
             ast.Constant(value=n_times, kind=None),
             iterator,
@@ -626,3 +626,10 @@ def extraction_from_structure(structure, value_expr):
                 value_expr=value_expr,
             )),
         )
+
+
+def take_next(n_times, iterable):
+    result = None
+    for _ in range(n_times):
+        result = next(iterable)
+    return result

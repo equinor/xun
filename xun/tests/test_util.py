@@ -13,6 +13,7 @@ from xun.functions.util import overwrite_scope
 from xun.functions.util import shape_to_ast_tuple
 from xun.functions.util import strip_decorators
 from xun.functions.util import structure_from_shape
+from xun.functions.util import take_next
 import astunparse
 
 
@@ -264,27 +265,30 @@ def test_structure_from_shape():
 def test_extraction_from_structure():
     value_expr = ast.parse("'a', 'b'").body[0].value
     result_ast = extraction_from_structure((0,), value_expr)
-    expected_ast = ast.parse("take_next(1, iter(('a', 'b')))").body[0].value
+    expected_ast = ast.parse(
+        "_xun_take_next(1, iter(('a', 'b')))").body[0].value
     ok, diff = check_ast_equals(result_ast, expected_ast)
     assert ok, diff
 
     value_expr = ast.parse("'a', 'b'").body[0].value
     result_ast = extraction_from_structure((0, 0), value_expr)
     expected_ast = ast.parse(
-        "take_next(1, iter(take_next(1, iter(('a', 'b')))))").body[0].value
+        """_xun_take_next(
+            1,
+            iter(_xun_take_next(1, iter(('a', 'b')))))""").body[0].value
     ok, diff = check_ast_equals(result_ast, expected_ast)
     assert ok, diff
 
     value_expr = ast.parse("'a', ('b', ('c', 'd')), 'e'").body[0].value
     result_ast = extraction_from_structure((1, 1, 0), value_expr)
     expected_ast = ast.parse(
-        """take_next(
+        """_xun_take_next(
             1,
             iter(
-                take_next(
+                _xun_take_next(
                     2,
                     iter(
-                        take_next(
+                        _xun_take_next(
                             2,
                             iter(('a', ('b', ('c', 'd')), 'e')),
                         )
@@ -296,3 +300,14 @@ def test_extraction_from_structure():
     ).body[0].value
     ok, diff = check_ast_equals(result_ast, expected_ast)
     assert ok, diff
+
+
+def test_take_next():
+    iterator = iter(('a', 'b', 'c'))
+    assert take_next(1, iterator) == 'a'
+
+    iterator = iter(('a', 'b', 'c'))
+    assert take_next(2, iterator) == 'b'
+
+    iterator = iter(('a', 'b', 'c'))
+    assert take_next(3, iterator) == 'c'

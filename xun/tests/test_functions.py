@@ -835,17 +835,15 @@ def test_graph_generation():
     @xun.function()
     def h():
         with ...:
-            (r_a, c), r_b = g(), 'b'
+            r_a, r_b = g(), 'b'
             inter_a = r_a
             a, b = inter_a, r_b
-            d = f(c)
-        return a + b + c + d
+        return a + b
 
+    print(h.code.graph_str)
     print(h.code.task_str)
 
-    h.callable()
-
-    # result = run_in_process(h.blueprint())
+    result = run_in_process(h.blueprint())
 
     assert False
     assert result == 'abcd'

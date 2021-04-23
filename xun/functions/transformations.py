@@ -361,6 +361,37 @@ def copy_only_constants(
     return func.update(copy_only_constants=copy_only_constants)
 
 
+def unroll_unpacking_assignments(func: FunctionDecomposition):
+    unrolled_stmts = []
+    for stmt in func.copy_only_constants:
+        if not isinstance(stmt, ast.Assign):
+            unrolled_stmts.append(stmt)
+            continue
+        if len(stmt.targets) > 1:
+            raise SyntaxError("Multiple targets not supported")
+        target = stmt.targets[0]
+        target_shape = assignment_target_shape(target)
+        if target_shape == (1,):
+            unrolled_stmts.append(stmt)
+            continue
+
+        # Add unrolled stmts
+        for target, structure in zip(flatten_assignment_targets(target),
+                                        structure_from_shape(target_shape)):
+            extraction = extraction_from_structure(
+                structure=structure,
+                value_expr=stmt.value,
+            )
+
+            unrolled_stmt = ast.Assign(
+                targets=[ast.Name(id=target.id, ctx=ast.Store())],
+                value=extraction
+            )
+            unrolled_stmts.append(unrolled_stmt)
+
+    return func.update(with_unrolled_unpacks=unrolled_stmts)
+
+
 def build_xun_graph(
         func: FunctionDecomposition,
         dependencies={},
@@ -447,14 +478,24 @@ def build_xun_graph(
         RegisterCallWrapper().visit(stmt)
         if isinstance(stmt, ast.Assign) or isinstance(stmt, ast.Expr)
         else stmt
-        for stmt in func.copy_only_constants
+        for stmt in func.with_unrolled_unpacks
     ]
 
-    resolved_body = unpack_unpacking_assignments(body)
+    unrolled_assignments = unpack_unpacking_assignments(body)
 
     xun_graph = [
+        ast.ImportFrom(
+            module='xun.functions.util',
+            names=[
+                ast.alias(
+                    name='take_next',
+                    asname='_xun_take_next'
+                ),
+            ],
+            level=0
+        ),
         *header,
-        *resolved_body,
+        *unrolled_assignments,
         return_graph
     ]
 
@@ -486,7 +527,7 @@ def load_from_store(
         def __init__(self):
             self.seen_targets = []
 
-            for node in func.copy_only_constants:
+            for node in func.with_unrolled_unpacks:
                 self.visit(node)
 
             self.body_external_names = body_external_names(func.body)
@@ -537,41 +578,6 @@ def load_from_store(
                 keywords=node.keywords,
             )
             return construct_call
-
-    def unroll_unpacking(assignments):
-        # @function_ast
-        # def helper_code():
-        #     def take_next(iter, n=1):
-        #         result = None
-        #         for _ in range(n):
-        #             result = next(iter)
-        #         return result
-        # header = helper_code.body[0].body
-
-        unrolled_assignments = []
-        for assignment in assignments:
-            if len(assignment.targets) > 1:
-                raise SyntaxError("Multiple targets not supported")
-            target = assignment.targets[0]
-            target_shape = assignment_target_shape(target)
-            if target_shape == (1,):
-                unrolled_assignments.append(assignment)
-                continue
-
-            # Add unrolled assignments
-            for target, structure in zip(flatten_assignment_targets(target),
-                                         structure_from_shape(target_shape)):
-                extraction = extraction_from_structure(
-                    structure=structure,
-                    value_expr=assignment.value,
-                )
-
-                unrolled_assignment = ast.Assign(
-                    targets=[ast.Name(id=target.id)],
-                    value=extraction
-                )
-                unrolled_assignments.append(unrolled_assignment)
-        return unrolled_assignments
 
     class CallNode2Load(NodeMapper):
         def __init__(self, output_targets):
@@ -625,23 +631,19 @@ def load_from_store(
 
     # Assigned values will be made available to the function body
     assignments = [
-        node for node in func.copy_only_constants
+        node for node in func.with_unrolled_unpacks
         if isinstance(node, ast.Assign)
     ]
 
     # Converts calls to xun functions to CallNodes
     call_nodes = Call2CallNode().map(assignments)
-    call_nodes = unpack_unpacking_assignments(call_nodes)
-
-    unrolled_assignments = unroll_unpacking(assignments)
 
     output_targets = []
-    loads = CallNode2Load(output_targets=output_targets).map(assignments)
-
+    loads = CallNode2Load(output_targets=output_targets).map(call_nodes)
 
     imports = [
         *[
-            node for node in func.copy_only_constants
+            node for node in func.with_unrolled_unpacks
             if isinstance(node, (ast.Import, ast.ImportFrom))
         ],
         ast.ImportFrom(
@@ -660,6 +662,16 @@ def load_from_store(
                 ast.alias(
                     name='StoreAccessor',
                     asname='_xun_StoreAccessor'
+                ),
+            ],
+            level=0
+        ),
+        ast.ImportFrom(
+            module='xun.functions.util',
+            names=[
+                ast.alias(
+                    name='take_next',
+                    asname='_xun_take_next'
                 ),
             ],
             level=0
@@ -688,7 +700,7 @@ def load_from_store(
                 ),
                 type_comment=None,
             ),
-            *unrolled_assignments,
+            *call_nodes,
             ast.Return(
                 value=ast.Tuple(elts=loads, ctx=ast.Load())
             )

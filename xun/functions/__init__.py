@@ -17,8 +17,10 @@ from .transformations import FunctionDecomposition
 from .transformations import build_xun_graph
 from .transformations import copy_only_constants
 from .transformations import load_from_store
+from .transformations import map_expressions
 from .transformations import separate_constants
 from .transformations import sort_constants
+from .transformations import unroll_to_separate_names
 from .util import func_arg_names
 from .util import func_external_names
 from .util import function_ast

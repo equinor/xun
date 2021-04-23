@@ -838,3 +838,29 @@ def test_funcntions_with_dict_arguments():
             u = a(d={'a': 2})
         return v, u
     assert run_in_process(f.blueprint()) == (1, 2)
+
+
+def test_unpacking_to_intermediate():
+    @xun.function()
+    def f(arg):
+        return 'd'
+
+    @xun.function()
+    def g():
+        return 'a', 'c'
+
+    @xun.function()
+    def h():
+        with ...:
+            (r_a, c), r_b = g(), 'b'
+            inter_a = r_a
+            a, b = inter_a, r_b
+            d = f(c)
+        return a + b + c + d
+
+    print(h.code.graph_str)
+    print(h.code.task_str)
+
+    result = run_in_process(h.blueprint())
+
+    assert result == 'abcd'

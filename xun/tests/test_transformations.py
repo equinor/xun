@@ -149,6 +149,8 @@ def test_load_from_store_transformation():
         .apply(xun.functions.separate_constants)
         .apply(xun.functions.sort_constants)
         .apply(xun.functions.copy_only_constants, known_functions)
+        .apply(xun.functions.unroll_to_separate_names)
+        .apply(xun.functions.map_expressions)
         .apply(xun.functions.load_from_store, known_functions))
 
     generated = [*code.load_from_store, *code.body]
@@ -180,6 +182,8 @@ def test_load_from_store_skip_if_unecessary():
         .apply(xun.functions.separate_constants)
         .apply(xun.functions.sort_constants)
         .apply(xun.functions.copy_only_constants, known_functions)
+        .apply(xun.functions.unroll_to_separate_names)
+        .apply(xun.functions.map_expressions)
         .apply(xun.functions.load_from_store, known_functions))
 
     generated = [*code.load_from_store, *code.body]
@@ -285,6 +289,8 @@ def test_structured_unpacking_transformation():
         .apply(xun.functions.separate_constants)
         .apply(xun.functions.sort_constants)
         .apply(xun.functions.copy_only_constants, known_functions)
+        .apply(xun.functions.unroll_to_separate_names)
+        .apply(xun.functions.map_expressions)
         .apply(xun.functions.load_from_store, known_functions))
 
     @xun.function_ast
@@ -331,6 +337,8 @@ def test_unreferenced_names_are_not_loaded():
         .apply(xun.functions.separate_constants)
         .apply(xun.functions.sort_constants)
         .apply(xun.functions.copy_only_constants, known_functions)
+        .apply(xun.functions.unroll_to_separate_names)
+        .apply(xun.functions.map_expressions)
         .apply(xun.functions.load_from_store, known_functions))
 
     @xun.function_ast

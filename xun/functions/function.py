@@ -227,6 +227,8 @@ class Function:
                 .apply(transformations.separate_constants)
                 .apply(transformations.sort_constants)
                 .apply(transformations.copy_only_constants, self.dependencies)
+                .apply(transformations.unroll_to_separate_names)
+                .apply(transformations.map_expressions)
                 .apply(transformations.build_xun_graph, self.dependencies)
             )
 
@@ -277,6 +279,8 @@ class Function:
             .apply(transformations.separate_constants)
             .apply(transformations.sort_constants)
             .apply(transformations.copy_only_constants, self.dependencies)
+            .apply(transformations.unroll_to_separate_names)
+            .apply(transformations.map_expressions)
             .apply(transformations.load_from_store, self.dependencies)
         )
 

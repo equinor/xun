@@ -19,12 +19,14 @@ from .function_image import FunctionImage
 from .util import assignment_target_introduced_names
 from .util import assignment_target_shape
 from .util import body_external_names
+from .util import draw_graph
 from .util import flatten_assignment_targets
 from .util import function_ast
 from .util import separate_constants_ast
 from .util import shape_to_ast_tuple
 from .util import sort_constants_ast
 from .util import stmt_introduced_names
+from .util import structure_from_shape
 from itertools import chain
 import copy
 import types
@@ -200,54 +202,6 @@ class FunctionDecomposition(types.SimpleNamespace):
         return FunctionDecomposition(self.desc, attrs)
 
 
-def unpack_unpacking_assignments(nodes):
-    """
-    For all nodes of type ast.Assign, where the target is iterable and the
-    value is either a call or a subscripted call, the .unpack() attribute is
-    added to the call.
-
-    Example
-    a, b, (c, d) = _xun_CallNode('f')
-    ->
-    a, b, (c, d) = _xun_CallNode('f').unpack((2, (2,)))
-    """
-    def add_unpack_to_callnode(node):
-        target_shape = assignment_target_shape(node.targets[0])
-        unpacked_call = ast.Call(
-            func=ast.Attribute(
-                value=node.value,
-                attr='unpack',
-                ctx=ast.Load(),
-            ),
-            args=[shape_to_ast_tuple(target_shape)],
-            keywords=[],
-        )
-        return ast.Assign(
-            targets=node.targets,
-            value=unpacked_call,
-            type_comment=None,
-        )
-
-    def assignment_left_side_is_iterable(node):
-        return isinstance(node.targets[0], (ast.Tuple, ast.List))
-
-    def assignment_right_side_is_callnode(node):
-        return isinstance(node.value, ast.Call)
-
-    def assignment_right_side_is_subscripted_callnode(node):
-        if isinstance(node.value, ast.Subscript):
-            return assignment_right_side_is_subscripted_callnode(node.value)
-        return isinstance(node.value, ast.Call)
-
-    return [
-        add_unpack_to_callnode(node) if isinstance(node, ast.Assign)
-        and assignment_left_side_is_iterable(node) and
-        (assignment_right_side_is_callnode(node)
-         or assignment_right_side_is_subscripted_callnode(node)) else node
-        for node in nodes
-    ]
-
-
 #
 # Transformations
 #
@@ -363,6 +317,89 @@ def copy_only_constants(
     return func.update(copy_only_constants=copy_only_constants)
 
 
+def unroll_to_separate_names(func: FunctionDecomposition):
+    """Unroll to separate names
+
+    For all assign-statements with an iterable target with multiple variables,
+    make one assignment for every target where the right hand side is the
+    unpacked version of the original right hand side expression.
+    """
+    unrolled_stmts = []
+    for stmt in func.copy_only_constants:
+        if isinstance(stmt, ast.Assign):
+            if len(stmt.targets) > 1:
+                raise SyntaxError("Multiple targets not supported")
+
+            target = stmt.targets[0]
+            target_shape = assignment_target_shape(target)
+
+            if target_shape == (1,):
+                unrolled_stmts.append(stmt)
+                continue
+
+            indices = structure_from_shape(target_shape)
+            flatten_targets = flatten_assignment_targets(target)
+
+            for index, target in zip(indices, flatten_targets):
+                unrolled_value = stmt.value
+                for i in index:
+                    unrolled_value = ast.Call(
+                        func=ast.Name(id='_xun_get', ctx=ast.Load()),
+                        args=[
+                            ast.Constant(value=i, kind=None),
+                            ast.Call(
+                                func=ast.Name(id='iter', ctx=ast.Load()),
+                                args=[unrolled_value],
+                                keywords=[],
+                            )
+                        ],
+                        keywords=[],
+                    )
+
+                unrolled_stmts.append(
+                    ast.Assign(
+                        targets=[target],
+                        value=unrolled_value,
+                    )
+                )
+        else:
+            unrolled_stmts.append(stmt)
+
+    return func.update(unrolled_stmts=unrolled_stmts)
+
+
+def map_expressions(func: FunctionDecomposition):
+    """Map expressions
+
+    Map all expressions on the right hand side to the corresponding variable on
+    the left hand using a dictionary. Also replace names in expressions with
+    its corresponding expression.
+    """
+
+    class ReplaceSymbolicValues(ast.NodeTransformer):
+        def __init__(self, unrolled_exprs_dict):
+            self.unrolled_exprs_dict = unrolled_exprs_dict
+
+        def visit_Name(self, node):
+            if node.id in self.unrolled_exprs_dict:
+                return self.unrolled_exprs_dict[node.id]
+            return self.generic_visit(node)
+
+    unrolled_exprs_dict = {}
+    for stmt in func.unrolled_stmts:
+        if isinstance(stmt, ast.Assign):
+            target = stmt.targets[0]
+            value = stmt.value
+            unrolled_exprs_dict[target.id] = ReplaceSymbolicValues(
+                unrolled_exprs_dict).visit(value)
+
+    # import astor
+    # for key, value in unrolled_exprs_dict.items():
+    #     print(key, ':', astor.to_source(value).rstrip())
+
+    return func.update(unrolled_exprs_dict=unrolled_exprs_dict)
+
+
 def build_xun_graph(
         func: FunctionDecomposition,
         dependencies={},
@@ -446,17 +483,25 @@ def build_xun_graph(
     return_graph = ast.Return(value=ast.Name(id='_xun_graph', ctx=ast.Load()))
 
     body = [
-        RegisterCallWrapper().visit(stmt)
+        RegisterCallWrapper().visit(copy.deepcopy(stmt))
         if isinstance(stmt, ast.Assign) or isinstance(stmt, ast.Expr)
         else stmt
-        for stmt in func.copy_only_constants
+        for stmt in func.unrolled_stmts
     ]
 
-    resolved_body = unpack_unpacking_assignments(body)
-
     xun_graph = [
+        ast.ImportFrom(
+            module='xun.functions.util',
+            names=[
+                ast.alias(
+                    name='get',
+                    asname='_xun_get'
+                ),
+            ],
+            level=0
+        ),
         *header,
-        *resolved_body,
+        *body,
         return_graph
     ]
 
@@ -488,7 +533,7 @@ def load_from_store(
         def __init__(self):
             self.seen_targets = []
 
-            for node in func.copy_only_constants:
+            for node in func.unrolled_stmts:
                 self.visit(node)
 
             self.body_external_names = body_external_names(func.body)
@@ -517,12 +562,21 @@ def load_from_store(
             node.func.id in dependencies
         )
 
-    class NodeMapper(ast.NodeTransformer):
-        def map(self, nodes):
-            transformed = (self.visit(copy.deepcopy(node)) for node in nodes)
-            return [node for node in transformed if node is not None]
+    def is_xun_callnode(node):
+        return (
+            isinstance(node, ast.Call) and
+            isinstance(node.func, ast.Name) and
+            node.func.id == '_xun_CallNode'
+        )
 
-    class Call2CallNode(NodeMapper):
+    def is_xun_store_accessor_attribute(node):
+        return (
+            isinstance(node, ast.Attribute) and
+            isinstance(node.value, ast.Name) and
+            node.value.id == '_xun_store_accessor'
+        )
+
+    class Call2CallNode(ast.NodeTransformer):
         def visit_Call(self, node):
             node = self.generic_visit(node)
 
@@ -538,74 +592,51 @@ def load_from_store(
                 ],
                 keywords=node.keywords,
             )
+
             return construct_call
 
-    class CallNode2Load(NodeMapper):
-        def __init__(self, output_targets):
-            self.output_targets = output_targets
-            self.known_call_nodes = {}
 
-        def visit_Assign(self, node):
-            introduced_names = stmt_introduced_names(node)
-            if any(is_referenced_in_body(name) for name in introduced_names):
-                self.output_targets.extend(node.targets)
-                return self.visit(node.value)
-            if is_xun_call(node.value):
-                target_names = list(
-                    target.id for target in flatten_assignment_targets(node))
-                self.known_call_nodes.update(
-                    dict.fromkeys(target_names, node.value))
-            return None
-
+    class CallNode2Load(ast.NodeTransformer):
         def visit_Call(self, node):
-            if not is_xun_call(node):
-                return self.generic_visit(node)
-            return self.add_loading_from_store(node)
+            if is_xun_callnode(node):
+                store_accessor_load_func = ast.Attribute(
+                    value=ast.Name(id='_xun_store_accessor', ctx=ast.Load()),
+                    attr='load_result',
+                    ctx=ast.Load(),
+                )
 
-        def visit_Name(self, node):
-            if node.id in self.known_call_nodes:
-                call_node = self.known_call_nodes[node.id]
-                return self.add_loading_from_store(call_node)
+                store_accessor_load_call = ast.Call(
+                    func=store_accessor_load_func,
+                    args=[node],
+                    keywords=[],
+                )
+                return store_accessor_load_call
+
+            if is_xun_store_accessor_attribute(node.func):
+                # Avoid loading multiple times
+                return node
+
             return self.generic_visit(node)
 
-        def add_loading_from_store(self, node):
-            call_node = Call2CallNode().visit(node)
-
-            store_accessor_load_func = ast.Attribute(
-                value=ast.Name(id='_xun_store_accessor', ctx=ast.Load()),
-                attr='load_result',
-                ctx=ast.Load(),
-            )
-
-            store_accessor_load_call = ast.Call(
-                func=store_accessor_load_func,
-                args=[call_node],
-                keywords=[],
-            )
-
-            return store_accessor_load_call
 
     # If No dependencies are referenced in the body of the function, there is
     # nothing to load
     if len(discovered_reference.referenced_in_body) == 0:
         return func.update(load_from_store=[])
 
-    # Assigned values will be made available to the function body
-    assignments = [
-        node for node in func.copy_only_constants
-        if isinstance(node, ast.Assign)
-    ]
-
-    # Converts calls to xun functions to CallNodes
-    call_nodes = Call2CallNode().map(assignments)
-    call_nodes = unpack_unpacking_assignments(call_nodes)
-
     output_targets = []
-    loads = CallNode2Load(output_targets=output_targets).map(assignments)
+    loads = []
+    for target, value in func.unrolled_exprs_dict.items():
+        if is_referenced_in_body(target):
+            output_targets.append(ast.Name(id=target, ctx=ast.Store()))
+
+            call_nodes = Call2CallNode().visit(copy.deepcopy(value))
+            load = CallNode2Load().visit(call_nodes)
+            loads.append(load)
 
     imports = [
         *[
-            node for node in func.copy_only_constants
+            node for node in func.unrolled_stmts
             if isinstance(node, (ast.Import, ast.ImportFrom))
         ],
         ast.ImportFrom(
@@ -624,6 +655,16 @@ def load_from_store(
                 ast.alias(
                     name='StoreAccessor',
                     asname='_xun_StoreAccessor'
+                ),
+            ],
+            level=0
+        ),
+        ast.ImportFrom(
+            module='xun.functions.util',
+            names=[
+                ast.alias(
+                    name='get',
+                    asname='_xun_get'
                 ),
             ],
             level=0
@@ -652,9 +693,8 @@ def load_from_store(
                 ),
                 type_comment=None,
             ),
-            *call_nodes,
             ast.Return(
-                value=ast.Tuple(elts=loads, ctx=ast.Load())
+                value=ast.Tuple(elts=loads,ctx=ast.Load())
             )
         ],
         decorator_list=[],

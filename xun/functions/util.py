@@ -233,10 +233,12 @@ def assignment_target_shape(target):
     >>> assignment_target_shape(ast_target)
     (1, (2,))
     """
+    if isinstance(target, (ast.Name, ast.Attribute, ast.Subscript)):
+        return (1, )
     target_shape = ()
     count_names = 0
     for el in target.elts:
-        if isinstance(el, ast.Name):
+        if isinstance(el, (ast.Name, ast.Attribute, ast.Subscript)):
             count_names += 1
         else:
             if count_names > 0:

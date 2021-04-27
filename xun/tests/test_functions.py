@@ -835,10 +835,11 @@ def test_graph_generation():
     @xun.function()
     def h():
         with ...:
-            r_a, r_b = g(), 'b'
+            (r_a, c), r_b = g(), 'b'
             inter_a = r_a
             a, b = inter_a, r_b
-        return a + b
+            d = f(c)
+        return a + b + c + d
 
     print(h.code.graph_str)
     print(h.code.task_str)

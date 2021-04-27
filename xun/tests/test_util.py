@@ -7,7 +7,6 @@ from xun.functions import function_source
 from xun.functions.compatibility import ast
 from xun.functions.util import assignment_target_introduced_names
 from xun.functions.util import assignment_target_shape
-from xun.functions.util import extraction_from_structure
 from xun.functions.util import func_external_names
 from xun.functions.util import overwrite_scope
 from xun.functions.util import shape_to_ast_tuple
@@ -260,47 +259,6 @@ def test_structure_from_shape():
         (3,),
         (4,),
     )
-
-
-def test_extraction_from_structure():
-    value_expr = ast.parse("'a', 'b'").body[0].value
-    result_ast = extraction_from_structure((0,), value_expr)
-    expected_ast = ast.parse(
-        "_xun_take_next(1, iter(('a', 'b')))").body[0].value
-    ok, diff = check_ast_equals(result_ast, expected_ast)
-    assert ok, diff
-
-    value_expr = ast.parse("'a', 'b'").body[0].value
-    result_ast = extraction_from_structure((0, 0), value_expr)
-    expected_ast = ast.parse(
-        """_xun_take_next(
-            1,
-            iter(_xun_take_next(1, iter(('a', 'b')))))""").body[0].value
-    ok, diff = check_ast_equals(result_ast, expected_ast)
-    assert ok, diff
-
-    value_expr = ast.parse("'a', ('b', ('c', 'd')), 'e'").body[0].value
-    result_ast = extraction_from_structure((1, 1, 0), value_expr)
-    expected_ast = ast.parse(
-        """_xun_take_next(
-            1,
-            iter(
-                _xun_take_next(
-                    2,
-                    iter(
-                        _xun_take_next(
-                            2,
-                            iter(('a', ('b', ('c', 'd')), 'e')),
-                        )
-                    )
-                )
-            )
-        )
-        """
-    ).body[0].value
-    ok, diff = check_ast_equals(result_ast, expected_ast)
-    assert ok, diff
-
 
 def test_take_next():
     iterator = iter(('a', 'b', 'c'))

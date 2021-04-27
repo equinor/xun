@@ -573,6 +573,10 @@ def has_mutating_assignments(node):
     return False
 
 
+#
+# These should probably be be moved up eventually
+#
+
 def structure_from_shape(shape, _structure=()):
     idx = 0
     output = ()
@@ -593,39 +597,6 @@ def structure_from_shape(shape, _structure=()):
         else:
             raise TypeError("Invalid content in shape tuple")
     return output
-
-
-def extraction_from_structure(structure, value_expr):
-    def make_iter_call(argument):
-        iter_call = ast.Call()
-        iter_call.func = ast.Name(id='iter', ctx=ast.Load())
-        iter_call.args = [argument]
-        iter_call.keywords = []
-        return iter_call
-
-    def make_take_next_call(n_times, iterator):
-        take_next_call = ast.Call()
-        take_next_call.func = ast.Name(id='_xun_take_next', ctx=ast.Load())
-        take_next_call.args = [
-            ast.Constant(value=n_times, kind=None),
-            iterator,
-        ]
-        take_next_call.keywords = []
-        return take_next_call
-
-    if len(structure) == 1:
-        return make_take_next_call(
-            n_times=structure[0]+1,
-            iterator=make_iter_call(value_expr),
-        )
-    else:
-        return make_take_next_call(
-            n_times=structure[-1]+1,
-            iterator=make_iter_call(extraction_from_structure(
-                structure=structure[:-1],
-                value_expr=value_expr,
-            )),
-        )
 
 
 def take_next(n_times, iterable):

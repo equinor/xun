@@ -27,7 +27,6 @@ from .util import sort_constants_ast
 from .util import stmt_dag
 from .util import stmt_introduced_names
 from .util import structure_from_shape
-from .util import extraction_from_structure
 from itertools import chain
 import copy
 import types
@@ -369,15 +368,8 @@ def unroll_unpacking_assignments(func: FunctionDecomposition):
     import astor
 
     G = stmt_dag(func.copy_only_constants)
-
-    # Draw original graph
-    # pos = graphviz_layout(G, prog='dot')
-    # nx.draw(G, pos)
-    # nx.draw_networkx_labels(G, pos)
-    # plt.show()
-
     out_graph = G.copy()
-
+    counter_node = 0
     for node in G.nodes():
         if not isinstance(node, ast.Assign):
             continue
@@ -389,108 +381,53 @@ def unroll_unpacking_assignments(func: FunctionDecomposition):
         if target_shape == (1,):
             continue
 
+        # Start a subgraph where all the predecessors of the assign points to
+        # the expression
+        H = nx.DiGraph()
+        expr_node = node.value
         predecessors = list(G.predecessors(node))
-        print(predecessors)
+        H.add_edges_from([(predecessor, expr_node) for predecessor in predecessors])
 
-        # Add unrolled stmts
-        for target, structure in zip(flatten_assignment_targets(target),
-                                     structure_from_shape(target_shape)):
-            extraction = extraction_from_structure(
-                structure=structure,
-                value_expr=node.value,
-            )
+        list_of_indices = structure_from_shape(target_shape)
+        flatten_targets = flatten_assignment_targets(target)
+        for index, target_name in zip(list_of_indices, flatten_targets):
+            prev_node = expr_node
+            for depth in index:
+                # Add iter function application
+                iter_node = '_xun_node_' + str(counter_node)
+                counter_node += 1
+                H.add_edge(prev_node, iter_node, type='iter()')
 
-            unrolled_stmt = ast.Assign(
-                targets=[ast.Name(id=target.id, ctx=ast.Store())],
-                value=extraction
-            )
+                # Add next function application
+                next_node = '_xun_node_' + str(counter_node)
+                counter_node += 1
+                H.add_edge(iter_node, next_node, type=f'next({depth+1})')
 
-            H = nx.DiGraph()
-            for predecessor in predecessors:
-                H.add_edge(predecessor, unrolled_stmt)
-            H.add_edge(unrolled_stmt, target.id)
+                prev_node = next_node
 
-            G_ = nx.subgraph_view(out_graph, filter_node=nx.filters.hide_nodes([node]))
-            out_graph = nx.compose(H, G_)
+            H.add_edge(prev_node, target_name.id, type='assign')
 
-    # Relabel to show the source code
+        # Remove the original node from and merge subgraph with the orinal graph
+        G_ = nx.subgraph_view(out_graph, filter_node=nx.filters.hide_nodes([node]))
+        out_graph = nx.compose(H, G_)
+
+    # Relabel AST nodes to display the source code
     mapping = {
         node: astor.to_source(node)
         for node in out_graph.nodes()
-        if isinstance(node, ast.Assign)
+        if isinstance(node, ast.AST)
     }
     out_graph = nx.relabel_nodes(out_graph, mapping)
 
     # Draw the graph
     pos = graphviz_layout(out_graph, prog='dot')
-    edge_labels = nx.get_edge_attributes(out_graph, 'label')
+    edge_labels = nx.get_edge_attributes(out_graph, 'type')
     nx.draw(out_graph, pos)
     nx.draw_networkx_edge_labels(out_graph, pos, edge_labels)
     nx.draw_networkx_labels(out_graph, pos)
     plt.show()
 
-    raise SyntaxError
-
-    unrolled_stmts = []
-    for stmt in func.copy_only_constants:
-        if not isinstance(stmt, ast.Assign):
-            unrolled_stmts.append(stmt)
-            continue
-        if len(stmt.targets) > 1:
-            raise SyntaxError("Multiple targets not supported")
-        target = stmt.targets[0]
-        target_shape = assignment_target_shape(target)
-        if target_shape == (1,):
-            unrolled_stmts.append(stmt)
-            continue
-
-        # Add unrolled stmts
-        for target, structure in zip(flatten_assignment_targets(target),
-                                        structure_from_shape(target_shape)):
-            extraction = extraction_from_structure(
-                structure=structure,
-                value_expr=stmt.value,
-            )
-
-            unrolled_stmt = ast.Assign(
-                targets=[ast.Name(id=target.id, ctx=ast.Store())],
-                value=extraction
-            )
-            unrolled_stmts.append(unrolled_stmt)
-
-    return func.update(with_unrolled_unpacks=unrolled_stmts)
-
-
-# def unroll_unpacking_assignments(func: FunctionDecomposition):
-#     unrolled_stmts = []
-#     for stmt in func.copy_only_constants:
-#         if not isinstance(stmt, ast.Assign):
-#             unrolled_stmts.append(stmt)
-#             continue
-#         if len(stmt.targets) > 1:
-#             raise SyntaxError("Multiple targets not supported")
-#         target = stmt.targets[0]
-#         target_shape = assignment_target_shape(target)
-#         if target_shape == (1,):
-#             unrolled_stmts.append(stmt)
-#             continue
-
-#         # Add unrolled stmts
-#         for target, structure in zip(flatten_assignment_targets(target),
-#                                         structure_from_shape(target_shape)):
-#             extraction = extraction_from_structure(
-#                 structure=structure,
-#                 value_expr=stmt.value,
-#             )
-
-#             unrolled_stmt = ast.Assign(
-#                 targets=[ast.Name(id=target.id, ctx=ast.Store())],
-#                 value=extraction
-#             )
-#             unrolled_stmts.append(unrolled_stmt)
-
-#     return func.update(with_unrolled_unpacks=unrolled_stmts)
-
+    raise NotImplementedError("Further implementation not ready")
 
 def build_xun_graph(
         func: FunctionDecomposition,

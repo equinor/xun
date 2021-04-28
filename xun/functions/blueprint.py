@@ -137,9 +137,6 @@ def build_function_call_graph(functions, call):
         (node, call) for node in sink_nodes(graph) if node != call
     )
 
-    if not nx.is_directed_acyclic_graph(graph):
-        raise NotDAGError
-
     dependencies = tuple(
         n for n in graph.nodes if isinstance(n, CallNode) and n != call
     )
@@ -167,7 +164,7 @@ def build_call_graph(functions, call):
         The call graph built from the context and entry call. The resulting
         graph is required to be a directed acyclic graph.
     """
-    graph = nx.DiGraph()
+    graphs = []
     visited = set()
     q = queue.Queue()
     q.put(call)
@@ -181,13 +178,17 @@ def build_call_graph(functions, call):
         visited.add(call)
 
         func_graph, dependencies = build_function_call_graph(functions, call)
+        graphs.append(func_graph)
 
         for dependency in dependencies:
             q.put(dependency)
 
-        graph = nx.compose(graph, func_graph)
+    graph = nx.DiGraph()
+    for g in graphs:
+        graph.add_nodes_from(g.nodes(data=True))
+        graph.add_edges_from(g.edges(data=True))
 
-        if not nx.is_directed_acyclic_graph(graph):
-            raise NotDAGError
+    if not nx.is_directed_acyclic_graph(graph):
+        raise NotDAGError
 
     return graph

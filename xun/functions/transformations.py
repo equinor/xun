@@ -412,22 +412,90 @@ def unroll_unpacking_assignments(func: FunctionDecomposition):
         out_graph = nx.compose(H, G_)
 
     # Relabel AST nodes to display the source code
-    mapping = {
-        node: astor.to_source(node)
-        for node in out_graph.nodes()
-        if isinstance(node, ast.AST)
-    }
-    out_graph = nx.relabel_nodes(out_graph, mapping)
+    # mapping = {
+    #     node: astor.to_source(node)
+    #     for node in out_graph.nodes()
+    #     if isinstance(node, ast.AST)
+    # }
+    # out_graph = nx.relabel_nodes(out_graph, mapping)
 
+    # # Draw the graph
+    # pos = graphviz_layout(out_graph, prog='dot')
+    # edge_labels = nx.get_edge_attributes(out_graph, 'type')
+    # nx.draw(out_graph, pos)
+    # nx.draw_networkx_edge_labels(out_graph, pos, edge_labels)
+    # nx.draw_networkx_labels(out_graph, pos)
+    # plt.show()
+
+    return func.update(unrolled_graph=out_graph)
+
+
+def graph_to_code(func: FunctionDecomposition):
+    from matplotlib import pyplot as plt
+    import networkx as nx
+    from networkx.drawing.nx_agraph import graphviz_layout
+    from copy import deepcopy
+    
+    class DiscoverReferences(ast.NodeVisitor):
+        def __init__(self):
+            self.seen_targets = []
+
+            for node in func.copy_only_constants:
+                self.visit(node)
+
+            self.body_external_names = body_external_names(func.body)
+
+            self.referenced_in_body = frozenset(
+                t for t in self.seen_targets if t in self.body_external_names
+            )
+
+        def visit_Assign(self, node):
+            self.generic_visit(node)
+            target = node.targets[0]
+            self.seen_targets.extend(
+                assignment_target_introduced_names(target)
+                if isinstance(target, (ast.Tuple, ast.List)) else [target.id]
+            )
+            return node
+    discovered_reference = DiscoverReferences()
+
+
+    graph = func.unrolled_graph.reverse()
+    sink_nodes = list(discovered_reference.referenced_in_body)
+
+    # sink_nodes = chain(sink_nodes, ['r_b'])
     # Draw the graph
-    pos = graphviz_layout(out_graph, prog='dot')
-    edge_labels = nx.get_edge_attributes(out_graph, 'type')
-    nx.draw(out_graph, pos)
-    nx.draw_networkx_edge_labels(out_graph, pos, edge_labels)
-    nx.draw_networkx_labels(out_graph, pos)
-    plt.show()
+    # pos = graphviz_layout(graph, prog='dot')
+    # edge_labels = nx.get_edge_attributes(graph, 'type')
+    # nx.draw(graph, pos)
+    # nx.draw_networkx_edge_labels(graph, pos, edge_labels)
+    # nx.draw_networkx_labels(graph, pos)
+    # plt.show()
+    visited_nodes = set()
 
-    raise NotImplementedError("Further implementation not ready")
+    nodes_to_visit = deepcopy(sink_nodes)
+    visited_nodes = set(nodes_to_visit)
+
+    while len(nodes_to_visit) > 0:
+        sink_node = nodes_to_visit.pop(0)
+        print(sink_node)
+        visited_nodes.add(sink_node)
+        edges_from_sink_node = tuple(nx.edge_dfs(graph, sink_node))
+        for edge in edges_from_sink_node:
+            node = edge[1]
+            print(node)
+            if isinstance(node, ast.AST):
+                dependencies = list(graph.successors(node))
+                for dep in dependencies:
+                    if dep not in visited_nodes or dep not in nodes_to_visit:
+                        nodes_to_visit.append(dep)
+                        visited_nodes.add(dep)
+                break
+
+    raise NotImplementedError
+    return func.update(with_unrolled_unpacks=unrolled_unpacks)
+
+
 
 def build_xun_graph(
         func: FunctionDecomposition,

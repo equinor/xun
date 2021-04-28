@@ -215,6 +215,7 @@ class Function:
                 .apply(transformations.sort_constants)
                 .apply(transformations.copy_only_constants, self.dependencies)
                 .apply(transformations.unroll_unpacking_assignments)
+                .apply(transformations.graph_to_code)
                 .apply(transformations.build_xun_graph, self.dependencies)
             )
 
@@ -266,6 +267,7 @@ class Function:
             .apply(transformations.sort_constants)
             .apply(transformations.copy_only_constants, self.dependencies)
             .apply(transformations.unroll_unpacking_assignments)
+            .apply(transformations.graph_to_code)
             .apply(transformations.load_from_store, self.dependencies)
         )
 

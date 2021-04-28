@@ -832,6 +832,9 @@ def test_graph_generation():
     def g():
         return 'a', 'c'
 
+    def k_func():
+        return 'k'
+
     @xun.function()
     def h():
         with ...:
@@ -840,6 +843,8 @@ def test_graph_generation():
             a, b = inter_a, r_b
             d = f(c)
         return a + b + c + d
+        #     k = k_func()
+        # return a + b + c + d + k
 
     print(h.code.graph_str)
     print(h.code.task_str)

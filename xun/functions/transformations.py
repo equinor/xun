@@ -369,6 +369,7 @@ def unroll_unpacking_assignments(func: FunctionDecomposition):
 
     G = stmt_dag(func.copy_only_constants)
     out_graph = G.copy()
+    nx.set_edge_attributes(out_graph, 'preserved', 'type')
     counter_node = 0
     for node in G.nodes():
         if not isinstance(node, ast.Assign):
@@ -376,44 +377,52 @@ def unroll_unpacking_assignments(func: FunctionDecomposition):
 
         if len(node.targets) > 1:
             raise SyntaxError("Multiple targets not supported")
-        target = node.targets[0]
-        target_shape = assignment_target_shape(target)
-        if target_shape == (1,):
-            continue
 
         # Start a subgraph where all the predecessors of the assign points to
         # the expression
         H = nx.DiGraph()
         expr_node = node.value
         predecessors = list(G.predecessors(node))
-        H.add_edges_from([(predecessor, expr_node) for predecessor in predecessors])
+        H.add_edges_from(
+            [(predecessor, expr_node) for predecessor in predecessors],
+            type='dependency'
+        )
 
-        list_of_indices = structure_from_shape(target_shape)
-        flatten_targets = flatten_assignment_targets(target)
-        for index, target_name in zip(list_of_indices, flatten_targets):
-            prev_node = expr_node
-            for depth in index:
-                # Add iter function application
-                iter_node = '_xun_node_' + str(counter_node)
-                counter_node += 1
-                H.add_edge(prev_node, iter_node, type='iter()')
+        target = node.targets[0]
+        target_shape = assignment_target_shape(target)
+        # If the target is a single variable, simply add an assign edge
+        if target_shape == (1,):
+            H.add_edge(expr_node, target.id, type='assign')
 
-                # Add next function application
-                next_node = '_xun_node_' + str(counter_node)
-                counter_node += 1
-                H.add_edge(iter_node, next_node, type=f'next({depth+1})')
+        # If the target is more than a single variable, add unpacking nodes
+        else:
+            list_of_indices = structure_from_shape(target_shape)
+            flatten_targets = flatten_assignment_targets(target)
+            for index, target_name in zip(list_of_indices, flatten_targets):
+                prev_node = expr_node
+                for depth in index:
+                    # Add iter function application
+                    iter_node = '_xun_node_' + str(counter_node)
+                    counter_node += 1
+                    H.add_edge(prev_node, iter_node, type='iter()')
 
-                prev_node = next_node
+                    # Add next function application
+                    next_node = '_xun_node_' + str(counter_node)
+                    counter_node += 1
+                    H.add_edge(iter_node, next_node, type=f'next({depth+1})')
 
-            H.add_edge(prev_node, target_name.id, type='assign')
+                    prev_node = next_node
 
-        # Remove the original node from and merge subgraph with the orinal graph
-        G_ = nx.subgraph_view(out_graph, filter_node=nx.filters.hide_nodes([node]))
+                H.add_edge(prev_node, target_name.id, type='assign')
+
+        # Remove the node from, and merge subgraph with, the orinal graph
+        G_ = nx.subgraph_view(
+            out_graph, filter_node=nx.filters.hide_nodes([node]))
         out_graph = nx.compose(H, G_)
 
     # Relabel AST nodes to display the source code
     # mapping = {
-    #     node: astor.to_source(node)
+    #     node: astor.to_source(node).rstrip()
     #     for node in out_graph.nodes()
     #     if isinstance(node, ast.AST)
     # }
@@ -463,7 +472,6 @@ def graph_to_code(func: FunctionDecomposition):
     graph = func.unrolled_graph.reverse()
     sink_nodes = list(discovered_reference.referenced_in_body)
 
-    # sink_nodes = chain(sink_nodes, ['r_b'])
     # Draw the graph
     # pos = graphviz_layout(graph, prog='dot')
     # edge_labels = nx.get_edge_attributes(graph, 'type')
@@ -471,23 +479,24 @@ def graph_to_code(func: FunctionDecomposition):
     # nx.draw_networkx_edge_labels(graph, pos, edge_labels)
     # nx.draw_networkx_labels(graph, pos)
     # plt.show()
-    visited_nodes = set()
 
     nodes_to_visit = deepcopy(sink_nodes)
     visited_nodes = set(nodes_to_visit)
 
     while len(nodes_to_visit) > 0:
         sink_node = nodes_to_visit.pop(0)
-        print(sink_node)
+        print()
+        print(f'Sink node: {sink_node}')
         visited_nodes.add(sink_node)
         edges_from_sink_node = tuple(nx.edge_dfs(graph, sink_node))
         for edge in edges_from_sink_node:
             node = edge[1]
-            print(node)
+            type = graph.get_edge_data(edge[0], edge[1])['type']
+            print(f'Node: {node}, Type: {type}')
             if isinstance(node, ast.AST):
                 dependencies = list(graph.successors(node))
                 for dep in dependencies:
-                    if dep not in visited_nodes or dep not in nodes_to_visit:
+                    if dep not in visited_nodes and dep not in nodes_to_visit:
                         nodes_to_visit.append(dep)
                         visited_nodes.add(dep)
                 break

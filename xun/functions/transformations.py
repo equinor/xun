@@ -363,13 +363,13 @@ def copy_only_constants(
 
 def unroll_unpacking_assignments(func: FunctionDecomposition):
     from matplotlib import pyplot as plt
-    import networkx as nx
     from networkx.drawing.nx_agraph import graphviz_layout
     import astor
+    import networkx as nx
 
     G = stmt_dag(func.copy_only_constants)
     out_graph = G.copy()
-    nx.set_edge_attributes(out_graph, 'preserved', 'type')
+    nx.set_edge_attributes(out_graph, 'preserved', 'edge_type')
     counter_node = 0
     for node in G.nodes():
         if not isinstance(node, ast.Assign):
@@ -385,14 +385,14 @@ def unroll_unpacking_assignments(func: FunctionDecomposition):
         predecessors = list(G.predecessors(node))
         H.add_edges_from(
             [(predecessor, expr_node) for predecessor in predecessors],
-            type='dependency'
+            edge_type='dependency'
         )
 
         target = node.targets[0]
         target_shape = assignment_target_shape(target)
         # If the target is a single variable, simply add an assign edge
         if target_shape == (1,):
-            H.add_edge(expr_node, target.id, type='assign')
+            H.add_edge(expr_node, target.id, edge_type='assign')
 
         # If the target is more than a single variable, add unpacking nodes
         else:
@@ -404,16 +404,17 @@ def unroll_unpacking_assignments(func: FunctionDecomposition):
                     # Add iter function application
                     iter_node = '_xun_node_' + str(counter_node)
                     counter_node += 1
-                    H.add_edge(prev_node, iter_node, type='iter()')
+                    H.add_edge(prev_node, iter_node, edge_type='iter()')
 
                     # Add next function application
                     next_node = '_xun_node_' + str(counter_node)
                     counter_node += 1
-                    H.add_edge(iter_node, next_node, type=f'next({depth+1})')
+                    H.add_edge(
+                        iter_node, next_node, edge_type=f'next {depth+1}')
 
                     prev_node = next_node
 
-                H.add_edge(prev_node, target_name.id, type='assign')
+                H.add_edge(prev_node, target_name.id, edge_type='assign')
 
         # Remove the node from, and merge subgraph with, the orinal graph
         G_ = nx.subgraph_view(
@@ -430,7 +431,7 @@ def unroll_unpacking_assignments(func: FunctionDecomposition):
 
     # # Draw the graph
     # pos = graphviz_layout(out_graph, prog='dot')
-    # edge_labels = nx.get_edge_attributes(out_graph, 'type')
+    # edge_labels = nx.get_edge_attributes(out_graph, 'edge_type')
     # nx.draw(out_graph, pos)
     # nx.draw_networkx_edge_labels(out_graph, pos, edge_labels)
     # nx.draw_networkx_labels(out_graph, pos)
@@ -440,10 +441,11 @@ def unroll_unpacking_assignments(func: FunctionDecomposition):
 
 
 def graph_to_code(func: FunctionDecomposition):
-    from matplotlib import pyplot as plt
-    import networkx as nx
-    from networkx.drawing.nx_agraph import graphviz_layout
     from copy import deepcopy
+    from matplotlib import pyplot as plt
+    from networkx.drawing.nx_agraph import graphviz_layout
+    import astor
+    import networkx as nx
     
     class DiscoverReferences(ast.NodeVisitor):
         def __init__(self):
@@ -474,7 +476,7 @@ def graph_to_code(func: FunctionDecomposition):
 
     # Draw the graph
     # pos = graphviz_layout(graph, prog='dot')
-    # edge_labels = nx.get_edge_attributes(graph, 'type')
+    # edge_labels = nx.get_edge_attributes(graph, 'edge_type')
     # nx.draw(graph, pos)
     # nx.draw_networkx_edge_labels(graph, pos, edge_labels)
     # nx.draw_networkx_labels(graph, pos)
@@ -483,16 +485,22 @@ def graph_to_code(func: FunctionDecomposition):
     nodes_to_visit = deepcopy(sink_nodes)
     visited_nodes = set(nodes_to_visit)
 
+    paths = []
+
     while len(nodes_to_visit) > 0:
+        path = []
+
         sink_node = nodes_to_visit.pop(0)
         print()
         print(f'Sink node: {sink_node}')
         visited_nodes.add(sink_node)
         edges_from_sink_node = tuple(nx.edge_dfs(graph, sink_node))
+        # paths.append(edges_from_sink_node)
         for edge in edges_from_sink_node:
             node = edge[1]
-            type = graph.get_edge_data(edge[0], edge[1])['type']
-            print(f'Node: {node}, Type: {type}')
+            edge_type = graph.get_edge_data(edge[0], edge[1])['edge_type']
+            path.append((edge[0], edge[1], edge_type))
+            print(f'Node: {node}, Type: {edge_type}')
             if isinstance(node, ast.AST):
                 dependencies = list(graph.successors(node))
                 for dep in dependencies:
@@ -500,10 +508,75 @@ def graph_to_code(func: FunctionDecomposition):
                         nodes_to_visit.append(dep)
                         visited_nodes.add(dep)
                 break
+        
+        paths.append(path)
 
-    raise NotImplementedError
-    return func.update(with_unrolled_unpacks=unrolled_unpacks)
+    unrolled_stmts = []
 
+    print("\nGenerated code:")
+    for path in paths:
+        chunk = []
+        print()
+        for edge in reversed(path):
+            print(edge)
+            if isinstance(edge[1], ast.AST):
+                to_edge_ast = edge[1]
+            elif isinstance(edge[1], str):
+                to_edge_ast = ast.Name(id=edge[1], ctx=ast.Load())
+            else:
+                raise TypeError(f'Invalid edge type {type(edge[1])}')
+
+            tag = edge[2].split()
+            if tag[0] == 'iter()':
+                value = ast.Call(
+                    func=ast.Name(id='iter', ctx=ast.Load()),
+                    args=[to_edge_ast],
+                    keywords=[],
+                )
+            elif tag[0] == 'next':
+                n_next = ast.Constant(value=int(tag[1]), kind=None)
+                value = ast.Call(
+                    func=ast.Name(id='_xun_take_next', ctx=ast.Load()),
+                    args=[n_next, to_edge_ast],
+                    keywords=[],
+                )
+            elif tag[0] == 'assign':
+                value = to_edge_ast
+            else:
+                raise TypeError(f'Unrecognized tag string {tag[0]}')
+
+
+            stmt = ast.Assign(
+                targets=[ast.Name(id=edge[0], ctx=ast.Store())],
+                value=value,
+            )
+
+            print(astor.to_source(stmt).rstrip())
+
+            chunk.append(stmt)
+        unrolled_stmts.append(chunk)
+    
+    unrolled_stmts = [stmt for stmt in chunk for chunk in unrolled_stmts[::-1]]
+
+    print(unrolled_stmts)
+    # unrolled_stmts = unrolled_stmts[::-1]
+
+    return func.update(with_unrolled_unpacks=unrolled_stmts)
+
+# ast.Assign(
+#     targets=[ast.Name(id='b')],
+#     value=
+# )
+# stmt = ast.Assign(targets=[], value)
+# ast.Call(func=, args, keywords)
+
+# b = _xun_take_next(2, iter(<Tuple>))
+
+# _xun_node_0 = iter(<Tuple>)
+# _xun_node_1 = _xun_take_next(1, _xun_node_0)
+# _xun_node_2 = iter(_xun_node_1)
+# _xun_node_3 = _xun_take_next(1, _xun_node_2)
+# r_a = _xun_node_3
 
 
 def build_xun_graph(

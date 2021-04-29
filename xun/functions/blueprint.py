@@ -183,6 +183,7 @@ def build_call_graph(functions, call):
         for dependency in dependencies:
             q.put(dependency)
 
+    # nx.compose is too slow when the number of graphs is huge
     graph = nx.DiGraph()
     for g in graphs:
         graph.add_nodes_from(g.nodes(data=True))

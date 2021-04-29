@@ -1,8 +1,6 @@
 from .. import graph as graph_helpers
 from .driver import Driver
 import asyncio
-import dask
-import distributed
 import functools
 import logging
 import networkx as nx

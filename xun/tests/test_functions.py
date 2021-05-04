@@ -539,7 +539,8 @@ def test_function_version_completeness():
     # Rerun w0 to overwrite the latest result, this ensures that we test that
     # the correct hash is used when loading the result of f. To force a rerun
     # of w0, we scramble the hash using w1's hash (since it is suitably random)
-    w0.hash = bytes(a ^ b for a, b in zip(w0.hash, w1.hash))
+    w0.hash = bytes(a ^ b for a, b in zip(w0.hash.encode(), w1.hash.encode())
+              ).decode()
     r2 = w0.blueprint().run(driver=driver, store=store)
     assert r2 == 0
 

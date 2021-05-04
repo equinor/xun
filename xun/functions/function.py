@@ -2,8 +2,9 @@ from .blueprint import Blueprint
 from .function_description import describe
 from .graph import CallNode
 from . import transformations
-import hashlib
 import astor
+import base64
+import hashlib
 
 
 class Function:
@@ -117,11 +118,12 @@ class Function:
         str
             Hex digest of function hash
         """
-        content = desc.src.encode()
-        sha256 = hashlib.sha256(content).digest()
+        sha256 = hashlib.sha256()
+        sha256.update(desc.src.encode())
         for dependency in dependencies.values():
-            sha256 = bytes(a ^ b for a, b in zip(sha256, dependency.hash))
-        return sha256
+            sha256.update(dependency.hash.encode())
+        truncated = sha256.digest()[:12]
+        return base64.urlsafe_b64encode(truncated).decode()
 
     @staticmethod
     def from_function(func, max_parallel=None):

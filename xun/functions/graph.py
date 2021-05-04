@@ -52,16 +52,6 @@ class CallNode:
         self.args = args
         self.kwargs = kwargs
 
-        # For large graphs, __hash__ will be called _a lot_. Precomuting this
-        # is significant.
-        self._hash = hash((
-            self.function_name,
-            self.function_hash,
-            self.subscript,
-            tuple(self.args),
-            frozenset(self.kwargs.items())
-        ))
-
     def __getitem__(self, key):
         return self._replace(subscript=self.subscript + (key,))
 
@@ -82,7 +72,13 @@ class CallNode:
             return False
 
     def __hash__(self):
-        return self._hash
+        return hash((
+            self.function_name,
+            self.function_hash,
+            self.subscript,
+            tuple(self.args),
+            frozenset(self.kwargs.items())
+        ))
 
     def __repr__(self):
         args = [repr(self.function_name), repr(self.function_hash)]

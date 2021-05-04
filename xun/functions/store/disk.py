@@ -1,13 +1,17 @@
 from .store import Store
 from .store import StoreDriver
 from pathlib import Path
+import base64
 import hashlib
 import pickle
 
 
-def key_hash(key):
+def key_hash_str(key):
     pickled = pickle.dumps(key)
-    return hashlib.sha256(pickled).hexdigest()
+    sha256 = hashlib.sha256()
+    sha256.update(pickled)
+    truncated = sha256.digest()[:12]
+    return base64.urlsafe_b64encode(truncated).decode()
 
 
 class Disk(Store):
@@ -56,29 +60,29 @@ class DiskDriver(StoreDriver):
                 self.index[path.name] = key
 
                 if __debug__:
-                    assert key_hash(key) == path.name
+                    assert key_hash_str(key) == path.name
                     self.key_invariant(key)
 
         removed = set(self.index.keys()) - set(p.name for p in files)
-        for sha256 in removed:
-            key = self.index[sha256]
-            del self.index[sha256]
+        for b64 in removed:
+            key = self.index[b64]
+            del self.index[b64]
             self.key_invariant(key)
 
     def key_invariant(self, key):
-        sha256 = key_hash(key)
+        b64 = key_hash_str(key)
         if self.__contains__(key):
-            assert not(sha256 in self.index) or self.index[sha256] == key
-            assert (self.dir / 'keys' / sha256).is_file()
-            assert (self.dir / 'values' / sha256).is_file()
+            assert not(b64 in self.index) or self.index[b64] == key
+            assert (self.dir / 'keys' / b64).is_file()
+            assert (self.dir / 'values' / b64).is_file()
         else:
-            assert sha256 not in self.index
-            assert not (self.dir / 'keys' / sha256).is_file()
-            assert not (self.dir / 'values' / sha256).is_file()
+            assert b64 not in self.index
+            assert not (self.dir / 'keys' / b64).is_file()
+            assert not (self.dir / 'values' / b64).is_file()
 
     def __contains__(self, key):
-        sha256 = key_hash(key)
-        return (self.dir / 'keys' / sha256).is_file()
+        b64 = key_hash_str(key)
+        return (self.dir / 'keys' / b64).is_file()
 
     def __delitem__(self, key):
         if __debug__:
@@ -86,11 +90,11 @@ class DiskDriver(StoreDriver):
         if not self.__contains__(key):
             raise KeyError('KeyError: {}'.format(str(key)))
 
-        sha256 = key_hash(key)
-        (self.dir / 'keys' / sha256).unlink()
-        (self.dir / 'values' / sha256).unlink()
-        if sha256 in self.index:
-            del self.index[sha256]
+        b64 = key_hash_str(key)
+        (self.dir / 'keys' / b64).unlink()
+        (self.dir / 'values' / b64).unlink()
+        if b64 in self.index:
+            del self.index[b64]
 
     def __getitem__(self, key):
         if __debug__:
@@ -98,8 +102,8 @@ class DiskDriver(StoreDriver):
         if not self.__contains__(key):
             raise KeyError('KeyError: {}'.format(str(key)))
 
-        sha256 = key_hash(key)
-        with open(str(self.dir / 'values' / sha256), 'rb') as f:
+        b64 = key_hash_str(key)
+        with open(str(self.dir / 'values' / b64), 'rb') as f:
             return pickle.load(f)
 
     def __iter__(self):
@@ -111,14 +115,14 @@ class DiskDriver(StoreDriver):
         return len(self.index)
 
     def __setitem__(self, key, value):
-        sha256 = key_hash(key)
+        b64 = key_hash_str(key)
 
-        with open(str(self.dir / 'keys' / sha256), 'wb') as kf, \
-             open(str(self.dir / 'values' / sha256), 'wb') as vf:
+        with open(str(self.dir / 'keys' / b64), 'wb') as kf, \
+             open(str(self.dir / 'values' / b64), 'wb') as vf:
             pickle.dump(key, kf)
             pickle.dump(value, vf)
 
-        self.index[sha256] = key
+        self.index[b64] = key
 
         if __debug__:
             self.key_invariant(key)

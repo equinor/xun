@@ -1,15 +1,10 @@
 from .store import Store
 from .store import StoreDriver
+from .disk import key_hash_str
 from pathlib import Path
-import hashlib
 import paramiko
 import pickle
 import stat
-
-
-def key_hash(key):
-    pickled = pickle.dumps(key)
-    return hashlib.sha256(pickled).hexdigest()
 
 
 class SFTP(Store):
@@ -117,13 +112,13 @@ class SFTPDriver(StoreDriver):
                     key = pickle.load(f)
                 self.index[path.name] = key
                 if __debug__:
-                    assert key_hash(key) == path.name
+                    assert key_hash_str(key) == path.name
                     self.key_invariant(key)
 
         removed = set(self.index.keys()) - set(p.name for p in files)
-        for sha256 in removed:
-            key = self.index[sha256]
-            del self.index[sha256]
+        for b64 in removed:
+            key = self.index[b64]
+            del self.index[b64]
             self.key_invariant(key)
 
     def key_files(self):
@@ -134,20 +129,20 @@ class SFTPDriver(StoreDriver):
         )
 
     def key_invariant(self, key):
-        sha256 = key_hash(key)
+        b64 = key_hash_str(key)
         if self.__contains__(key):
-            assert not(sha256 in self.index) or self.index[sha256] == key
-            assert self.is_file(self.root / 'keys' / sha256)
-            assert self.is_file(self.root / 'values' / sha256)
+            assert not(b64 in self.index) or self.index[b64] == key
+            assert self.is_file(self.root / 'keys' / b64)
+            assert self.is_file(self.root / 'values' / b64)
         else:
             print(self.index)
-            assert sha256 not in self.index
-            assert not self.is_file(self.root / 'keys' / sha256)
-            assert not self.is_file(self.root / 'values' / sha256)
+            assert b64 not in self.index
+            assert not self.is_file(self.root / 'keys' / b64)
+            assert not self.is_file(self.root / 'values' / b64)
 
     def __contains__(self, key):
-        sha256 = key_hash(key)
-        return self.is_file(self.root / 'keys' / sha256)
+        b64 = key_hash_str(key)
+        return self.is_file(self.root / 'keys' / b64)
 
     def __delitem__(self, key):
         if __debug__:
@@ -155,11 +150,11 @@ class SFTPDriver(StoreDriver):
         if not self.__contains__(key):
             raise KeyError('KeyError: {}'.format(str(key)))
 
-        sha256 = key_hash(key)
-        self.sftp.remove(str(self.root / 'keys' / sha256))
-        self.sftp.remove(str(self.root / 'values' / sha256))
-        if sha256 in self.index:
-            del self.index[sha256]
+        b64 = key_hash_str(key)
+        self.sftp.remove(str(self.root / 'keys' / b64))
+        self.sftp.remove(str(self.root / 'values' / b64))
+        if b64 in self.index:
+            del self.index[b64]
 
     def __getitem__(self, key):
         if __debug__:
@@ -167,8 +162,8 @@ class SFTPDriver(StoreDriver):
         if not self.__contains__(key):
             raise KeyError('KeyError: {}'.format(str(key)))
 
-        sha256 = key_hash(key)
-        with self.sftp.open(str(self.root / 'values' / sha256), 'rb') as f:
+        b64 = key_hash_str(key)
+        with self.sftp.open(str(self.root / 'values' / b64), 'rb') as f:
             return pickle.load(f)
 
     def __iter__(self):
@@ -180,14 +175,14 @@ class SFTPDriver(StoreDriver):
         return len(self.index)
 
     def __setitem__(self, key, value):
-        sha256 = key_hash(key)
+        b64 = key_hash_str(key)
 
-        with self.sftp.open(str(self.root / 'keys' / sha256), 'wb') as kf, \
-             self.sftp.open(str(self.root / 'values' / sha256), 'wb') as vf:
+        with self.sftp.open(str(self.root / 'keys' / b64), 'wb') as kf, \
+             self.sftp.open(str(self.root / 'values' / b64), 'wb') as vf:
             pickle.dump(key, kf)
             pickle.dump(value, vf)
 
-        self.index[sha256] = key
+        self.index[b64] = key
 
         if __debug__:
             self.key_invariant(key)

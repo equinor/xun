@@ -19,6 +19,7 @@ from .function_image import FunctionImage
 from .util import assignment_target_introduced_names
 from .util import assignment_target_shape
 from .util import body_external_names
+from .util import draw_graph
 from .util import flatten_assignment_targets
 from .util import function_ast
 from .util import separate_constants_ast
@@ -362,9 +363,6 @@ def copy_only_constants(
 
 
 def unroll_unpacking_assignments(func: FunctionDecomposition):
-    from matplotlib import pyplot as plt
-    from networkx.drawing.nx_agraph import graphviz_layout
-    import astor
     import networkx as nx
 
     G = stmt_dag(func.copy_only_constants)
@@ -421,32 +419,15 @@ def unroll_unpacking_assignments(func: FunctionDecomposition):
             out_graph, filter_node=nx.filters.hide_nodes([node]))
         out_graph = nx.compose(H, G_)
 
-    # Relabel AST nodes to display the source code
-    # mapping = {
-    #     node: astor.to_source(node).rstrip()
-    #     for node in out_graph.nodes()
-    #     if isinstance(node, ast.AST)
-    # }
-    # out_graph = nx.relabel_nodes(out_graph, mapping)
-
-    # # Draw the graph
-    # pos = graphviz_layout(out_graph, prog='dot')
-    # edge_labels = nx.get_edge_attributes(out_graph, 'edge_type')
-    # nx.draw(out_graph, pos)
-    # nx.draw_networkx_edge_labels(out_graph, pos, edge_labels)
-    # nx.draw_networkx_labels(out_graph, pos)
-    # plt.show()
+    # draw_graph(out_graph)
 
     return func.update(unrolled_graph=out_graph)
 
 
 def graph_to_code(func: FunctionDecomposition):
     from copy import deepcopy
-    from matplotlib import pyplot as plt
-    from networkx.drawing.nx_agraph import graphviz_layout
-    import astor
     import networkx as nx
-    
+
     class DiscoverReferences(ast.NodeVisitor):
         def __init__(self):
             self.seen_targets = []
@@ -470,55 +451,40 @@ def graph_to_code(func: FunctionDecomposition):
             return node
     discovered_reference = DiscoverReferences()
 
-
     graph = func.unrolled_graph.reverse()
-    sink_nodes = list(discovered_reference.referenced_in_body)
 
-    # Draw the graph
-    # pos = graphviz_layout(graph, prog='dot')
-    # edge_labels = nx.get_edge_attributes(graph, 'edge_type')
-    # nx.draw(graph, pos)
-    # nx.draw_networkx_edge_labels(graph, pos, edge_labels)
-    # nx.draw_networkx_labels(graph, pos)
-    # plt.show()
+    # Remove sink nodes that are a dependency of another node
+    sink_nodes = list(
+        sink_node
+        for sink_node in discovered_reference.referenced_in_body
+        if graph.in_degree(sink_node) == 0
+    )
 
-    nodes_to_visit = deepcopy(sink_nodes)
-    visited_nodes = set(nodes_to_visit)
-
+    queue = deepcopy(sink_nodes)
+    visited_nodes = set(queue)
     paths = []
-
-    while len(nodes_to_visit) > 0:
+    while len(queue) > 0:
         path = []
-
-        sink_node = nodes_to_visit.pop(0)
-        print()
-        print(f'Sink node: {sink_node}')
+        sink_node = queue.pop(0)
         visited_nodes.add(sink_node)
         edges_from_sink_node = tuple(nx.edge_dfs(graph, sink_node))
-        # paths.append(edges_from_sink_node)
         for edge in edges_from_sink_node:
-            node = edge[1]
             edge_type = graph.get_edge_data(edge[0], edge[1])['edge_type']
             path.append((edge[0], edge[1], edge_type))
-            print(f'Node: {node}, Type: {edge_type}')
-            if isinstance(node, ast.AST):
-                dependencies = list(graph.successors(node))
+            if isinstance(edge[1], ast.AST):
+                dependencies = list(graph.successors(edge[1]))
                 for dep in dependencies:
-                    if dep not in visited_nodes and dep not in nodes_to_visit:
-                        nodes_to_visit.append(dep)
+                    if dep not in visited_nodes and dep not in queue:
+                        queue.append(dep)
                         visited_nodes.add(dep)
                 break
-        
         paths.append(path)
 
+    # Generate the code
     unrolled_stmts = []
-
-    print("\nGenerated code:")
     for path in paths:
         chunk = []
-        print()
         for edge in reversed(path):
-            print(edge)
             if isinstance(edge[1], ast.AST):
                 to_edge_ast = edge[1]
             elif isinstance(edge[1], str):
@@ -545,38 +511,20 @@ def graph_to_code(func: FunctionDecomposition):
             else:
                 raise TypeError(f'Unrecognized tag string {tag[0]}')
 
-
             stmt = ast.Assign(
                 targets=[ast.Name(id=edge[0], ctx=ast.Store())],
                 value=value,
             )
-
-            print(astor.to_source(stmt).rstrip())
-
             chunk.append(stmt)
         unrolled_stmts.append(chunk)
-    
-    unrolled_stmts = [stmt for stmt in chunk for chunk in unrolled_stmts[::-1]]
 
-    print(unrolled_stmts)
-    # unrolled_stmts = unrolled_stmts[::-1]
+    # Reverse the order and unpack each chunk of code
+    unrolled_stmts_finished = []
+    for chunk in unrolled_stmts[::-1]:
+        for stmt in chunk:
+            unrolled_stmts_finished.append(stmt)
 
-    return func.update(with_unrolled_unpacks=unrolled_stmts)
-
-# ast.Assign(
-#     targets=[ast.Name(id='b')],
-#     value=
-# )
-# stmt = ast.Assign(targets=[], value)
-# ast.Call(func=, args, keywords)
-
-# b = _xun_take_next(2, iter(<Tuple>))
-
-# _xun_node_0 = iter(<Tuple>)
-# _xun_node_1 = _xun_take_next(1, _xun_node_0)
-# _xun_node_2 = iter(_xun_node_1)
-# _xun_node_3 = _xun_take_next(1, _xun_node_2)
-# r_a = _xun_node_3
+    return func.update(with_unrolled_unpacks=unrolled_stmts_finished)
 
 
 def build_xun_graph(
@@ -762,6 +710,7 @@ def load_from_store(
                 ],
                 keywords=node.keywords,
             )
+
             return construct_call
 
     class CallNode2Load(NodeMapper):
@@ -808,6 +757,21 @@ def load_from_store(
             )
 
             return store_accessor_load_call
+    
+    def add_loading_from_store(name):
+        store_accessor_load_func = ast.Attribute(
+            value=ast.Name(id='_xun_store_accessor', ctx=ast.Load()),
+            attr='load_result',
+            ctx=ast.Load(),
+        )
+
+        store_accessor_load_call = ast.Call(
+            func=store_accessor_load_func,
+            args=[ast.Name(id=name.id, ctx=ast.Load())],
+            keywords=[],
+        )
+
+        return store_accessor_load_call
 
     # If No dependencies are referenced in the body of the function, there is
     # nothing to load
@@ -825,6 +789,27 @@ def load_from_store(
 
     output_targets = []
     loads = CallNode2Load(output_targets=output_targets).map(call_nodes)
+    # loads = [ast.Name(name.id, ctx=ast.Load()) for name in output_targets]
+    loads = [add_loading_from_store(name) for name in output_targets]
+
+    print_newline = ast.Expr(
+        value=ast.Call(
+            func=ast.Name(id='print', ctx=ast.Load()),
+            args=[],
+            keywords=[],
+        )
+    )
+
+    print_variables = [
+        ast.Expr(
+            value=ast.Call(
+                func=ast.Name(id='print', ctx=ast.Load()),
+                args=[ast.Name(id=name.id, ctx=ast.Load())],
+                keywords=[],
+            )
+        )
+        for name in output_targets
+    ]
 
     imports = [
         *[
@@ -886,8 +871,13 @@ def load_from_store(
                 type_comment=None,
             ),
             *call_nodes,
+            print_newline,
+            *print_variables,
             ast.Return(
-                value=ast.Tuple(elts=loads, ctx=ast.Load())
+                value=ast.Tuple(
+                    elts=loads,
+                    ctx=ast.Load(),
+                )
             )
         ],
         decorator_list=[],

@@ -823,6 +823,7 @@ def test_stmt_introduced_names():
         assert i == e, statement_type
 
 
+# @pytest.mark.skip
 def test_graph_generation():
     @xun.function()
     def f(arg):

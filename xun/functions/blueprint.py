@@ -144,6 +144,10 @@ def build_function_call_graph(functions, call):
         n for n in graph.nodes if isinstance(n, CallNode) and n != call
     )
 
+    print(f'Call: {call}')
+    print(f'Dependencies: {dependencies}')
+    print(f'graph.nodes: {graph.nodes}')
+    print()
     return graph, dependencies
 
 

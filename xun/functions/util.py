@@ -604,3 +604,25 @@ def take_next(n_times, iterable):
     for _ in range(n_times):
         result = next(iterable)
     return result
+
+
+def draw_graph(graph):
+    from matplotlib import pyplot as plt
+    from networkx.drawing.nx_agraph import graphviz_layout
+    import astor
+    
+    # Relabel AST nodes to display the source code
+    mapping = {
+        node: astor.to_source(node).rstrip()
+        for node in graph.nodes()
+        if isinstance(node, ast.AST)
+    }
+    draw = nx.relabel_nodes(graph, mapping)
+
+    # Draw the graph
+    pos = graphviz_layout(draw, prog='dot')
+    edge_labels = nx.get_edge_attributes(draw, 'edge_type')
+    nx.draw(draw, pos)
+    nx.draw_networkx_edge_labels(draw, pos, edge_labels)
+    nx.draw_networkx_labels(draw, pos)
+    plt.show()

@@ -19,12 +19,15 @@ from .function_image import FunctionImage
 from .util import assignment_target_introduced_names
 from .util import assignment_target_shape
 from .util import body_external_names
+from .util import draw_graph
 from .util import flatten_assignment_targets
 from .util import function_ast
 from .util import separate_constants_ast
 from .util import shape_to_ast_tuple
 from .util import sort_constants_ast
+from .util import stmt_dag
 from .util import stmt_introduced_names
+from .util import structure_from_shape
 from itertools import chain
 import copy
 import types
@@ -359,6 +362,171 @@ def copy_only_constants(
     return func.update(copy_only_constants=copy_only_constants)
 
 
+def unroll_unpacking_assignments(func: FunctionDecomposition):
+    import networkx as nx
+
+    G = stmt_dag(func.copy_only_constants)
+    out_graph = G.copy()
+    nx.set_edge_attributes(out_graph, 'preserved', 'edge_type')
+    counter_node = 0
+    for node in G.nodes():
+        if not isinstance(node, ast.Assign):
+            continue
+
+        if len(node.targets) > 1:
+            raise SyntaxError("Multiple targets not supported")
+
+        # Start a subgraph where all the predecessors of the assign points to
+        # the expression
+        H = nx.DiGraph()
+        expr_node = node.value
+        predecessors = list(G.predecessors(node))
+        H.add_edges_from(
+            [(predecessor, expr_node) for predecessor in predecessors],
+            edge_type='dependency'
+        )
+
+        target = node.targets[0]
+        target_shape = assignment_target_shape(target)
+        # If the target is a single variable, simply add an assign edge
+        if target_shape == (1,):
+            H.add_edge(expr_node, target.id, edge_type='assign')
+
+        # If the target is more than a single variable, add unpacking nodes
+        else:
+            list_of_indices = structure_from_shape(target_shape)
+            flatten_targets = flatten_assignment_targets(target)
+            for index, target_name in zip(list_of_indices, flatten_targets):
+                prev_node = expr_node
+                for depth in index:
+                    # Add iter function application
+                    iter_node = '_xun_node_' + str(counter_node)
+                    counter_node += 1
+                    H.add_edge(prev_node, iter_node, edge_type='iter()')
+
+                    # Add next function application
+                    next_node = '_xun_node_' + str(counter_node)
+                    counter_node += 1
+                    H.add_edge(
+                        iter_node, next_node, edge_type=f'next {depth+1}')
+
+                    prev_node = next_node
+
+                H.add_edge(prev_node, target_name.id, edge_type='assign')
+
+        # Remove the node from, and merge subgraph with, the orinal graph
+        G_ = nx.subgraph_view(
+            out_graph, filter_node=nx.filters.hide_nodes([node]))
+        out_graph = nx.compose(H, G_)
+
+    # draw_graph(out_graph)
+
+    return func.update(unrolled_graph=out_graph)
+
+
+def graph_to_code(func: FunctionDecomposition):
+    from copy import deepcopy
+    import networkx as nx
+
+    class DiscoverReferences(ast.NodeVisitor):
+        def __init__(self):
+            self.seen_targets = []
+
+            for node in func.copy_only_constants:
+                self.visit(node)
+
+            self.body_external_names = body_external_names(func.body)
+
+            self.referenced_in_body = frozenset(
+                t for t in self.seen_targets if t in self.body_external_names
+            )
+
+        def visit_Assign(self, node):
+            self.generic_visit(node)
+            target = node.targets[0]
+            self.seen_targets.extend(
+                assignment_target_introduced_names(target)
+                if isinstance(target, (ast.Tuple, ast.List)) else [target.id]
+            )
+            return node
+    discovered_reference = DiscoverReferences()
+
+    graph = func.unrolled_graph.reverse()
+
+    # Remove sink nodes that are a dependency of another node
+    sink_nodes = list(
+        sink_node
+        for sink_node in discovered_reference.referenced_in_body
+        if graph.in_degree(sink_node) == 0
+    )
+
+    queue = deepcopy(sink_nodes)
+    visited_nodes = set(queue)
+    paths = []
+    while len(queue) > 0:
+        path = []
+        sink_node = queue.pop(0)
+        visited_nodes.add(sink_node)
+        edges_from_sink_node = tuple(nx.edge_dfs(graph, sink_node))
+        for edge in edges_from_sink_node:
+            edge_type = graph.get_edge_data(edge[0], edge[1])['edge_type']
+            path.append((edge[0], edge[1], edge_type))
+            if isinstance(edge[1], ast.AST):
+                dependencies = list(graph.successors(edge[1]))
+                for dep in dependencies:
+                    if dep not in visited_nodes and dep not in queue:
+                        queue.append(dep)
+                        visited_nodes.add(dep)
+                break
+        paths.append(path)
+
+    # Generate the code
+    unrolled_stmts = []
+    for path in paths:
+        chunk = []
+        for edge in reversed(path):
+            if isinstance(edge[1], ast.AST):
+                to_edge_ast = edge[1]
+            elif isinstance(edge[1], str):
+                to_edge_ast = ast.Name(id=edge[1], ctx=ast.Load())
+            else:
+                raise TypeError(f'Invalid edge type {type(edge[1])}')
+
+            tag = edge[2].split()
+            if tag[0] == 'iter()':
+                value = ast.Call(
+                    func=ast.Name(id='iter', ctx=ast.Load()),
+                    args=[to_edge_ast],
+                    keywords=[],
+                )
+            elif tag[0] == 'next':
+                n_next = ast.Constant(value=int(tag[1]), kind=None)
+                value = ast.Call(
+                    func=ast.Name(id='_xun_take_next', ctx=ast.Load()),
+                    args=[n_next, to_edge_ast],
+                    keywords=[],
+                )
+            elif tag[0] == 'assign':
+                value = to_edge_ast
+            else:
+                raise TypeError(f'Unrecognized tag string {tag[0]}')
+
+            stmt = ast.Assign(
+                targets=[ast.Name(id=edge[0], ctx=ast.Store())],
+                value=value,
+            )
+            chunk.append(stmt)
+        unrolled_stmts.append(chunk)
+
+    # Reverse the order and unpack each chunk of code
+    unrolled_stmts_finished = []
+    for chunk in unrolled_stmts[::-1]:
+        for stmt in chunk:
+            unrolled_stmts_finished.append(stmt)
+
+    return func.update(with_unrolled_unpacks=unrolled_stmts_finished)
+
+
 def build_xun_graph(
         func: FunctionDecomposition,
         dependencies={},
@@ -445,14 +613,22 @@ def build_xun_graph(
         RegisterCallWrapper().visit(stmt)
         if isinstance(stmt, ast.Assign) or isinstance(stmt, ast.Expr)
         else stmt
-        for stmt in func.copy_only_constants
+        for stmt in func.with_unrolled_unpacks
     ]
 
-    resolved_body = unpack_unpacking_assignments(body)
-
     xun_graph = [
+        ast.ImportFrom(
+            module='xun.functions.util',
+            names=[
+                ast.alias(
+                    name='take_next',
+                    asname='_xun_take_next'
+                ),
+            ],
+            level=0
+        ),
         *header,
-        *resolved_body,
+        *body,
         return_graph
     ]
 
@@ -484,7 +660,7 @@ def load_from_store(
         def __init__(self):
             self.seen_targets = []
 
-            for node in func.copy_only_constants:
+            for node in func.with_unrolled_unpacks:
                 self.visit(node)
 
             self.body_external_names = body_external_names(func.body)
@@ -534,6 +710,7 @@ def load_from_store(
                 ],
                 keywords=node.keywords,
             )
+
             return construct_call
 
     class CallNode2Load(NodeMapper):
@@ -580,6 +757,21 @@ def load_from_store(
             )
 
             return store_accessor_load_call
+    
+    def add_loading_from_store(name):
+        store_accessor_load_func = ast.Attribute(
+            value=ast.Name(id='_xun_store_accessor', ctx=ast.Load()),
+            attr='load_result',
+            ctx=ast.Load(),
+        )
+
+        store_accessor_load_call = ast.Call(
+            func=store_accessor_load_func,
+            args=[ast.Name(id=name.id, ctx=ast.Load())],
+            keywords=[],
+        )
+
+        return store_accessor_load_call
 
     # If No dependencies are referenced in the body of the function, there is
     # nothing to load
@@ -588,20 +780,40 @@ def load_from_store(
 
     # Assigned values will be made available to the function body
     assignments = [
-        node for node in func.copy_only_constants
+        node for node in func.with_unrolled_unpacks
         if isinstance(node, ast.Assign)
     ]
 
     # Converts calls to xun functions to CallNodes
     call_nodes = Call2CallNode().map(assignments)
-    call_nodes = unpack_unpacking_assignments(call_nodes)
 
     output_targets = []
-    loads = CallNode2Load(output_targets=output_targets).map(assignments)
+    loads = CallNode2Load(output_targets=output_targets).map(call_nodes)
+    # loads = [ast.Name(name.id, ctx=ast.Load()) for name in output_targets]
+    loads = [add_loading_from_store(name) for name in output_targets]
+
+    print_newline = ast.Expr(
+        value=ast.Call(
+            func=ast.Name(id='print', ctx=ast.Load()),
+            args=[],
+            keywords=[],
+        )
+    )
+
+    print_variables = [
+        ast.Expr(
+            value=ast.Call(
+                func=ast.Name(id='print', ctx=ast.Load()),
+                args=[ast.Name(id=name.id, ctx=ast.Load())],
+                keywords=[],
+            )
+        )
+        for name in output_targets
+    ]
 
     imports = [
         *[
-            node for node in func.copy_only_constants
+            node for node in func.with_unrolled_unpacks
             if isinstance(node, (ast.Import, ast.ImportFrom))
         ],
         ast.ImportFrom(
@@ -620,6 +832,16 @@ def load_from_store(
                 ast.alias(
                     name='StoreAccessor',
                     asname='_xun_StoreAccessor'
+                ),
+            ],
+            level=0
+        ),
+        ast.ImportFrom(
+            module='xun.functions.util',
+            names=[
+                ast.alias(
+                    name='take_next',
+                    asname='_xun_take_next'
                 ),
             ],
             level=0
@@ -649,8 +871,13 @@ def load_from_store(
                 type_comment=None,
             ),
             *call_nodes,
+            print_newline,
+            *print_variables,
             ast.Return(
-                value=ast.Tuple(elts=loads, ctx=ast.Load())
+                value=ast.Tuple(
+                    elts=loads,
+                    ctx=ast.Load(),
+                )
             )
         ],
         decorator_list=[],

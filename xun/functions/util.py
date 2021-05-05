@@ -233,10 +233,12 @@ def assignment_target_shape(target):
     >>> assignment_target_shape(ast_target)
     (1, (2,))
     """
+    if isinstance(target, (ast.Name, ast.Attribute, ast.Subscript)):
+        return (1, )
     target_shape = ()
     count_names = 0
     for el in target.elts:
-        if isinstance(el, ast.Name):
+        if isinstance(el, (ast.Name, ast.Attribute, ast.Subscript)):
             count_names += 1
         else:
             if count_names > 0:
@@ -569,3 +571,58 @@ def has_mutating_assignments(node):
             return True
         scope.update(names)
     return False
+
+
+#
+# These should probably be be moved up eventually
+#
+
+def structure_from_shape(shape, _structure=()):
+    idx = 0
+    output = ()
+    for element in shape:
+        if isinstance(element, int):
+            for _ in range(element):
+                structure = _structure + (idx,)
+                output += (structure,)
+                idx += 1
+        elif isinstance(element, (tuple, list)):
+            structure = _structure + (idx,)
+            idx += 1
+            output += structure_from_shape(shape=element, _structure=structure)
+        elif isinstance(element, type(Ellipsis)):
+            structure = _structure + (idx,)
+            output += (structure,)
+            idx += 1
+        else:
+            raise TypeError("Invalid content in shape tuple")
+    return output
+
+
+def take_next(n_times, iterable):
+    result = None
+    for _ in range(n_times):
+        result = next(iterable)
+    return result
+
+
+def draw_graph(graph):
+    from matplotlib import pyplot as plt
+    from networkx.drawing.nx_agraph import graphviz_layout
+    import astor
+    
+    # Relabel AST nodes to display the source code
+    mapping = {
+        node: astor.to_source(node).rstrip()
+        for node in graph.nodes()
+        if isinstance(node, ast.AST)
+    }
+    draw = nx.relabel_nodes(graph, mapping)
+
+    # Draw the graph
+    pos = graphviz_layout(draw, prog='dot')
+    edge_labels = nx.get_edge_attributes(draw, 'edge_type')
+    nx.draw(draw, pos)
+    nx.draw_networkx_edge_labels(draw, pos, edge_labels)
+    nx.draw_networkx_labels(draw, pos)
+    plt.show()

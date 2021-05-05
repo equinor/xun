@@ -37,8 +37,22 @@ class StoreAccessor:
             return self
 
     def load_result(self, call):
+        print()
+        print(call)
+        if not isinstance(call, CallNode):
+            # raise TypeError("Not CallNode")
+            print("Not a CallNode")
+            return call
         namespace = self.store / 'results' / call
-        return namespace[call.function_hash]
+        print(namespace)
+        res_stmt = iter(namespace[call.function_hash])
+        for subscript in call.subscript:
+            for _ in range(subscript):
+                next(res_stmt)
+            res_stmt = iter(next(res_stmt))
+        res_stmt = next(res_stmt)
+        print('Done loading result from store:', res_stmt)
+        return res_stmt
 
     def store_result(self, call, result):
         namespace = self.store / 'results' / call
@@ -70,12 +84,14 @@ class StoreAccessor:
             If the argument is a Callnode, the result must be loaded from the
             store, unless it is already loaded in the cache.
             """
+            print(f'load_arg_value({arg})')
             if isinstance(arg, CallNode):
                 if len(arg.subscript) == 0:
                     return cache.setdefault(arg, self.load_result(arg))
                 # In case subscript is specified, find the value at the correct
                 # subscript by iterating thgough the result
                 result = iter(cache.setdefault(arg, self.load_result(arg)))
+                print(f'Result: {result}')
                 for subscript in arg.subscript:
                     for _ in range(subscript):
                         next(result)
@@ -92,4 +108,5 @@ class StoreAccessor:
             key: load_arg_value(arg)
             for key, arg in call.kwargs.items()
         }
+        print(args, kwargs)
         return args, kwargs

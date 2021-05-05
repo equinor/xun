@@ -32,7 +32,6 @@ if __name__ == '__main__':
             'xun.functions.store',
             'xun.init',
             'xun.sima',
-            'xun.zephyre',
         ],
         platforms = 'any',
         include_package_data=True,

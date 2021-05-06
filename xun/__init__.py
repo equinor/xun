@@ -23,6 +23,3 @@ from .functions import NotDAGError
 from .functions import XunSyntaxError
 from .init import init_notebook
 from .memoized import memoized
-
-
-from . import sima

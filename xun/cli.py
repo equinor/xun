@@ -19,11 +19,7 @@ import sys
 
 
 from . import functions
-from . import sima
 from . import init
-from .cli_helpers import schema_action
-from .cli_helpers import valid_date
-from .cli_helpers import struct_fmt
 
 
 def main(args=None):
@@ -38,24 +34,6 @@ def main(args=None):
 
 parser = argparse.ArgumentParser(description=None)
 subparsers = parser.add_subparsers()
-
-
-#
-# Sima result export command
-#
-parser_export = subparsers.add_parser('sima-export')
-parser_export.set_defaults(func=sima.export.main)
-parser_export.add_argument('format',
-                            help='python struct based format',
-                            type=struct_fmt)
-parser_export.add_argument('bin_input')
-parser_export.add_argument('-o',
-                            '--output',
-                            default=None)
-parser_export.add_argument('-s', '--out-schema',
-                           action=schema_action(
-                               lambda args: sima.export.schema(args.format)
-                           ))
 
 
 #

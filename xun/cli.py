@@ -22,7 +22,6 @@ from . import functions
 from . import sima
 from . import init
 from .cli_helpers import schema_action
-from .cli_helpers import valid_date
 from .cli_helpers import struct_fmt
 
 

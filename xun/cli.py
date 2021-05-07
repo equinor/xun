@@ -19,12 +19,7 @@ import sys
 
 
 from . import functions
-from . import sima
-from . import zephyre
 from . import init
-from .cli_helpers import schema_action
-from .cli_helpers import valid_date
-from .cli_helpers import struct_fmt
 
 
 def main(args=None):
@@ -39,50 +34,6 @@ def main(args=None):
 
 parser = argparse.ArgumentParser(description=None)
 subparsers = parser.add_subparsers()
-
-
-#
-# zephyre command
-#
-parser_zephyre = subparsers.add_parser('zephyre')
-parser_zephyre.set_defaults(func=zephyre.main)
-parser_zephyre.add_argument('measurement_name',
-                            help='Name of the measurement to download')
-parser_zephyre.add_argument('start_time',
-                            help='The start date in format YYYY-MM-DD or '
-                                 'YYYY-MM-DDTHH:mm:ss',
-                            type=valid_date)
-parser_zephyre.add_argument('end_time',
-                            help='The end date in format YYYY-MM-DD or '
-                                 'YYYY-MM-DDTHH:mm:ss or '
-                                 'YYYY-MM-DDTHH:mm:ss.ffffff',
-                            type=valid_date)
-parser_zephyre.add_argument('-o',
-                            '--output',
-                            default=None)
-parser_zephyre.add_argument('-s', '--out-schema',
-                            # help='Print the schema of the output file',
-                            action=schema_action(
-                                lambda _: zephyre.schema()
-                            ))
-
-
-#
-# Sima result export command
-#
-parser_export = subparsers.add_parser('sima-export')
-parser_export.set_defaults(func=sima.export.main)
-parser_export.add_argument('format',
-                            help='python struct based format',
-                            type=struct_fmt)
-parser_export.add_argument('bin_input')
-parser_export.add_argument('-o',
-                            '--output',
-                            default=None)
-parser_export.add_argument('-s', '--out-schema',
-                           action=schema_action(
-                               lambda args: sima.export.schema(args.format)
-                           ))
 
 
 #

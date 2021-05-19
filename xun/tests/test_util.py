@@ -9,7 +9,6 @@ from xun.functions.compatibility import ast
 from xun.functions.util import assignment_target_introduced_names
 from xun.functions.util import assignment_target_shape
 from xun.functions.util import func_external_names
-from xun.functions.util import get
 from xun.functions.util import overwrite_scope
 from xun.functions.util import shape_to_ast_tuple
 from xun.functions.util import strip_decorators
@@ -257,20 +256,20 @@ def test_structure_from_shape():
         (2,),
     )
 
-    assert structure_from_shape((3, Ellipsis, 1)) == (
+    assert structure_from_shape((3, Ellipsis, (2,), 1)) == (
         (0,),
         (1,),
         (2,),
-        (3,),
-        (4,),
+        (slice(3, -3),),
+        (-2, 0),
+        (-2, 1),
+        (-1,),
     )
 
-def test_get():
-    iterator = iter(('a', 'b', 'c'))
-    assert get(0, iterator) == 'a'
-
-    iterator = iter(('a', 'b', 'c'))
-    assert get(1, iterator) == 'b'
-
-    iterator = iter(('a', 'b', 'c'))
-    assert get(2, iterator) == 'c'
+    assert structure_from_shape((1, (2, Ellipsis), 1)) == (
+        (0,),
+        (1, 0),
+        (1, 1),
+        (1, slice(2, -1)),
+        (2,),
+    )

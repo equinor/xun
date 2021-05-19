@@ -19,14 +19,12 @@ from .function_image import FunctionImage
 from .util import assignment_target_introduced_names
 from .util import assignment_target_shape
 from .util import body_external_names
-from .util import draw_graph
 from .util import flatten_assignment_targets
 from .util import function_ast
 from .util import separate_constants_ast
-from .util import shape_to_ast_tuple
 from .util import sort_constants_ast
-from .util import stmt_introduced_names
 from .util import structure_from_shape
+from .util import subscript_node_with_constant
 from itertools import chain
 import copy
 import types
@@ -343,17 +341,24 @@ def unroll_to_separate_names(func: FunctionDecomposition):
             for index, target in zip(indices, flatten_targets):
                 unrolled_value = stmt.value
                 for i in index:
-                    unrolled_value = ast.Call(
-                        func=ast.Name(id='_xun_get', ctx=ast.Load()),
-                        args=[
-                            ast.Constant(value=i, kind=None),
-                            ast.Call(
-                                func=ast.Name(id='iter', ctx=ast.Load()),
-                                args=[unrolled_value],
-                                keywords=[],
-                            )
-                        ],
-                        keywords=[],
+                    if isinstance(i, int):
+                        s = ast.Index(value=ast.Constant(value=i, kind=None))
+                    elif isinstance(i, slice):
+                        lower = i.start
+                        upper = i.stop + 1 if i.stop < -1 else None
+
+                        s = ast.Slice(
+                            lower=ast.Constant(value=lower, kind=None),
+                            upper=ast.Constant(value=upper, kind=None),
+                            step=None,
+                        )
+                    else:
+                        raise TypeError('Invalid content in structure')
+
+                    unrolled_value = ast.Subscript(
+                        value=unrolled_value,
+                        slice=s,
+                        ctx=ast.Load()
                     )
 
                 unrolled_stmts.append(
@@ -368,36 +373,259 @@ def unroll_to_separate_names(func: FunctionDecomposition):
     return func.update(unrolled_stmts=unrolled_stmts)
 
 
-def map_expressions(func: FunctionDecomposition):
-    """Map expressions
-
-    Map all expressions on the right hand side to the corresponding variable on
-    the left hand using a dictionary. Also replace names in expressions with
-    its corresponding expression.
+def loaded_and_symbolic(func: FunctionDecomposition, dependencies={}):
     """
+    Transform every new variable into a loaded and a symbolic version
+    """
+    def is_xun_call(node):
+        return (
+            isinstance(node, ast.Call) and
+            isinstance(node.func, ast.Name) and
+            node.func.id in dependencies
+        )
 
-    class ReplaceSymbolicValues(ast.NodeTransformer):
-        def __init__(self, unrolled_exprs_dict):
-            self.unrolled_exprs_dict = unrolled_exprs_dict
+    def is_xun_callnode(node):
+        return (
+            isinstance(node, ast.Call) and
+            isinstance(node.func, ast.Name) and
+            node.func.id == '_xun_CallNode'
+        )
 
-        def visit_Name(self, node):
-            if node.id in self.unrolled_exprs_dict:
-                return self.unrolled_exprs_dict[node.id]
+    class Call2CallNode(ast.NodeTransformer):
+        def __init__(self, known_targets):
+            self.known_targets = known_targets
+
+        def visit_Call(self, node):
+            node = self.generic_visit(node)
+
+            if not is_xun_call(node):
+                return node
+
+            construct_call = ast.Call(
+                func=ast.Name(id='_xun_CallNode', ctx=ast.Load()),
+                args=[
+                    ast.Constant(node.func.id, kind=None),
+                    ast.Constant(dependencies[node.func.id].hash, kind=None),
+                    *[
+                        subscript_node_with_constant(arg, 'sym')
+                        if isinstance(arg, ast.Name)
+                        and arg.id in self.known_targets else arg
+                        for arg in node.args
+                    ]
+                ],
+                keywords=node.keywords,
+            )
+
+            return construct_call
+
+        def visit_Assign(self, node):
+            target = node.targets[0]
+            if isinstance(target, ast.Name):
+                self.known_targets.append(node.targets[0].id)
+            else:
+                raise TypeError(
+                    'Target should be a single variable at this point'
+                )
             return self.generic_visit(node)
 
-    unrolled_exprs_dict = {}
+    class PrefixNames(ast.NodeTransformer):
+        def __init__(self, prefix):
+            self.prefix = prefix
+
+        def visit_Name(self, node):
+            return ast.Name(id=self.prefix+node.id, ctx=ast.Store())
+
+    def prefix_target(target):
+        return ast.Tuple(
+            elts=[
+                PrefixNames('_xun_sym_').visit(copy.deepcopy(target)),
+                PrefixNames('_xun_load_').visit(copy.deepcopy(target)),
+            ],
+            ctx=target.ctx,
+        )
+
+    def zip_iterator_subscripted(iterator):
+        return ast.Call(
+            func=ast.Name(id='zip', ctx=ast.Load()),
+            args=[
+                subscript_node_with_constant(
+                    node=ast.Name(id=iterator.id, ctx=ast.Load()),
+                    constant='sym',
+                ),
+                ast.Call(
+                    func=subscript_node_with_constant(
+                        node=ast.Name(id=iterator.id, ctx=ast.Load()),
+                        constant='load',
+                    ),
+                    args=[],
+                    keywords=[],
+                ),
+            ],
+            keywords=[],
+        )
+
+    def zip_iterator_prefixed(iterator):
+        return ast.Call(
+            func=ast.Name(id='zip', ctx=ast.Load()),
+            args=[
+                ast.Name(id='_xun_sym_'+iterator.id, ctx=ast.Load()),
+                ast.Call(
+                    func=ast.Name(id='_xun_load_'+iterator.id, ctx=ast.Load()),
+                    args=[],
+                    keywords=[],
+                ),
+            ],
+            keywords=[],
+        )
+
+    def transform_list_comp(node):
+        t_generators = []
+        local_known_targets = set()
+        for generator in node.generators:
+            if isinstance(generator.iter, ast.Name):
+                if generator.iter.id in known_targets:
+                    local_known_targets |= assignment_target_introduced_names(
+                        generator.target)
+                    t_iter = zip_iterator_subscripted(generator.iter)
+                elif generator.iter.id in local_known_targets:
+                    t_iter = zip_iterator_prefixed(generator.iter)
+                else:
+                    t_iter = generator.iter
+                t_target = prefix_target(generator.target)
+                t_generators.append(
+                    ast.comprehension(
+                        target=t_target,
+                        iter=t_iter,
+                        ifs=generator.ifs,
+                        is_async=generator.is_async,
+                    ))
+            else:
+                t_generators.append(generator)
+        return t_generators, local_known_targets
+
+    class Name2LocalSym(ast.NodeTransformer):
+        def __init__(self, local_known_targets):
+            self.local_known_targets = local_known_targets
+
+        def visit_Name(self, node):
+            if node.id in self.local_known_targets:
+                return ast.Name(id='_xun_sym_'+node.id, ctx=node.ctx)
+            return self.generic_visit(node)
+
+    class Name2LocalLoad(ast.NodeTransformer):
+        def __init__(self, local_known_targets):
+            self.local_known_targets = local_known_targets
+
+        def visit_Call(self, node):
+            if is_xun_callnode(node):
+                store_accessor_load_func = ast.Attribute(
+                    value=ast.Name(id='_xun_store_accessor', ctx=ast.Load()),
+                    attr='load_result',
+                    ctx=ast.Load(),
+                )
+
+                store_accessor_load_call = ast.Call(
+                    func=store_accessor_load_func,
+                    args=[
+                        Name2LocalSym(
+                            local_known_targets=self.local_known_targets
+                        ).visit(copy.deepcopy(node))
+                    ],
+                    keywords=[],
+                )
+                return store_accessor_load_call
+
+            return self.generic_visit(node)
+
+        def visit_Name(self, node):
+            if node.id in self.local_known_targets:
+                return ast.Name(id='_xun_load_'+node.id, ctx=node.ctx)
+            return self.generic_visit(node)
+
+    class Value2Sym(ast.NodeTransformer):
+        def visit_Call(self, node):
+            return node if is_xun_callnode(node) else self.generic_visit(node)
+
+        def visit_ListComp(self, node):
+            t_generators, local_known_targets = transform_list_comp(node)
+            t_elt = Name2LocalSym(
+                local_known_targets=local_known_targets).visit(
+                    copy.deepcopy(node.elt))
+            return ast.ListComp(elt=t_elt, generators=t_generators)
+
+        def visit_Name(self, node):
+            if node.id in known_targets:
+                return subscript_node_with_constant(node, 'sym')
+            return self.generic_visit(node)
+
+    class Value2Load(ast.NodeTransformer):
+        def visit_Call(self, node):
+            if is_xun_callnode(node):
+                store_accessor_load_func = ast.Attribute(
+                    value=ast.Name(id='_xun_store_accessor', ctx=ast.Load()),
+                    attr='load_result',
+                    ctx=ast.Load(),
+                )
+
+                store_accessor_load_call = ast.Call(
+                    func=store_accessor_load_func,
+                    args=[node],
+                    keywords=[],
+                )
+                return store_accessor_load_call
+
+            return self.generic_visit(node)
+
+        def visit_ListComp(self, node):
+            t_generators, local_known_targets = transform_list_comp(node)
+            t_elt = Name2LocalLoad(
+                local_known_targets=local_known_targets).visit(
+                    copy.deepcopy(node.elt))
+            return ast.ListComp(elt=t_elt, generators=t_generators)
+
+        def visit_Name(self, node):
+            if node.id in known_targets:
+                return ast.Call(
+                    func=subscript_node_with_constant(node, 'load'),
+                    args=[],
+                    keywords=[],
+                )
+            return self.generic_visit(node)
+
+    dual_stmts = []
+    known_targets = []
     for stmt in func.unrolled_stmts:
+        stmt = Call2CallNode(known_targets=known_targets).visit(
+            copy.deepcopy(stmt))
         if isinstance(stmt, ast.Assign):
-            target = stmt.targets[0]
-            value = stmt.value
-            unrolled_exprs_dict[target.id] = ReplaceSymbolicValues(
-                unrolled_exprs_dict).visit(value)
+            symbolic_value = Value2Sym().visit(copy.deepcopy(stmt.value))
+            loaded_value = ast.Lambda(
+                args=ast.arguments(
+                    posonlyargs=[],
+                    args=[],
+                    vararg=None,
+                    kwonlyargs=[],
+                    kw_defaults=[],
+                    kwarg=None,
+                    defaults=[],
+                ),
+                body=Value2Load().visit(copy.deepcopy(stmt.value)),
+            )
+            dual_stmts.append(
+                ast.Assign(
+                    targets=stmt.targets,
+                    value=ast.Dict(
+                        keys=[
+                            ast.Constant(value='sym', kind=None),
+                            ast.Constant(value='load', kind=None),
+                        ],
+                        values=[symbolic_value, loaded_value]
+                    ),
+                    type_comment=None,
+                )
+            )
 
-    # import astor
-    # for key, value in unrolled_exprs_dict.items():
-    #     print(key, ':', astor.to_source(value).rstrip())
-
-    return func.update(unrolled_exprs_dict=unrolled_exprs_dict)
+    return func.update(dual_stmts=dual_stmts)
 
 
 def build_xun_graph(
@@ -490,16 +718,6 @@ def build_xun_graph(
     ]
 
     xun_graph = [
-        ast.ImportFrom(
-            module='xun.functions.util',
-            names=[
-                ast.alias(
-                    name='get',
-                    asname='_xun_get'
-                ),
-            ],
-            level=0
-        ),
         *header,
         *body,
         return_graph
@@ -555,84 +773,29 @@ def load_from_store(
     def is_referenced_in_body(name):
         return name in discovered_reference.referenced_in_body
 
-    def is_xun_call(node):
-        return (
-            isinstance(node, ast.Call) and
-            isinstance(node.func, ast.Name) and
-            node.func.id in dependencies
-        )
-
-    def is_xun_callnode(node):
-        return (
-            isinstance(node, ast.Call) and
-            isinstance(node.func, ast.Name) and
-            node.func.id == '_xun_CallNode'
-        )
-
-    def is_xun_store_accessor_attribute(node):
-        return (
-            isinstance(node, ast.Attribute) and
-            isinstance(node.value, ast.Name) and
-            node.value.id == '_xun_store_accessor'
-        )
-
-    class Call2CallNode(ast.NodeTransformer):
-        def visit_Call(self, node):
-            node = self.generic_visit(node)
-
-            if not is_xun_call(node):
-                return node
-
-            construct_call = ast.Call(
-                func=ast.Name(id='_xun_CallNode', ctx=ast.Load()),
-                args=[
-                    ast.Constant(node.func.id, kind=None),
-                    ast.Constant(dependencies[node.func.id].hash, kind=None),
-                    *node.args
-                ],
-                keywords=node.keywords,
-            )
-
-            return construct_call
-
-
-    class CallNode2Load(ast.NodeTransformer):
-        def visit_Call(self, node):
-            if is_xun_callnode(node):
-                store_accessor_load_func = ast.Attribute(
-                    value=ast.Name(id='_xun_store_accessor', ctx=ast.Load()),
-                    attr='load_result',
-                    ctx=ast.Load(),
-                )
-
-                store_accessor_load_call = ast.Call(
-                    func=store_accessor_load_func,
-                    args=[node],
-                    keywords=[],
-                )
-                return store_accessor_load_call
-
-            if is_xun_store_accessor_attribute(node.func):
-                # Avoid loading multiple times
-                return node
-
-            return self.generic_visit(node)
-
-
     # If No dependencies are referenced in the body of the function, there is
     # nothing to load
     if len(discovered_reference.referenced_in_body) == 0:
         return func.update(load_from_store=[])
 
-    output_targets = []
     loads = []
-    for target, value in func.unrolled_exprs_dict.items():
-        if is_referenced_in_body(target):
-            output_targets.append(ast.Name(id=target, ctx=ast.Store()))
+    output_targets = []
+    for stmt in func.dual_stmts:
+        if isinstance(stmt, ast.Assign):
+            target = stmt.targets[0]
+            if is_referenced_in_body(target.id):
+                output_targets.append(target)
 
-            call_nodes = Call2CallNode().visit(copy.deepcopy(value))
-            load = CallNode2Load().visit(call_nodes)
-            loads.append(load)
+                loads.append(
+                    ast.Call(
+                        func=subscript_node_with_constant(
+                            node=ast.Name(id=target.id, ctx=ast.Load()),
+                            constant='load',
+                        ),
+                        args=[],
+                        keywords=[],
+                    )
+                )
 
     imports = [
         *[
@@ -655,16 +818,6 @@ def load_from_store(
                 ast.alias(
                     name='StoreAccessor',
                     asname='_xun_StoreAccessor'
-                ),
-            ],
-            level=0
-        ),
-        ast.ImportFrom(
-            module='xun.functions.util',
-            names=[
-                ast.alias(
-                    name='get',
-                    asname='_xun_get'
                 ),
             ],
             level=0
@@ -693,6 +846,7 @@ def load_from_store(
                 ),
                 type_comment=None,
             ),
+            *func.dual_stmts,
             ast.Return(
                 value=ast.Tuple(elts=loads,ctx=ast.Load())
             )

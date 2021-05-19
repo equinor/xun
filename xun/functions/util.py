@@ -492,6 +492,18 @@ def func_arg_names(fdef):
     return frozenset(args)
 
 
+def subscript_node_with_constant(node, constant):
+    """Subscript node with constant
+
+    Subscript the node with a constant value in a load context
+    """
+    return ast.Subscript(
+        value=node,
+        slice=ast.Index(value=ast.Constant(value=constant, kind=None)),
+        ctx=ast.Load()
+    )
+
+
 #
 # AST Predicates and Checks
 #
@@ -629,19 +641,36 @@ def structure_from_shape(shape, _structure=()):
             idx += 1
             output += structure_from_shape(shape=element, _structure=structure)
         elif isinstance(element, type(Ellipsis)):
-            structure = _structure + (idx,)
+            ellipsis_start_idx = idx
+
+            reversed_shape = shape[::-1]
+            reversed_idx = -1
+            reversed_output = ()
+            for reversed_element in reversed_shape:
+                if isinstance(reversed_element, int):
+                    for _ in range(reversed_element):
+                        structure = _structure + (reversed_idx,)
+                        reversed_output += (structure,)
+                        reversed_idx -= 1
+                elif isinstance(reversed_element, (tuple, list)):
+                    structure = _structure + (reversed_idx,)
+                    reversed_idx -= 1
+                    reversed_output += structure_from_shape(
+                        shape=reversed_element, _structure=structure
+                    )[::-1]
+                elif isinstance(reversed_element, type(Ellipsis)):
+                    ellipsis_end_idx = reversed_idx
+                    break
+
+            ellipsis_idx =  slice(ellipsis_start_idx, ellipsis_end_idx)
+
+            structure = _structure + (ellipsis_idx,)
             output += (structure,)
-            idx += 1
+            output += reversed_output[::-1]
+            break
         else:
             raise TypeError("Invalid content in shape tuple")
     return output
-
-
-def get(index, iterable):
-    result = None
-    for _ in range(index+1):
-        result = next(iterable)
-    return result
 
 
 def draw_graph(graph):

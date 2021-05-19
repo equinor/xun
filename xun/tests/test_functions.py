@@ -864,3 +864,31 @@ def test_unpacking_to_intermediate():
     result = run_in_process(h.blueprint())
 
     assert result == 'abcd'
+
+
+def test_unpacking_list_comp():
+    @xun.function()
+    def double(arg):
+        return arg*2
+
+    @xun.function()
+    def triple(arg):
+        return arg*3
+
+    @xun.function()
+    def h(n_values):
+        return [(i, d, t, td) for i, d, t, td in result]
+        with ...:
+            value_pairs = [(i, double(i)) for i in range(n_values)]
+            result = [(s, d, triple(s), triple(d)) for s, d in value_pairs]
+
+    print(h.code.graph_str)
+    print(h.code.task_str)
+
+    n = 4
+    blueprint = h.blueprint(n)
+    expected = [(i, 2*i, 3*i, 3*2*i) for i in range(n)]
+
+    result = run_in_process(blueprint)
+
+    assert result == expected

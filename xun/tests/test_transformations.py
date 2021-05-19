@@ -128,13 +128,29 @@ def test_load_from_store_transformation():
             from xun.functions import CallNode as _xun_CallNode
             from xun.functions.store import StoreAccessor as _xun_StoreAccessor
             _xun_store_accessor = _xun_StoreAccessor(_xun_store)
-            a = _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')
-            b = _xun_CallNode('f', 'K9ZuxDD5x6atLkNd', a)
-            c = _xun_CallNode('f', 'K9ZuxDD5x6atLkNd', b)
-            return (
-                _xun_store_accessor.load_result(_xun_CallNode('f', 'K9ZuxDD5x6atLkNd')),
-                _xun_store_accessor.load_result(_xun_CallNode('f', 'K9ZuxDD5x6atLkNd', b)),
-            )
+            a = {
+                'sym':
+                _xun_CallNode('f', 'K9ZuxDD5x6atLkNd'),
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('f', 'K9ZuxDD5x6atLkNd'))
+            }
+            b = {
+                'sym':
+                _xun_CallNode('f', 'K9ZuxDD5x6atLkNd', a['sym']),
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('f', 'K9ZuxDD5x6atLkNd', a['sym']))
+            }
+            c = {
+                'sym':
+                _xun_CallNode('f', 'K9ZuxDD5x6atLkNd', b['sym']),
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('f', 'K9ZuxDD5x6atLkNd', b['sym']))
+            }
+            return a['load'](), c['load']()
+
         a, c = _xun_load_constants()
         value = a + c
         return value
@@ -150,7 +166,7 @@ def test_load_from_store_transformation():
         .apply(xun.functions.sort_constants)
         .apply(xun.functions.copy_only_constants, known_functions)
         .apply(xun.functions.unroll_to_separate_names)
-        .apply(xun.functions.map_expressions)
+        .apply(xun.functions.loaded_and_symbolic, known_functions)
         .apply(xun.functions.load_from_store, known_functions))
 
     generated = [*code.load_from_store, *code.body]
@@ -183,7 +199,7 @@ def test_load_from_store_skip_if_unecessary():
         .apply(xun.functions.sort_constants)
         .apply(xun.functions.copy_only_constants, known_functions)
         .apply(xun.functions.unroll_to_separate_names)
-        .apply(xun.functions.map_expressions)
+        .apply(xun.functions.loaded_and_symbolic, known_functions)
         .apply(xun.functions.load_from_store, known_functions))
 
     generated = [*code.load_from_store, *code.body]
@@ -290,7 +306,7 @@ def test_structured_unpacking_transformation():
         .apply(xun.functions.sort_constants)
         .apply(xun.functions.copy_only_constants, known_functions)
         .apply(xun.functions.unroll_to_separate_names)
-        .apply(xun.functions.map_expressions)
+        .apply(xun.functions.loaded_and_symbolic, known_functions)
         .apply(xun.functions.load_from_store, known_functions))
 
     @xun.function_ast
@@ -300,14 +316,83 @@ def test_structured_unpacking_transformation():
             from xun.functions import CallNode as _xun_CallNode
             from xun.functions.store import StoreAccessor as _xun_StoreAccessor
             _xun_store_accessor = _xun_StoreAccessor(_xun_store)
-            a, b, ((x, y, z), (𝛂, β)), c, d = _xun_CallNode('f', 'K9ZuxDD5x6atLkNd').unpack(
-                (2, ((3,), (2,)), 2))
-            something = _xun_CallNode('h', 'K9ZuxDD5x6atLkNd', x, y, z)
-            return (
-                _xun_store_accessor.load_result(_xun_CallNode('f', 'K9ZuxDD5x6atLkNd')),
-                _xun_store_accessor.load_result(_xun_CallNode('h', 'K9ZuxDD5x6atLkNd', x, y, z)),
-            )
-        (a, b, ((x, y, z), (𝛂, β)), c, d), something = _xun_load_constants()
+            a = {
+                'sym':
+                _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')[0],
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('f', 'K9ZuxDD5x6atLkNd'))[0]
+            }
+            b = {
+                'sym':
+                _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')[1],
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('f', 'K9ZuxDD5x6atLkNd'))[1]
+            }
+            x = {
+                'sym':
+                _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')[2][0][0],
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('f', 'K9ZuxDD5x6atLkNd'))[2][0][0]
+            }
+            y = {
+                'sym':
+                _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')[2][0][1],
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('f', 'K9ZuxDD5x6atLkNd'))[2][0][1]
+            }
+            z = {
+                'sym':
+                _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')[2][0][2],
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('f', 'K9ZuxDD5x6atLkNd'))[2][0][2]
+            }
+            𝛂 = {
+                'sym':
+                _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')[2][1][0],
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('f', 'K9ZuxDD5x6atLkNd'))[2][1][0]
+            }
+            β = {
+                'sym':
+                _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')[2][1][1],
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('f', 'K9ZuxDD5x6atLkNd'))[2][1][1]
+            }
+            c = {
+                'sym':
+                _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')[3],
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('f', 'K9ZuxDD5x6atLkNd'))[3]
+            }
+            d = {
+                'sym':
+                _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')[4],
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('f', 'K9ZuxDD5x6atLkNd'))[4]
+            }
+            something = {
+                'sym':
+                _xun_CallNode('h', 'K9ZuxDD5x6atLkNd', x['sym'], y['sym'],
+                              z['sym']),
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('h', 'K9ZuxDD5x6atLkNd', x['sym'], y['sym'],
+                                  z['sym']))
+            }
+            return a['load'](), b['load'](), x['load'](), y['load'](
+            ), z['load'](), α['load'](), β['load'](), c['load'](), d['load'](
+            ), something['load']()
+
+        a, b, x, y, z, 𝛂, β, c, d, something = _xun_load_constants()
         return a * b * x * y * z * 𝛂 * β * c * d + something
 
     generated = [*code.load_from_store, *code.body]
@@ -338,7 +423,7 @@ def test_unreferenced_names_are_not_loaded():
         .apply(xun.functions.sort_constants)
         .apply(xun.functions.copy_only_constants, known_functions)
         .apply(xun.functions.unroll_to_separate_names)
-        .apply(xun.functions.map_expressions)
+        .apply(xun.functions.loaded_and_symbolic, known_functions)
         .apply(xun.functions.load_from_store, known_functions))
 
     @xun.function_ast
@@ -348,12 +433,30 @@ def test_unreferenced_names_are_not_loaded():
             from xun.functions import CallNode as _xun_CallNode
             from xun.functions.store import StoreAccessor as _xun_StoreAccessor
             _xun_store_accessor = _xun_StoreAccessor(_xun_store)
-            a = _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')
-            b = _xun_CallNode('h', 'K9ZuxDD5x6atLkNd', a)
-            c = _xun_CallNode('g', 'K9ZuxDD5x6atLkNd', b)
-            return (_xun_store_accessor.load_result(_xun_CallNode('f', 'K9ZuxDD5x6atLkNd')),
-                    _xun_store_accessor.load_result(_xun_CallNode('g', 'K9ZuxDD5x6atLkNd', b)),
-            )
+            a = {
+                'sym':
+                _xun_CallNode('f', 'K9ZuxDD5x6atLkNd'),
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('f', 'K9ZuxDD5x6atLkNd'))
+            }
+            b = {
+                'sym':
+                _xun_CallNode('h', 'K9ZuxDD5x6atLkNd', a['sym']),
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('h', 'K9ZuxDD5x6atLkNd', a['sym']))
+            }
+            c = {
+                'sym':
+                _xun_CallNode('g', 'K9ZuxDD5x6atLkNd', b['sym']),
+                'load':
+                lambda: _xun_store_accessor.load_result(
+                    _xun_CallNode('g', 'K9ZuxDD5x6atLkNd', b['sym']))
+            }
+
+            return a['load'](), c['load']()
+
         a, c = _xun_load_constants()
         return a + c
 

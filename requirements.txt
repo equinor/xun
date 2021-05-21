@@ -6,3 +6,4 @@ matplotlib
 nbformat
 networkx
 redis
+immutables

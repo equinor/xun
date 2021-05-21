@@ -1,8 +1,10 @@
 from .compatibility import ast
 from .errors import NotDAGError
 from .errors import XunSyntaxError
+from immutables import Map as frozenmap
 from itertools import chain
 from itertools import tee
+import collections
 import copy
 import inspect
 import networkx as nx
@@ -569,3 +571,39 @@ def has_mutating_assignments(node):
             return True
         scope.update(names)
     return False
+
+
+def make_hashable(a):
+    """Recursively turns `a` and, its descendants, into hashable type.
+
+    If `a` (or inside of it) is an unhashable type, it will turn it into
+    a hashable type
+
+    Parameters
+    ----------
+    a : various type (collections.abc.ByteString, collections.abc.Mapping, ...)
+
+    Returns
+    -------
+    bytes, frozenmap, frozenset, tuple
+        Value in an appropriate hashable type.
+
+    Raises
+    ------
+    TypeError
+        If the type of the argument is unhashable.
+    """
+    if isinstance(a, str) or isinstance(a, bytes):
+        return a
+    if isinstance(a, collections.abc.ByteString):
+        return bytes(a)
+    elif isinstance(a, collections.abc.Mapping):
+        return frozenmap({k: make_hashable(v) for k, v in a.items()})
+    elif isinstance(a, collections.abc.Set):
+        return frozenset(make_hashable(v) for v in a)
+    elif isinstance(a, collections.abc.Sequence):
+        return tuple(make_hashable(v) for v in a)
+    elif isinstance(a, (collections.abc.Hashable)):
+        return a
+    else:
+        raise TypeError(f'unhashable type {a.__class__}')

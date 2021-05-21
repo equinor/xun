@@ -1,6 +1,7 @@
 import networkx as nx
 from .errors import CopyError
 from .errors import NotDAGError
+from .util import make_hashable
 
 
 def sink_nodes(dag):
@@ -49,8 +50,8 @@ class CallNode:
         self.function_name = function_name
         self.function_hash = function_hash
         self.subscript = ()
-        self.args = args
-        self.kwargs = kwargs
+        self.args = make_hashable(args)
+        self.kwargs = make_hashable(kwargs)
 
     def __getitem__(self, key):
         return self._replace(subscript=self.subscript + (key,))

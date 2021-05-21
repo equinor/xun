@@ -822,3 +822,19 @@ def test_stmt_introduced_names():
 
     for i, (statement_type, e) in zip(stmt_introduced_names, expected.items()):
         assert i == e, statement_type
+
+
+def test_funcntions_with_dict_arguments():
+    @xun.function()
+    def a(d=None):
+        dd = dict(d)
+        dd['b'] = 2
+        return dd['a']
+
+    @xun.function()
+    def f():
+        with ...:
+            v = a({'a': 1})
+            u = a(d={'a': 2})
+        return v, u
+    assert run_in_process(f.blueprint()) == (1, 2)

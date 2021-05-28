@@ -167,6 +167,10 @@ class FunctionDecomposition(types.SimpleNamespace):
         f = FunctionImage(
             fdef,
             self.desc.name,
+            self.desc.qualname,
+            self.desc.doc,
+            self.desc.annotations,
+            self.desc.module,
             self.desc.globals,
             self.desc.referenced_modules,
         )

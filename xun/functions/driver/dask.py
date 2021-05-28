@@ -23,11 +23,16 @@ class Dask(Driver):
         return scheduler(entry_call, graph)
 
 
-def compute_proxy(store_accessor, func, node):
-    args, kwargs = store_accessor.resolve_call_args(node)
-    result = func(*args, **kwargs)
-    store_accessor.store_result(node, result)
-    return node
+def compute_proxy(store_accessor, func):
+    """Dask 'handles' functools.partial so that we can't use it. Create a new
+       function instead."""
+    def λ(node):
+        args, kwargs = store_accessor.resolve_call_args(node)
+        result = func(*args, **kwargs)
+        store_accessor.store_result(node, result)
+        return node
+    functools.update_wrapper(λ,  func)
+    return λ
 
 
 class DaskSchedule:
@@ -78,11 +83,8 @@ class DaskSchedule:
             else:
                 logger.info(f'Submitting {node}')
 
-                xun_function = self.function_images[node.function_name]
-                func = functools.partial(compute_proxy,
-                                         self.store_accessor,
-                                         xun_function)
-                functools.update_wrapper(func, xun_function)
+                func = compute_proxy(self.store_accessor,
+                                     self.function_images[node.function_name])
 
                 future = self.client.submit(func, node)
                 await self.client.gather(future, asynchronous=True)

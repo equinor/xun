@@ -1,4 +1,5 @@
 from .helpers import check_ast_equals
+from typing import Any
 from xun.functions import FunctionDescription
 from xun.functions import describe
 from xun.functions import func_arg_names
@@ -33,13 +34,17 @@ def test_overwrite_scope():
 def test_describe_function():
     some_value = None
 
-    def f(a, b, c):
+    def f(a, b, c) -> Any:
+        """hello world"""
         return some_value
 
     expected = FunctionDescription(
         src=function_source(f),
         ast=function_ast(f),
         name='f',
+        qualname='test_describe_function.<locals>.f',
+        doc='hello world',
+        annotations={'return': Any},
         defaults=f.__defaults__,
         globals={'some_value': None},
         referenced_modules=frozenset(),

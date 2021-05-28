@@ -1,4 +1,5 @@
 from .function_description import describe
+import functools
 import importlib
 
 
@@ -61,11 +62,19 @@ class FunctionImage:
     def __init__(self,
                  tree,
                  name,
+                 qualname,
+                 doc,
+                 annotations,
+                 module_name,
                  globals,
                  referenced_modules,
                  hash=None):
         self.tree = tree
-        self.name = name
+        self.__name__ = name
+        self.__qualname__ = qualname
+        self.__doc__ = doc
+        self.__annotations__ = annotations
+        self.__module__ = module_name
         self.globals = globals
         self.referenced_modules = referenced_modules
         self.hash = hash
@@ -113,6 +122,10 @@ class FunctionImage:
         return FunctionImage(
             desc.ast,
             desc.name,
+            desc.qualname,
+            desc.doc,
+            desc.annotations,
+            desc.module,
             desc.globals,
             desc.referenced_modules,
             hash=hash,
@@ -141,7 +154,13 @@ class FunctionImage:
         exec(function_code, namespace)  # nosec
         f = namespace[self.name]
 
+        functools.update_wrapper(f, self)
+
         return f
+
+    @property
+    def name(self):
+        return self.__name__
 
     def __call__(self, *args, **kwargs):
         """
@@ -159,7 +178,11 @@ class FunctionImage:
         """
         return (
             self.tree,
-            self.name,
+            self.__name__,
+            self.__qualname__,
+            self.__doc__,
+            self.__annotations__,
+            self.__module__,
             self.globals,
             self.referenced_modules,
             self.hash,
@@ -171,10 +194,14 @@ class FunctionImage:
         except the cached compiled function `_func`.
         """
         self.tree = state[0]
-        self.name = state[1]
-        self.globals = state[2]
-        self.referenced_modules = state[3]
-        self.hash = state[4]
+        self.__name__ = state[1]
+        self.__qualname__ = state[2]
+        self.__doc__ = state[3]
+        self.__annotations__ = state[4]
+        self.__module__ = state[5]
+        self.globals = state[6]
+        self.referenced_modules = state[7]
+        self.hash = state[8]
         self._func = None
 
 

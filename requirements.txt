@@ -1,5 +1,6 @@
 cookiecutter
-dask
+cryptography
+dask[distributed]
 fastavro
 immutables
 matplotlib

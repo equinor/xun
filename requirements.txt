@@ -1,6 +1,7 @@
 celery==4.4.7
 cookiecutter
-dask
+cryptography
+dask[distributed]
 fastavro
 matplotlib
 nbformat

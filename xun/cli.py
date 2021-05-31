@@ -14,11 +14,13 @@ Why does this file exist, and why not put this in __main__?
 
   Also see (1) from http://click.pocoo.org/5/setuptools/#setuptools-integration
 """
+from pathlib import Path
 import argparse
 import sys
 
 
 from . import functions
+from . import infrastructure
 from . import init
 
 
@@ -60,3 +62,14 @@ parser_template.set_defaults(func=init.cli.main)
 parser_template.add_argument('--path',
                              help='where to output the generated project',
                              default='.')
+
+
+#
+# Dask crypto identities
+#
+parser_crypto = subparsers.add_parser('create-cryptographic-identities')
+parser_crypto.set_defaults(func=infrastructure.cli.create_tls_identities)
+parser_crypto.add_argument('--path',
+                           help='target directory',
+                           default=Path.home() / '.xun/crypto',
+                           type=Path)

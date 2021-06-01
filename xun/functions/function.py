@@ -2,9 +2,18 @@ from .blueprint import Blueprint
 from .function_description import describe
 from .graph import CallNode
 from . import transformations
+from yapf.yapflib.yapf_api import FormatCode
+from yapf.yapflib.style import CreatePEP8Style
 import astor
 import base64
 import hashlib
+import shutil
+
+
+def adjusted_line_layout(style=CreatePEP8Style()):
+    columns = shutil.get_terminal_size().columns
+    style['COLUMN_LIMIT'] = columns
+    return style
 
 
 class Function:
@@ -69,7 +78,8 @@ class Function:
 
         @property
         def graph_str(self):
-            return astor.to_source(self.graph)
+            source = astor.to_source(self.graph)
+            return FormatCode(source, style_config=adjusted_line_layout())[0]
 
         @property
         def task(self):
@@ -77,7 +87,8 @@ class Function:
 
         @property
         def task_str(self):
-            return astor.to_source(self.task)
+            source = astor.to_source(self.task)
+            return FormatCode(source, style_config=adjusted_line_layout())[0]
 
         @property
         def source(self):

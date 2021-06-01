@@ -2,8 +2,9 @@ celery==4.4.7
 cookiecutter
 dask
 fastavro
+immutables
 matplotlib
 nbformat
 networkx
 redis
-immutables
+yapf

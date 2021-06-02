@@ -356,7 +356,6 @@ def test_subscripted_function():
     assert result == 'b'
 
 
-@pytest.mark.xfail(reason="Subscript result not implemented")
 def test_subscript_result():
     @xun.function()
     def f():
@@ -366,13 +365,13 @@ def test_subscript_result():
     def h():
         with ...:
             r = f()
-            b, c = r
-            c = r[1]
-        return b + c
+            a, b = r
+            b2 = r[1]
+        return a + b + b2
 
     result = run_in_process(h.blueprint())
 
-    assert result == 'bc'
+    assert result == 'abb'
 
 
 def test_unpack_subscripted_function():

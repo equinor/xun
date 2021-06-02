@@ -1,5 +1,0 @@
-*
-!Makefile
-!.gitignore
-!redis/etc/redis.conf
-!rabbitmq/etc/rabbitmq.conf

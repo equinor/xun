@@ -36,7 +36,6 @@ if __name__ == '__main__':
         include_package_data=True,
 
         install_requires = [
-            'celery',
             'fastavro',
             'matplotlib',
             'networkx',
@@ -56,7 +55,6 @@ if __name__ == '__main__':
             'mock-ssh-server',
             'pyshd',
             'pytest',
-            'pytest-celery',
             'pyshd',
         ],
 

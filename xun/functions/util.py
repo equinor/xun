@@ -37,6 +37,33 @@ def overwrite_scope(func, globals, defaults=None, module=None):
 
 
 #
+# Networkx
+#
+
+
+def draw_graph(graph):
+    from matplotlib import pyplot as plt
+    from networkx.drawing.nx_agraph import graphviz_layout
+    import astor
+
+    # Relabel AST nodes to display the source code
+    mapping = {
+        node: astor.to_source(node).rstrip()
+        for node in graph.nodes()
+        if isinstance(node, ast.AST)
+    }
+    draw = nx.relabel_nodes(graph, mapping)
+
+    # Draw the graph
+    pos = graphviz_layout(draw, prog='dot')
+    edge_labels = nx.get_edge_attributes(draw, 'edge_type')
+    nx.draw(draw, pos)
+    nx.draw_networkx_edge_labels(draw, pos, edge_labels)
+    nx.draw_networkx_labels(draw, pos)
+    plt.show()
+
+
+#
 # AST helpers
 #
 
@@ -504,6 +531,52 @@ def subscript_node_with_constant(node, constant):
     )
 
 
+def indices_from_shape(shape, _indices=()):
+    idx = 0
+    output = ()
+    for element in shape:
+        if isinstance(element, int):
+            for _ in range(element):
+                indices = _indices + (idx,)
+                output += (indices,)
+                idx += 1
+        elif isinstance(element, (tuple, list)):
+            indices = _indices + (idx,)
+            idx += 1
+            output += indices_from_shape(shape=element, _indices=indices)
+        elif isinstance(element, type(Ellipsis)):
+            ellipsis_start_idx = idx
+
+            reversed_shape = shape[::-1]
+            reversed_idx = -1
+            reversed_output = ()
+            for reversed_element in reversed_shape:
+                if isinstance(reversed_element, int):
+                    for _ in range(reversed_element):
+                        indices = _indices + (reversed_idx,)
+                        reversed_output += (indices,)
+                        reversed_idx -= 1
+                elif isinstance(reversed_element, (tuple, list)):
+                    indices = _indices + (reversed_idx,)
+                    reversed_idx -= 1
+                    reversed_output += indices_from_shape(
+                        shape=reversed_element, _indices=indices
+                    )[::-1]
+                elif isinstance(reversed_element, type(Ellipsis)):
+                    ellipsis_end_idx = reversed_idx
+                    break
+
+            ellipsis_idx = slice(ellipsis_start_idx, ellipsis_end_idx)
+
+            indices = _indices + (ellipsis_idx,)
+            output += (indices,)
+            output += reversed_output[::-1]
+            break
+        else:
+            raise TypeError("Invalid content in shape tuple")
+    return output
+
+
 #
 # AST Predicates and Checks
 #
@@ -621,75 +694,3 @@ def make_hashable(a):
         return a
     else:
         raise TypeError(f'unhashable type {a.__class__}')
-
-
-#
-# These should probably be be moved up eventually
-#
-
-def structure_from_shape(shape, _structure=()):
-    idx = 0
-    output = ()
-    for element in shape:
-        if isinstance(element, int):
-            for _ in range(element):
-                structure = _structure + (idx,)
-                output += (structure,)
-                idx += 1
-        elif isinstance(element, (tuple, list)):
-            structure = _structure + (idx,)
-            idx += 1
-            output += structure_from_shape(shape=element, _structure=structure)
-        elif isinstance(element, type(Ellipsis)):
-            ellipsis_start_idx = idx
-
-            reversed_shape = shape[::-1]
-            reversed_idx = -1
-            reversed_output = ()
-            for reversed_element in reversed_shape:
-                if isinstance(reversed_element, int):
-                    for _ in range(reversed_element):
-                        structure = _structure + (reversed_idx,)
-                        reversed_output += (structure,)
-                        reversed_idx -= 1
-                elif isinstance(reversed_element, (tuple, list)):
-                    structure = _structure + (reversed_idx,)
-                    reversed_idx -= 1
-                    reversed_output += structure_from_shape(
-                        shape=reversed_element, _structure=structure
-                    )[::-1]
-                elif isinstance(reversed_element, type(Ellipsis)):
-                    ellipsis_end_idx = reversed_idx
-                    break
-
-            ellipsis_idx =  slice(ellipsis_start_idx, ellipsis_end_idx)
-
-            structure = _structure + (ellipsis_idx,)
-            output += (structure,)
-            output += reversed_output[::-1]
-            break
-        else:
-            raise TypeError("Invalid content in shape tuple")
-    return output
-
-
-def draw_graph(graph):
-    from matplotlib import pyplot as plt
-    from networkx.drawing.nx_agraph import graphviz_layout
-    import astor
-
-    # Relabel AST nodes to display the source code
-    mapping = {
-        node: astor.to_source(node).rstrip()
-        for node in graph.nodes()
-        if isinstance(node, ast.AST)
-    }
-    draw = nx.relabel_nodes(graph, mapping)
-
-    # Draw the graph
-    pos = graphviz_layout(draw, prog='dot')
-    edge_labels = nx.get_edge_attributes(draw, 'edge_type')
-    nx.draw(draw, pos)
-    nx.draw_networkx_edge_labels(draw, pos, edge_labels)
-    nx.draw_networkx_labels(draw, pos)
-    plt.show()

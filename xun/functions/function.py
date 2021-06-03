@@ -228,7 +228,7 @@ class Function:
                 .apply(transformations.sort_constants)
                 .apply(transformations.copy_only_constants, self.dependencies)
                 .apply(transformations.unroll_to_separate_names)
-                .apply(transformations.loaded_and_symbolic, self.dependencies)
+                .apply(transformations.split_into_loaded_and_symbolic, self.dependencies)
                 .apply(transformations.build_xun_graph, self.dependencies)
             )
 
@@ -280,7 +280,7 @@ class Function:
             .apply(transformations.sort_constants)
             .apply(transformations.copy_only_constants, self.dependencies)
             .apply(transformations.unroll_to_separate_names)
-            .apply(transformations.loaded_and_symbolic, self.dependencies)
+            .apply(transformations.split_into_loaded_and_symbolic, self.dependencies)
             .apply(transformations.load_from_store, self.dependencies)
         )
 

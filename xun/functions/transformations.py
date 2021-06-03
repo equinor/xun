@@ -21,9 +21,9 @@ from .util import assignment_target_shape
 from .util import body_external_names
 from .util import flatten_assignment_targets
 from .util import function_ast
+from .util import indices_from_shape
 from .util import separate_constants_ast
 from .util import sort_constants_ast
-from .util import structure_from_shape
 from .util import subscript_node_with_constant
 from itertools import chain
 import copy
@@ -33,16 +33,16 @@ import types
 class FunctionDecomposition(types.SimpleNamespace):
     """ FunctionDecomposition
 
-    Immutable decomposition of a function. Instance of FunctionDecomposition are
+    Immutable decomposition of a function. Instances of FunctionDecomposition are
     used to transform functions as represented by syntax trees.
 
     Methods
     -------
     apply(transform, *args, **kwargs)
-        Apply transform and return new FunctionDecomposition
+        Apply transform and return a new FunctionDecomposition
     assemble(*nodes)
         Assemble FunctionDecomposition into Function object with the given
-        function body ast.AST nodes.
+        function body ast.AST nodes
     update(changed, new_desc)
         Create a new FunctionDecomposition object with the given changes
 
@@ -56,7 +56,7 @@ class FunctionDecomposition(types.SimpleNamespace):
     ...     return 2
     ...
     >>> def transformation(img: FunctionDecomposition):
-    ...     # remove first return
+    ...     # Remove first return
     ...     cropped_ast = img.ast.body[0].body[:1]
     ...     return img.update(
     ...         # Delete the original ast from FunctionDecomposition
@@ -138,7 +138,7 @@ class FunctionDecomposition(types.SimpleNamespace):
         Parameters
         ----------
         *nodes : vararg of list of ast.AST nodes
-            lists of statements (in order) to be used as the statements of the
+            Lists of statements (in order) to be used as the statements of the
             generated function body
 
         Returns
@@ -188,7 +188,7 @@ class FunctionDecomposition(types.SimpleNamespace):
             Dictionary containing the new fields to be added to the
             FunctionDecomposition
         new_desc : xun.functions.FunctionDescription, optional
-            use with care, replaces the underlying function description
+            Use with care, replaces the underlying function description
 
         Returns
         -------
@@ -266,6 +266,7 @@ def copy_only_constants(
     Calls to xun functions will later be replaced by sentinel nodes, which are
     not copyable, and should therefore not be made copy only. Managing which
     statements to skip is done through the skip_if predicate.
+    # Is skip_if still used?
 
     The `sorted_constants` attribute is replaced by `copy_only_constants`.
 
@@ -273,7 +274,7 @@ def copy_only_constants(
     ----------
     func : FunctionDecomposition
     dependencies : mapping from str to Function
-        maps names of dependencies to their Functions
+        Maps names of dependencies to their Functions
 
     Returns
     -------
@@ -318,9 +319,9 @@ def copy_only_constants(
 def unroll_to_separate_names(func: FunctionDecomposition):
     """Unroll to separate names
 
-    For all assign-statements with an iterable target with multiple variables,
-    make one assignment for every target where the right hand side is the
-    unpacked version of the original right hand side expression.
+    For every assign statement with an iterable target with multiple variables,
+    make a new assignment for each target. For those, the iterable on the right
+    hand side is subscripted with the corresponding index.
     """
     unrolled_stmts = []
     for stmt in func.copy_only_constants:
@@ -335,7 +336,7 @@ def unroll_to_separate_names(func: FunctionDecomposition):
                 unrolled_stmts.append(stmt)
                 continue
 
-            indices = structure_from_shape(target_shape)
+            indices = indices_from_shape(target_shape)
             flatten_targets = flatten_assignment_targets(target)
 
             for index, target in zip(indices, flatten_targets):
@@ -346,7 +347,6 @@ def unroll_to_separate_names(func: FunctionDecomposition):
                     elif isinstance(i, slice):
                         lower = i.start
                         upper = i.stop + 1 if i.stop < -1 else None
-
                         s = ast.Slice(
                             lower=ast.Constant(value=lower, kind=None),
                             upper=ast.Constant(value=upper, kind=None),
@@ -373,9 +373,13 @@ def unroll_to_separate_names(func: FunctionDecomposition):
     return func.update(unrolled_stmts=unrolled_stmts)
 
 
-def loaded_and_symbolic(func: FunctionDecomposition, dependencies={}):
-    """
-    Transform every new variable into a loaded and a symbolic version
+def split_into_loaded_and_symbolic(
+        func: FunctionDecomposition,
+        dependencies={},
+    ):
+    """Split into loaded and symbolic
+
+    Split every new variable into a loaded and a symbolic version.
     """
     def is_xun_call(node):
         return (
@@ -401,7 +405,7 @@ def loaded_and_symbolic(func: FunctionDecomposition, dependencies={}):
             if not is_xun_call(node):
                 return node
 
-            construct_call = ast.Call(
+            return ast.Call(
                 func=ast.Name(id='_xun_CallNode', ctx=ast.Load()),
                 args=[
                     ast.Constant(node.func.id, kind=None),
@@ -411,17 +415,15 @@ def loaded_and_symbolic(func: FunctionDecomposition, dependencies={}):
                         if isinstance(arg, ast.Name)
                         and arg.id in self.known_targets else arg
                         for arg in node.args
-                    ]
+                    ],
                 ],
                 keywords=node.keywords,
             )
 
-            return construct_call
-
         def visit_Assign(self, node):
             target = node.targets[0]
             if isinstance(target, ast.Name):
-                self.known_targets.append(node.targets[0].id)
+                self.known_targets.append(target.id)
             else:
                 raise TypeError(
                     'Target should be a single variable at this point'
@@ -848,7 +850,7 @@ def load_from_store(
             ),
             *func.dual_stmts,
             ast.Return(
-                value=ast.Tuple(elts=loads,ctx=ast.Load())
+                value=ast.Tuple(elts=loads, ctx=ast.Load())
             )
         ],
         decorator_list=[],

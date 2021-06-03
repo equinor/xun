@@ -12,7 +12,7 @@ from xun.functions.util import func_external_names
 from xun.functions.util import overwrite_scope
 from xun.functions.util import shape_to_ast_tuple
 from xun.functions.util import strip_decorators
-from xun.functions.util import structure_from_shape
+from xun.functions.util import indices_from_shape
 import astunparse
 
 
@@ -233,20 +233,20 @@ def test_assignment_target_introduced_names():
     assert assignment_target_introduced_names(stmts[4]) == {'h'}
 
 
-def test_structure_from_shape():
-    assert structure_from_shape((3,)) == (
+def test_indices_from_shape():
+    assert indices_from_shape((3,)) == (
         (0,),
         (1,),
         (2,),
     )
 
-    assert structure_from_shape(((2,), 1)) == (
+    assert indices_from_shape(((2,), 1)) == (
         (0, 0),
         (0, 1),
         (1,),
     )
 
-    assert structure_from_shape((1, ((3,), (2,)), 1)) == (
+    assert indices_from_shape((1, ((3,), (2,)), 1)) == (
         (0,),
         (1, 0, 0),
         (1, 0, 1),
@@ -256,7 +256,7 @@ def test_structure_from_shape():
         (2,),
     )
 
-    assert structure_from_shape((3, Ellipsis, (2,), 1)) == (
+    assert indices_from_shape((3, Ellipsis, (2,), 1)) == (
         (0,),
         (1,),
         (2,),
@@ -266,7 +266,7 @@ def test_structure_from_shape():
         (-1,),
     )
 
-    assert structure_from_shape((1, (2, Ellipsis), 1)) == (
+    assert indices_from_shape((1, (2, Ellipsis), 1)) == (
         (0,),
         (1, 0),
         (1, 1),

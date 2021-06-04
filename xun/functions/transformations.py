@@ -25,6 +25,7 @@ from .util import indices_from_shape
 from .util import separate_constants_ast
 from .util import sort_constants_ast
 from .util import subscript_node_with_constant
+from .xun_typing import TypeDeducer
 from itertools import chain
 import copy
 import types
@@ -244,6 +245,28 @@ def sort_constants(func: FunctionDecomposition):
         sorted_constants=sorted_constants,
         constant_graph=constant_graph,
     )
+
+
+def deduce_types(
+        func: FunctionDecomposition,
+        dependencies={}
+    ):
+    import astor
+
+    type_deducer = TypeDeducer(known_xun_functions=dependencies)
+
+    is_firstline = True
+    for stmt in func.sorted_constants:
+        if is_firstline:
+            print('\nTypes:')
+            is_firstline = False
+        if isinstance(stmt, ast.Assign):
+            value_type = type_deducer.visit(stmt)
+            print(astor.to_source(stmt.value).rstrip(), ':', value_type)
+
+    print(type_deducer.var_type_map)
+
+    return func.update(var_types=[])
 
 
 def copy_only_constants(

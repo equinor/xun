@@ -229,7 +229,7 @@ class Function:
                 .apply(transformations.deduce_types, self.dependencies)
                 .apply(transformations.copy_only_constants, self.dependencies)
                 .apply(transformations.unroll_to_separate_names)
-                .apply(transformations.split_into_loaded_and_symbolic, self.dependencies)
+                .apply(transformations.map_expressions)
                 .apply(transformations.build_xun_graph, self.dependencies)
             )
 
@@ -282,7 +282,7 @@ class Function:
             .apply(transformations.deduce_types, self.dependencies)
             .apply(transformations.copy_only_constants, self.dependencies)
             .apply(transformations.unroll_to_separate_names)
-            .apply(transformations.split_into_loaded_and_symbolic, self.dependencies)
+            .apply(transformations.map_expressions)
             .apply(transformations.load_from_store, self.dependencies)
         )
 

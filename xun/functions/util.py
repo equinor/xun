@@ -519,18 +519,6 @@ def func_arg_names(fdef):
     return frozenset(args)
 
 
-def subscript_node_with_constant(node, constant):
-    """Subscript node with constant
-
-    Subscript the node with a constant value in a load context
-    """
-    return ast.Subscript(
-        value=node,
-        slice=ast.Index(value=ast.Constant(value=constant, kind=None)),
-        ctx=ast.Load()
-    )
-
-
 def indices_from_shape(shape, _indices=()):
     idx = 0
     output = ()
@@ -575,6 +563,18 @@ def indices_from_shape(shape, _indices=()):
         else:
             raise TypeError("Invalid content in shape tuple")
     return output
+
+
+def prefix_load_result(node):
+    return ast.Call(
+        func=ast.Attribute(
+            value=ast.Name(id='_xun_store_accessor', ctx=ast.Load()),
+            attr='load_result',
+            ctx=ast.Load(),
+        ),
+        args=[node],
+        keywords=[],
+    )
 
 
 #

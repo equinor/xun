@@ -16,8 +16,9 @@ from .graph import CallNode
 from .transformations import FunctionDecomposition
 from .transformations import build_xun_graph
 from .transformations import copy_only_constants
+from .transformations import deduce_types
 from .transformations import load_from_store
-from .transformations import split_into_loaded_and_symbolic
+from .transformations import map_expressions
 from .transformations import separate_constants
 from .transformations import sort_constants
 from .transformations import unroll_to_separate_names

@@ -23,14 +23,23 @@ Union
 Union types (Xun or Any) can't be reused
 """
 
+def is_typing_tuple(t):
+    return hasattr(t, '__origin__') and t.__origin__ is tuple
+
+
+def is_xun_type(t):
+    return t is XunType
+
+
 class TypeDeducer:
     """
     Registers all variables and their types
     """
     def __init__(self, known_xun_functions):
         self.known_xun_functions = known_xun_functions
-        self.var_type_map = frozenmap()
-        self.local_var_type_map = frozenmap()
+        self.with_names = []
+        self.expr_name_type_map = frozenmap()
+        self.local_expr_name_type_map = frozenmap()
 
     def visit(self, node):
         member = 'visit_' + node.__class__.__name__
@@ -47,23 +56,25 @@ class TypeDeducer:
         value_type = self.visit(node.value)
 
         if target_shape == (1,):
-            target = target
-            with self.var_type_map.mutate() as mm:
+            self.with_names.append(target.id)
+            with self.expr_name_type_map.mutate() as mm:
                 mm[target.id] = value_type
-                self.var_type_map = mm.finish()
+                self.expr_name_type_map = mm.finish()
             return value_type
 
         indices = indices_from_shape(target_shape)
         flatten_targets = flatten_assignment_targets(target)
 
-        with self.var_type_map.mutate() as mm:
+        with self.expr_name_type_map.mutate() as mm:
             for index, target in zip(indices, flatten_targets):
+                self.with_names.append(target.id)
                 target_type = value_type
-                if isinstance(target_type, typing.Tuple):
-                    for i in index:
+                for i in index:
+                    if is_typing_tuple(target_type):
                         target_type = target_type.__args__[i]
                 mm.set(target.id, target_type)
-            self.var_type_map = mm.finish()
+            new_map = mm.finish()
+        self.expr_name_type_map = new_map
 
         return value_type
 
@@ -84,7 +95,6 @@ class TypeDeducer:
         pass
 
     def visit_IfExp(self, node):
-        import astor
         body_type = self.visit(node.body)
         orelse_type = self.visit(node.orelse)
         if body_type is not orelse_type:
@@ -122,29 +132,14 @@ class TypeDeducer:
         Not allowed to iterate over tuples
         Iterator of generators can only be a variable, or a
         Does not support ifs or is_async
-
-        for i in [[1,2,3], [4,5,6]]:
-            for k in i:
-                (i, k)
-        [(i, k) for i in [[1,2,3], [4,5,6]] for k in i]
-
         """
-
         # Register the local variables in each generator
-        with self.var_type_map.mutate() as mm:
+        with self.expr_name_type_map.mutate() as mm:
             for generator in node.generators:
-                # Deal with iter
                 iter_types = self.visit(generator.iter)
-                # if hasattr(iter_types, '__origin__') and iter_types.__origin__ is tuple:
-                #     raise TypeError('Cannot iterate container of mixed types')
 
-                # Deal with target
                 target = generator.target
                 target_shape = assignment_target_shape(target)
-
-                if iter_types is None:
-                    # Remove eventually
-                    continue
 
                 if target_shape == (1,):
                     mm.set(target.id, iter_types)
@@ -155,18 +150,18 @@ class TypeDeducer:
 
                 for index, target in zip(indices, flatten_targets):
                     target_type = iter_types
-                    if hasattr(
-                            target_type,
-                            '__origin__') and iter_types.__origin__ is tuple:
+                    if is_typing_tuple(target_type):
                         for i in index:
                             target_type = target_type.__args__[i]
                     mm.set(target.id, target_type)
 
-            local_var_type_map = mm.finish()
+            local_expr_name_type_map = mm.finish()
 
-        self.local_var_type_map = local_var_type_map
+        # Add mapping over known local variables while visiting the element of
+        # the comprehension
+        self.local_expr_name_type_map = local_expr_name_type_map
         result = self.visit(node.elt)
-        self.local_var_type_map = frozenmap()
+        self.local_expr_name_type_map = frozenmap()
         return result
 
     def visit_SetComp(self, node):
@@ -215,14 +210,15 @@ class TypeDeducer:
         pass
 
     def visit_Name(self, node: ast.Name):
-        if node.id in self.var_type_map.keys():
-            return self.var_type_map[node.id]
-        if node.id in self.local_var_type_map.keys():
-            return self.local_var_type_map[node.id]
+        if node.id in self.expr_name_type_map.keys():
+            return self.expr_name_type_map[node.id]
+        if node.id in self.local_expr_name_type_map.keys():
+            return self.local_expr_name_type_map[node.id]
         return typing.Any
 
     def visit_List(self, node):
-        pass
+        return typing.Tuple.__getitem__(tuple(
+            (self.visit(elt) for elt in node.elts)))
 
     def visit_Tuple(self, node):
         return typing.Tuple.__getitem__(tuple(

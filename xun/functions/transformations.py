@@ -27,7 +27,8 @@ from .util import separate_constants_ast
 from .util import sort_constants_ast
 from .xun_typing import TypeDeducer
 from .xun_typing import is_typing_tuple
-from .xun_typing import is_xun_type
+from .xun_typing import type_is_iterator
+from .xun_typing import type_is_xun_type
 from itertools import chain
 import copy
 import types
@@ -333,7 +334,7 @@ def copy_only_constants(
     return func.update(copy_only_constants=copy_only_constants)
 
 
-def unroll_to_separate_names(func: FunctionDecomposition):
+def unroll_unpacking_assignments(func: FunctionDecomposition):
     """Unroll to separate names
 
     For every assign statement with an iterable target with multiple variables,
@@ -359,11 +360,20 @@ def unroll_to_separate_names(func: FunctionDecomposition):
             for index, target in zip(indices, flatten_targets):
                 unrolled_value = stmt.value
                 for i in index:
-                    if isinstance(unrolled_value, ast.Tuple):
-                        # If the value is actually a tuple, its elements will
-                        # be available as elements
+                    if isinstance(unrolled_value, (ast.Tuple, ast.List)):
+                        # If the value is actually a tuple or a list, its
+                        # elements will be available as elements
                         unrolled_value = unrolled_value.elts[i]
                     else:
+                        expr_type = func.expr_name_type_map[target.id]
+                        if type_is_iterator(expr_type):
+                            # Wrap in list to be able to subscript later
+                            unrolled_value = ast.Call(
+                                func=ast.Name(id='list', ctx=ast.Load()),
+                                args=[unrolled_value],
+                                keywords=[],
+                            )
+
                         # If not, the value should be a subscriptable type
                         # and the subscripting has to happen at runtime
                         if isinstance(i, int):
@@ -618,13 +628,13 @@ def load_from_store(
                 loaded_elts = []
                 for index, elt_type in enumerate(expr_type.__args__):
                     elt = node.elt.elts[index]
-                    if is_xun_type(elt_type):
+                    if type_is_xun_type(elt_type):
                         loaded_elts.append(prefix_load_result(elt))
                     else:
                         loaded_elts.append(elt)
                 loaded_node.elt = ast.Tuple(elts=loaded_elts, ctx=ast.Load())
             else:
-                if is_xun_type(expr_type):
+                if type_is_xun_type(expr_type):
                     loaded_node.elt = prefix_load_result(node.elt)
 
             return loaded_node

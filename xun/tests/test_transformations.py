@@ -152,7 +152,7 @@ def test_load_from_store_transformation():
         .apply(xun.functions.sort_constants)
         .apply(xun.functions.deduce_types, known_functions)
         .apply(xun.functions.copy_only_constants, known_functions)
-        .apply(xun.functions.unroll_to_separate_names)
+        .apply(xun.functions.unroll_unpacking_assignments)
         .apply(xun.functions.map_expressions)
         .apply(xun.functions.load_from_store, known_functions))
 
@@ -186,7 +186,7 @@ def test_load_from_store_skip_if_unecessary():
         .apply(xun.functions.sort_constants)
         .apply(xun.functions.deduce_types, known_functions)
         .apply(xun.functions.copy_only_constants, known_functions)
-        .apply(xun.functions.unroll_to_separate_names)
+        .apply(xun.functions.unroll_unpacking_assignments)
         .apply(xun.functions.map_expressions)
         .apply(xun.functions.load_from_store, known_functions))
 
@@ -294,7 +294,7 @@ def test_structured_unpacking_transformation():
         .apply(xun.functions.sort_constants)
         .apply(xun.functions.deduce_types, known_functions)
         .apply(xun.functions.copy_only_constants, known_functions)
-        .apply(xun.functions.unroll_to_separate_names)
+        .apply(xun.functions.unroll_unpacking_assignments)
         .apply(xun.functions.map_expressions)
         .apply(xun.functions.load_from_store, known_functions))
 
@@ -362,7 +362,7 @@ def test_unreferenced_names_are_not_loaded():
         .apply(xun.functions.sort_constants)
         .apply(xun.functions.deduce_types, known_functions)
         .apply(xun.functions.copy_only_constants, known_functions)
-        .apply(xun.functions.unroll_to_separate_names)
+        .apply(xun.functions.unroll_unpacking_assignments)
         .apply(xun.functions.map_expressions)
         .apply(xun.functions.load_from_store, known_functions))
 

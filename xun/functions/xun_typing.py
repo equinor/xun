@@ -15,12 +15,30 @@ class XunType:
         return self.__class__.__name__
 XunType = XunType()
 
-"""
-Xun
-Any
-Union
 
-Union types (Xun or Any) can't be reused
+class TerminalType:
+    def __call__(self, *args, **kwargs):
+        raise TypeError('TerminalType should not be used')
+
+    def __getitem__(self, key):
+        inst = self.__class__.__new__(self.__class__)
+        inst.generic_type = key
+        return inst
+
+    def __repr__(self):
+        r = self.__class__.__name__
+        if hasattr(self, 'generic_type'):
+            r += f'[{self.generic_type}]'
+        return r
+TerminalType = TerminalType()
+
+
+"""
+Types used:
+* Xun
+* Any
+* Union
+* TerminalType (can't be reused in comprehensions)
 """
 
 def is_typing_tuple(t):
@@ -30,8 +48,12 @@ def is_typing_tuple(t):
         t.__origin__ is tuple or t.__origin__ is typing.Tuple)
 
 
-def is_xun_type(t):
+def type_is_xun_type(t):
     return t is XunType
+
+
+def type_is_iterator(t):
+    return t is typing.Iterator
 
 
 class TypeDeducer:
@@ -42,12 +64,29 @@ class TypeDeducer:
         self.known_xun_functions = known_xun_functions
         self.with_names = []
         self.expr_name_type_map = frozenmap()
-        self.local_expr_name_type_map = frozenmap()
+
+    def _replace(self, **kwargs):
+        """
+        Replace the existing values of class attributes with new ones.
+
+        Parameters
+        ----------
+        kwargs : dict
+            keyword arguments corresponding to one or more attributes whose
+            values are to be modified
+
+        Returns
+        -------
+        A new class instance with replaced attributes
+        """
+        attribs = {k: kwargs.pop(k, v) for k, v in vars(self).items()}
+        if kwargs:
+            raise ValueError(f'Got unexpected field names: {list(kwargs)!r}')
+        inst = self.__class__.__new__(self.__class__)
+        inst.__dict__.update(attribs)
+        return inst
 
     def visit(self, node):
-        # if isinstance(node, ast.Constant):
-        #     member = 'visit_Constant'
-        # else:
         member = 'visit_' + node.__class__.__name__
         visitor = getattr(self, member)
         return visitor(node)
@@ -104,7 +143,7 @@ class TypeDeducer:
         body_type = self.visit(node.body)
         orelse_type = self.visit(node.orelse)
         if body_type is not orelse_type:
-            return typing.Union[body_type, orelse_type]
+            return TerminalType[typing.Union[body_type, orelse_type]]
         return body_type
 
     def visit_Dict(self, node: ast.Dict):
@@ -113,11 +152,7 @@ class TypeDeducer:
         Hence, you can't forward it
         Weak coupling between keys and values
         """
-
-        return {
-            self.visit(k): self.visit(v) for k, v in zip(node.keys, node.values)
-        }
-        #typing.Dict[key_type, value_type]
+        return TerminalType[typing.Dict]
 
     def visit_Set(self, node):
         """
@@ -138,17 +173,22 @@ class TypeDeducer:
         Not allowed to iterate over tuples
         Iterator of generators can only be a variable, or a
         Does not support ifs or is_async
+
+        TODO
+        my_iter -> Tuple[Any, Xun, Any, Xun]
+        [i for i in my_iter] -> Tuple[Any, Xun, Any, Xun]
         """
         # Register the local variables in each generator
-        with self.expr_name_type_map.mutate() as mm:
+        with self.expr_name_type_map.mutate() as local_scope:
             for generator in node.generators:
                 iter_types = self.visit(generator.iter)
+                # TODO Raise TypeError if TerminalType is used
 
                 target = generator.target
                 target_shape = assignment_target_shape(target)
 
                 if target_shape == (1,):
-                    mm.set(target.id, iter_types)
+                    local_scope.set(target.id, iter_types)
                     continue
 
                 indices = indices_from_shape(target_shape)
@@ -159,39 +199,44 @@ class TypeDeducer:
                     if is_typing_tuple(target_type):
                         for i in index:
                             target_type = target_type.__args__[i]
-                    mm.set(target.id, target_type)
+                    local_scope.set(target.id, target_type)
 
-            local_expr_name_type_map = mm.finish()
+            # Add mapping over known local variables while visiting the element
+            # of the comprehension
+            return self._replace(expr_name_type_map=local_scope.finish()
+                ).visit(node.elt)
 
-        print(local_expr_name_type_map)
-
-        # Add mapping over known local variables while visiting the element of
-        # the comprehension
-        self.local_expr_name_type_map = local_expr_name_type_map
-        result = self.visit(node.elt)
-        self.local_expr_name_type_map = frozenmap()
-        return result
 
     def visit_SetComp(self, node):
+        # Ex: {i for i in range(10)}
+        # Terminal Type, can't be reused in comprehension
+        # This must be of one type
+        # Get something that must have same type
         pass
 
     def visit_DictComp(self, node):
+        # Ex: {k: v for k, v in ...}
+        # Terminal Type, can't be reused in comprehension
+        # This must be of one type
         pass
 
     def visit_GeneratorExp(self, node):
-        pass
+        # Ex: (i for i in range(10))
+        # This works
+        # Terminal type or this becomes a list
+        return typing.Iterator
 
     def visit_Await(self, node):
-        pass
+        self.raise_class_not_allowed(node)
 
     def visit_Yield(self, node):
-        pass
+        self.raise_class_not_allowed(node)
 
     def visit_YieldFrom(self, node):
-        pass
+        self.raise_class_not_allowed(node)
 
     def visit_Compare(self, node):
-        pass
+        self.raise_class_not_allowed(node)
 
     def visit_Call(self, node):
         if (isinstance(node.func, ast.Name) and
@@ -225,14 +270,10 @@ class TypeDeducer:
         return typing.Any
 
     def visit_List(self, node):
-        return typing.Tuple[tuple(self.visit(elt) for elt in node.elts)]
-        # return typing.Tuple.__getitem__(tuple(
-        #     (self.visit(elt) for elt in node.elts)))
+        return self.visit_Tuple(node)
 
     def visit_Tuple(self, node):
         return typing.Tuple[tuple(self.visit(elt) for elt in node.elts)]
-        # return typing.Tuple.__getitem__(tuple(
-        #     (self.visit(elt) for elt in node.elts)))
 
     def visit_Slice(self, node):
         pass
@@ -255,3 +296,6 @@ class TypeDeducer:
 
     def visit_Ellipsis(self, node):
         return typing.Any
+
+    def raise_class_not_allowed(self, node):
+        raise XunSyntaxError(f'{node.__class__} not allowed in xun definitions')

@@ -891,3 +891,70 @@ def test_unpacking_list_comp():
     result = run_in_process(blueprint)
 
     assert result == expected
+
+
+def test_unpacking_generator():
+    @xun.function()
+    def h():
+        with ...:
+            gen = (i for i in range(3))
+            (a, b, c), d = gen, 3
+        return a + b + c + d
+
+    print(h.code.graph_str)
+    print(h.code.task_str)
+
+    result = run_in_process(h.blueprint())
+    assert result == 6
+
+
+@pytest.mark.xfail
+def test_list_as_arg():
+    @xun.function()
+    def f(arg):
+        return arg
+
+    @xun.function()
+    def h():
+        with ...:
+            my_list = [1, 2, f(3)]
+            new_list = f(my_list)
+        return new_list
+
+    print(h.code.graph_str)
+    print(h.code.task_str)
+
+    print(f.code.graph_str)
+    print(f.code.task_str)
+
+    result = run_in_process(h.blueprint())
+
+    assert result == (1, 2, 3)
+
+
+@pytest.mark.xfail
+def test_dict_as_arg():
+    @xun.function()
+    def f(arg):
+        return arg
+
+    @xun.function()
+    def h():
+        with ...:
+            my_dict = {
+                'a': 1,
+                'b': f(2),
+                'c': f(f(3)),
+            }
+            new_dict = f(my_dict)
+            a = new_dict['a']
+            b = new_dict['b']
+            c = new_dict['c']
+        return a + b + c
+
+    print(h.code.graph_str)
+    print(h.code.task_str)
+
+    result = run_in_process(h.blueprint())
+
+    assert result == 6

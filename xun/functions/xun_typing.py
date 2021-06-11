@@ -24,7 +24,10 @@ Union types (Xun or Any) can't be reused
 """
 
 def is_typing_tuple(t):
-    return hasattr(t, '__origin__') and t.__origin__ is tuple
+    # Python 3.6 operates with t.__origin__ is typing.Tuple, but for >3.6 it
+    # is t.__origin__ is tuple
+    return hasattr(t, '__origin__') and (
+        t.__origin__ is tuple or t.__origin__ is typing.Tuple)
 
 
 def is_xun_type(t):
@@ -42,6 +45,9 @@ class TypeDeducer:
         self.local_expr_name_type_map = frozenmap()
 
     def visit(self, node):
+        # if isinstance(node, ast.Constant):
+        #     member = 'visit_Constant'
+        # else:
         member = 'visit_' + node.__class__.__name__
         visitor = getattr(self, member)
         return visitor(node)
@@ -157,6 +163,8 @@ class TypeDeducer:
 
             local_expr_name_type_map = mm.finish()
 
+        print(local_expr_name_type_map)
+
         # Add mapping over known local variables while visiting the element of
         # the comprehension
         self.local_expr_name_type_map = local_expr_name_type_map
@@ -217,12 +225,33 @@ class TypeDeducer:
         return typing.Any
 
     def visit_List(self, node):
-        return typing.Tuple.__getitem__(tuple(
-            (self.visit(elt) for elt in node.elts)))
+        return typing.Tuple[tuple(self.visit(elt) for elt in node.elts)]
+        # return typing.Tuple.__getitem__(tuple(
+        #     (self.visit(elt) for elt in node.elts)))
 
     def visit_Tuple(self, node):
-        return typing.Tuple.__getitem__(tuple(
-            (self.visit(elt) for elt in node.elts)))
+        return typing.Tuple[tuple(self.visit(elt) for elt in node.elts)]
+        # return typing.Tuple.__getitem__(tuple(
+        #     (self.visit(elt) for elt in node.elts)))
 
     def visit_Slice(self, node):
         pass
+
+    #
+    # For 3.6 compatibility
+    #
+
+    def visit_Num(self, node):
+        return typing.Any
+
+    def visit_Str(self, node):
+        return typing.Any
+
+    def visit_Bytes(self, node):
+        return typing.Any
+
+    def visit_NameConstant(self, node):
+        return typing.Any
+
+    def visit_Ellipsis(self, node):
+        return typing.Any

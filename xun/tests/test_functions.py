@@ -895,11 +895,67 @@ def test_unpacking_list_comp():
 
 def test_unpacking_generator():
     @xun.function()
+    def double(arg):
+        return arg*2
+
+    @xun.function()
     def h():
         with ...:
-            gen = (i for i in range(3))
+            gen = (double(i) for i in range(3))
             (a, b, c), d = gen, 3
         return a + b + c + d
+
+    result = run_in_process(h.blueprint())
+    assert result == 9
+
+
+def test_unpacking_list_comprehension():
+    @xun.function()
+    def double(arg):
+        return arg*2
+
+    @xun.function()
+    def h():
+        with ...:
+            list_comp = [double(i) for i in range(3)]
+            (a, b, c), d = list_comp, 3
+        return a + b + c + d
+
+    result = run_in_process(h.blueprint())
+    assert result == 9
+
+
+def test_unpacking_set_comprehension():
+    @xun.function()
+    def double(arg):
+        return arg*2
+
+    @xun.function()
+    def h():
+        with ...:
+            set_comp = {double(i) for i in range(3)}
+            (a, b, c), d = set_comp, 3
+        return a + b + c + d
+
+    result = run_in_process(h.blueprint())
+    assert result == 9
+
+
+def test_unpacking_dict_comprehension():
+    @xun.function()
+    def double(arg):
+        return arg*2
+
+    @xun.function()
+    def h():
+        with ...:
+            keys = [0, 1, 2]
+            values = [0, 1, 2]
+            dict_comp = {k: double(v) for k, v in zip(keys, values)}
+            a = dict_comp[0]
+            b = dict_comp[1]
+            c = dict_comp[2]
+        return a + b + c
 
     print(h.code.graph_str)
     print(h.code.task_str)
@@ -958,3 +1014,50 @@ def test_dict_as_arg():
     result = run_in_process(h.blueprint())
 
     assert result == 6
+
+
+def test_fails_when_iterating_over_callnode():
+    @xun.function()
+    def f():
+        return [1, 2, 3]
+
+    @xun.function()
+    def h():
+        with ...:
+            values = [i for i in f()]
+        return values
+
+    with pytest.raises(XunSyntaxError):
+        run_in_process(h.blueprint())
+
+
+def test_set():
+    @xun.function()
+    def f(arg):
+        return arg
+
+    @xun.function()
+    def h():
+        with ...:
+            only_values = {'a', 'b', 'c', 'd'}
+            only_xun_calls = {f('a'), f('b'), f('c'), f('d')}
+        return only_values, only_xun_calls
+
+    assert run_in_process(h.blueprint()) == (
+        {'a', 'b', 'c', 'd'}, {'a', 'b', 'c', 'd'}
+    )
+
+
+def test_fails_on_mixed_set():
+    @xun.function()
+    def f(arg):
+        return arg
+
+    @xun.function()
+    def h():
+        with ...:
+            values = {'a', 'b', f('c'), 'd'}
+        return values
+
+    with pytest.raises(XunSyntaxError):
+        run_in_process(h.blueprint())

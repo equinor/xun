@@ -27,7 +27,9 @@ from .util import separate_constants_ast
 from .util import sort_constants_ast
 from .xun_typing import TypeDeducer
 from .xun_typing import is_typing_tuple
+from .xun_typing import is_typing_list
 from .xun_typing import type_is_iterator
+from .xun_typing import type_is_set
 from .xun_typing import type_is_xun_type
 from itertools import chain
 import copy
@@ -366,7 +368,7 @@ def unroll_unpacking_assignments(func: FunctionDecomposition):
                         unrolled_value = unrolled_value.elts[i]
                     else:
                         expr_type = func.expr_name_type_map[target.id]
-                        if type_is_iterator(expr_type):
+                        if type_is_iterator(expr_type) or type_is_set(expr_type):
                             # Wrap in list to be able to subscript later
                             unrolled_value = ast.Call(
                                 func=ast.Name(id='list', ctx=ast.Load()),
@@ -624,15 +626,19 @@ def load_from_store(
         def visit_ListComp(self, node):
             expr_type = func.expr_name_type_map[self.expr_name]
             loaded_node = node
-            if is_typing_tuple(expr_type):
-                loaded_elts = []
-                for index, elt_type in enumerate(expr_type.__args__):
-                    elt = node.elt.elts[index]
-                    if type_is_xun_type(elt_type):
-                        loaded_elts.append(prefix_load_result(elt))
-                    else:
-                        loaded_elts.append(elt)
-                loaded_node.elt = ast.Tuple(elts=loaded_elts, ctx=ast.Load())
+            if is_typing_list(expr_type):
+                elts_type = expr_type.__args__[0]
+                if is_typing_tuple(elts_type):
+                    loaded_elts = []
+                    for index, elt in enumerate(node.elt.elts):
+                        elt_type = elts_type.__args__[index]
+                        if type_is_xun_type(elt_type):
+                            loaded_elts.append(prefix_load_result(elt))
+                        else:
+                            loaded_elts.append(elt)
+                    loaded_node.elt = ast.Tuple(elts=loaded_elts, ctx=ast.Load())
+                elif type_is_xun_type(elts_type):
+                    loaded_node.elt = prefix_load_result(node.elt)
             else:
                 if type_is_xun_type(expr_type):
                     loaded_node.elt = prefix_load_result(node.elt)

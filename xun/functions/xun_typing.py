@@ -37,6 +37,8 @@ TerminalType = TerminalType()
 Types used:
 * Xun
 * Any
+* Tuple: several possible different types
+* List: one type that denotes the entire list
 * Union
 * TerminalType (can't be reused in comprehensions)
 """
@@ -46,6 +48,16 @@ def is_typing_tuple(t):
     # is t.__origin__ is tuple
     return hasattr(t, '__origin__') and (
         t.__origin__ is tuple or t.__origin__ is typing.Tuple)
+
+
+def is_typing_list(t):
+    return hasattr(t, '__origin__') and (
+        t.__origin__ is list or t.__origin__ is typing.List)
+
+
+def type_is_set(t):
+    return hasattr(t, '__origin__') and (
+        t.__origin__ is set or t.__origin__ is typing.Set)
 
 
 def type_is_xun_type(t):
@@ -114,9 +126,13 @@ class TypeDeducer:
             for index, target in zip(indices, flatten_targets):
                 self.with_names.append(target.id)
                 target_type = value_type
+                if is_typing_list(target_type):
+                    target_type = target_type.__args__[0]
                 for i in index:
                     if is_typing_tuple(target_type):
                         target_type = target_type.__args__[i]
+                    elif is_typing_list(target_type):
+                        target_type = target_type.__args__[0]
                 mm.set(target.id, target_type)
             new_map = mm.finish()
         self.expr_name_type_map = new_map
@@ -124,7 +140,7 @@ class TypeDeducer:
         return value_type
 
     def visit_BoolOp(self, node):
-        pass
+        raise NotImplementedError
 
     def visit_BinOp(self, node):
         left_type = self.visit(node.left)
@@ -137,7 +153,7 @@ class TypeDeducer:
         return typing.Any
 
     def visit_UnaryOp(self, node):
-        pass
+        raise NotImplementedError
 
     def visit_IfExp(self, node):
         body_type = self.visit(node.body)
@@ -163,7 +179,6 @@ class TypeDeducer:
             elt_type = self.visit(elt)
             if elt_type is not set_type:
                 raise XunSyntaxError
-
         return set_type
 
     def visit_ListComp(self, node: ast.ListComp):
@@ -177,51 +192,26 @@ class TypeDeducer:
         TODO
         my_iter -> Tuple[Any, Xun, Any, Xun]
         [i for i in my_iter] -> Tuple[Any, Xun, Any, Xun]
+
+        Result will be a list where all elements have the same type
         """
-        # Register the local variables in each generator
-        with self.expr_name_type_map.mutate() as local_scope:
-            for generator in node.generators:
-                iter_types = self.visit(generator.iter)
-                # TODO Raise TypeError if TerminalType is used
-
-                target = generator.target
-                target_shape = assignment_target_shape(target)
-
-                if target_shape == (1,):
-                    local_scope.set(target.id, iter_types)
-                    continue
-
-                indices = indices_from_shape(target_shape)
-                flatten_targets = flatten_assignment_targets(target)
-
-                for index, target in zip(indices, flatten_targets):
-                    target_type = iter_types
-                    if is_typing_tuple(target_type):
-                        for i in index:
-                            target_type = target_type.__args__[i]
-                    local_scope.set(target.id, target_type)
-
-            # Add mapping over known local variables while visiting the element
-            # of the comprehension
-            return self._replace(expr_name_type_map=local_scope.finish()
-                ).visit(node.elt)
-
+        return typing.List[self.visit_comp(node)]
 
     def visit_SetComp(self, node):
-        # Ex: {i for i in range(10)}
+        # Example: {i for i in range(10)}
         # Terminal Type, can't be reused in comprehension
         # This must be of one type
         # Get something that must have same type
-        pass
+        return typing.Set[self.visit_comp(node)]
 
     def visit_DictComp(self, node):
-        # Ex: {k: v for k, v in ...}
+        # Example: {k: v for k, v in ...}
         # Terminal Type, can't be reused in comprehension
         # This must be of one type
-        pass
+        return TerminalType[typing.Dict]
 
     def visit_GeneratorExp(self, node):
-        # Ex: (i for i in range(10))
+        # Example: (i for i in range(10))
         # This works
         # Terminal type or this becomes a list
         return typing.Iterator
@@ -245,28 +235,26 @@ class TypeDeducer:
         return typing.Any
 
     def visit_FormattedValue(self, node):
-        pass
+        raise NotImplementedError
 
     def visit_JoinedStr(self, node):
-        pass
+        raise NotImplementedError
 
     def visit_Constant(self, node):
         return typing.Any
 
     def visit_Attribute(self, node):
-        pass
+        raise NotImplementedError
 
     def visit_Subscript(self, node):
-        pass
+        return self.visit(node.value)
 
     def visit_Starred(self, node):
-        pass
+        raise NotImplementedError
 
     def visit_Name(self, node: ast.Name):
         if node.id in self.expr_name_type_map.keys():
             return self.expr_name_type_map[node.id]
-        if node.id in self.local_expr_name_type_map.keys():
-            return self.local_expr_name_type_map[node.id]
         return typing.Any
 
     def visit_List(self, node):
@@ -276,7 +264,7 @@ class TypeDeducer:
         return typing.Tuple[tuple(self.visit(elt) for elt in node.elts)]
 
     def visit_Slice(self, node):
-        pass
+        raise NotImplementedError
 
     #
     # For 3.6 compatibility
@@ -297,5 +285,44 @@ class TypeDeducer:
     def visit_Ellipsis(self, node):
         return typing.Any
 
+    #
+    # Helper methods
+    #
+
     def raise_class_not_allowed(self, node):
         raise XunSyntaxError(f'{node.__class__} not allowed in xun definitions')
+
+    def visit_comp(self, node):
+        # Register the local variables in each generator
+        with self.expr_name_type_map.mutate() as local_scope:
+            for generator in node.generators:
+                iter_types = self.visit(generator.iter)
+
+                target = generator.target
+                target_shape = assignment_target_shape(target)
+
+                if target_shape == (1,):
+                    if type_is_xun_type(iter_types):
+                        raise XunSyntaxError('CallNode not allowed in iterator')
+                    local_scope.set(target.id, iter_types)
+                    continue
+
+                indices = indices_from_shape(target_shape)
+                flatten_targets = flatten_assignment_targets(target)
+
+
+                for index, target in zip(indices, flatten_targets):
+                    target_type = iter_types
+                    if is_typing_list(target_type):
+                        target_type = target_type.__args__[0]
+                    for i in index:
+                        if is_typing_tuple(target_type):
+                            target_type = target_type.__args__[i]
+                        elif is_typing_list(target_type):
+                            target_type = iter_types.__args__[0]
+                    local_scope.set(target.id, target_type)
+
+            # Add mapping over known local variables while visiting the element
+            # of the comprehension
+            return self._replace(expr_name_type_map=local_scope.finish()
+                ).visit(node.elt)

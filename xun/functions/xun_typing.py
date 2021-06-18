@@ -47,6 +47,10 @@ class TerminalType:
 TerminalType = TerminalType()
 
 
+def type_not_allowed_error(node):
+    return XunSyntaxError(f'{node.__class__} not allowed in xun definitions')
+
+
 def is_tuple_type(t):
     # Python 3.6 operates with t.__origin__ is typing.Tuple, but for >3.6 it
     # is t.__origin__ is tuple
@@ -183,7 +187,7 @@ class TypeDeducer:
             elt_type = self.visit(elt)
             if elt_type is not set_type:
                 raise XunSyntaxError
-        return set_type
+        return typing.Set[set_type]
 
     def visit_ListComp(self, node: ast.ListComp):
         """
@@ -206,6 +210,7 @@ class TypeDeducer:
         # Terminal Type, can't be reused in comprehension
         # This must be of one type
         # Get something that must have same type
+        # TODO: If uniform type ->
         return typing.Set[self.visit_comp(node)]
 
     def visit_DictComp(self, node):
@@ -221,16 +226,16 @@ class TypeDeducer:
         return typing.Iterator
 
     def visit_Await(self, node):
-        self.raise_class_not_allowed(node)
+        raise type_not_allowed_error(node)
 
     def visit_Yield(self, node):
-        self.raise_class_not_allowed(node)
+        raise type_not_allowed_error(node)
 
     def visit_YieldFrom(self, node):
-        self.raise_class_not_allowed(node)
+        raise type_not_allowed_error(node)
 
     def visit_Compare(self, node):
-        self.raise_class_not_allowed(node)
+        raise type_not_allowed_error(node)
 
     def visit_Call(self, node):
         if (isinstance(node.func, ast.Name)
@@ -292,10 +297,6 @@ class TypeDeducer:
     #
     # Helper methods
     #
-
-    def raise_class_not_allowed(self, node):
-        raise XunSyntaxError(
-            f'{node.__class__} not allowed in xun definitions')
 
     def visit_comp(self, node):
         # Register the local variables in each generator

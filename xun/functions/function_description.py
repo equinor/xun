@@ -73,12 +73,20 @@ def describe(func):
         if name in external_names
     }
 
+
     # Store function closure as globals
+    def cell_is_empty(cell):
+        try:
+            cell.cell_contents
+        except ValueError:
+            return True
+        return False
     if func.__closure__ is not None:
+        print(func.__code__.co_freevars, func.__closure__)
         external_references.update({
             name: cell.cell_contents
             for name, cell in zip(func.__code__.co_freevars, func.__closure__)
-            if name in external_names
+            if name in external_names and not cell_is_empty(cell)
         })
 
     function_globals = {

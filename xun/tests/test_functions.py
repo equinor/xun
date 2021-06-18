@@ -988,8 +988,8 @@ def test_list_as_arg():
     assert result == (1, 2, 3)
 
 
-@pytest.mark.xfail
-def test_dict_as_arg():
+@pytest.mark.xfail('Deep callnodes not supported yet')
+def test_deep_callnode_arguments():
     @xun.function()
     def f(arg):
         return arg
@@ -1003,9 +1003,9 @@ def test_dict_as_arg():
                 'c': f(f(3)),
             }
             new_dict = f(my_dict)
-            a = new_dict['a']
-            b = new_dict['b']
-            c = new_dict['c']
+        a = new_dict['a']
+        b = new_dict['b']
+        c = new_dict['c']
         return a + b + c
 
     print(h.code.graph_str)
@@ -1061,3 +1061,35 @@ def test_fails_on_mixed_set():
 
     with pytest.raises(XunSyntaxError):
         run_in_process(h.blueprint())
+
+
+def test_terminal_type():
+    var = 10
+    @xun.function()
+    def h(arg):
+        with ...:
+            mixed_dict = {
+                'a': var,
+                'b': h(),
+            }
+            t = (mixed_dict, mixed_dict)
+            l = [x for x in t]
+        return l
+
+    with pytest.raises(XunSyntaxError):
+        h.callable()
+
+
+@pytest.mark.xfail
+def test_different_function_same_name():
+    @xun.function()
+    def f():
+        return 1
+
+    @xun.function()
+    def f():
+        with ...:
+            value = f()
+        return value
+
+    assert run_in_process(f.blueprint()) == 1

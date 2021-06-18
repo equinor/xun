@@ -1,7 +1,7 @@
-import networkx as nx
 from .errors import CopyError
 from .errors import NotDAGError
 from .util import make_hashable
+import networkx as nx
 
 
 def sink_nodes(dag):

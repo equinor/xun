@@ -17,6 +17,7 @@ import types
 #
 
 
+# TODO: This is no longer in use
 def overwrite_scope(func, globals, defaults=None, module=None):
     """
     Returns a new function, with the same code as the original, but with the
@@ -41,6 +42,7 @@ def overwrite_scope(func, globals, defaults=None, module=None):
 #
 
 
+# TODO: This is no longer in use
 def draw_graph(graph):
     from matplotlib import pyplot as plt
     from networkx.drawing.nx_agraph import graphviz_layout
@@ -520,6 +522,20 @@ def func_arg_names(fdef):
 
 
 def indices_from_shape(shape, _indices=()):
+    """Indices from shape
+
+    Given a target shape, return the individual indices
+
+    Parameters
+    ----------
+    shape : tuple
+        a target shape
+
+    Returns
+    -------
+    tuple
+        individual indices
+    """
     idx = 0
     output = ()
     for element in shape:
@@ -566,6 +582,18 @@ def indices_from_shape(shape, _indices=()):
 
 
 def prefix_load_result(node):
+    """Prefix node with load_result
+
+    Parameters
+    ----------
+    node : ast.expr
+        AST expression node
+
+    Returns
+    -------
+    ast.Call
+        _xun_store_accessor.load_result(<node>)
+    """
     return ast.Call(
         func=ast.Attribute(
             value=ast.Name(id='_xun_store_accessor', ctx=ast.Load()),

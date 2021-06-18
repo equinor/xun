@@ -1,12 +1,12 @@
-from .helpers import PickleDriver
 from .helpers import FakeRedis
-from .helpers import sample_sin_blueprint
+from .helpers import PickleDriver
 from .helpers import run_in_process
+from .helpers import sample_sin_blueprint
 from xun.functions import CallNode
 from xun.functions import CopyError
 from xun.functions import XunSyntaxError
-import pytest
 import networkx as nx
+import pytest
 import xun
 
 

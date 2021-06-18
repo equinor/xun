@@ -26,11 +26,11 @@ from .util import prefix_load_result
 from .util import separate_constants_ast
 from .util import sort_constants_ast
 from .xun_typing import TypeDeducer
-from .xun_typing import is_typing_tuple
-from .xun_typing import is_typing_list
-from .xun_typing import type_is_iterator
-from .xun_typing import type_is_set
-from .xun_typing import type_is_xun_type
+from .xun_typing import is_iterator_type
+from .xun_typing import is_list_type
+from .xun_typing import is_set_type
+from .xun_typing import is_tuple_type
+from .xun_typing import is_xun_type
 from itertools import chain
 import copy
 import types
@@ -39,8 +39,8 @@ import types
 class FunctionDecomposition(types.SimpleNamespace):
     """ FunctionDecomposition
 
-    Immutable decomposition of a function. Instances of FunctionDecomposition are
-    used to transform functions as represented by syntax trees.
+    Immutable decomposition of a function. Instances of FunctionDecomposition
+    are used to transform functions as represented by syntax trees.
 
     Methods
     -------
@@ -114,9 +114,9 @@ class FunctionDecomposition(types.SimpleNamespace):
         Parameters
         ----------
         transformation : callable
-            Callable that takes a FunctionDecomposition, computes new attributes
-            and returns a new, updated FunctionDecomposition. This is typically
-            a function of the following form::
+            Callable that takes a FunctionDecomposition, computes new
+            attributes and returns a new, updated FunctionDecomposition. This
+            is typically a function of the following form::
 
                 def transform(image: FunctionDecomposition) -> FunctionDecomposition:
                     ...
@@ -252,10 +252,21 @@ def sort_constants(func: FunctionDecomposition):
     )
 
 
-def deduce_types(
-        func: FunctionDecomposition,
-        dependencies={}
-    ):
+def deduce_types(func: FunctionDecomposition, dependencies={}):
+    """Deduce types
+
+    Deduce the type of each expression
+
+    Parameters
+    ----------
+    func : FunctionDecomposition
+    dependencies : mapping from str to Function
+        Maps names of dependencies to their Functions
+
+    Returns
+    -------
+    FunctionDecomposition
+    """
     type_deducer = TypeDeducer(known_xun_functions=dependencies)
 
     for stmt in func.sorted_constants:
@@ -266,10 +277,7 @@ def deduce_types(
                        with_names=type_deducer.with_names)
 
 
-def copy_only_constants(
-        func: FunctionDecomposition,
-        dependencies={},
-    ):
+def copy_only_constants(func: FunctionDecomposition, dependencies={}):
     """Copy only constants
 
     Working on the FunctionDecomposition `sorted_constants`. Change any
@@ -280,13 +288,11 @@ def copy_only_constants(
     never a reference. This is necessary to ensure immutability in constant
     fields, and is what is responsible for the constness of the fields. If a
     function took a reference to a value instead of a copy, it could change the
-    value. This would result in us not being able to evaluate and know its value
-    when scheduling, since order is arbitrary.
+    value. This would result in us not being able to evaluate and know its
+    value when scheduling, since order is arbitrary.
 
     Calls to xun functions will later be replaced by sentinel nodes, which are
-    not copyable, and should therefore not be made copy only. Managing which
-    statements to skip is done through the skip_if predicate.
-    # Is skip_if still used?
+    not copyable, and should therefore not be made copy only.
 
     The `sorted_constants` attribute is replaced by `copy_only_constants`.
 
@@ -337,11 +343,19 @@ def copy_only_constants(
 
 
 def unroll_unpacking_assignments(func: FunctionDecomposition):
-    """Unroll to separate names
+    """Unroll To Unpacking Assignments Transformation
 
     For every assign statement with an iterable target with multiple variables,
     make a new assignment for each target. For those, the iterable on the right
     hand side is subscripted with the corresponding index.
+
+    Parameters
+    ----------
+    func : FunctionDecomposition
+
+    Returns
+    -------
+    FunctionDecomposition
     """
     unrolled_stmts = []
     for stmt in func.copy_only_constants:
@@ -368,7 +382,8 @@ def unroll_unpacking_assignments(func: FunctionDecomposition):
                         unrolled_value = unrolled_value.elts[i]
                     else:
                         expr_type = func.expr_name_type_map[target.id]
-                        if type_is_iterator(expr_type) or type_is_set(expr_type):
+                        if is_iterator_type(expr_type) or is_set_type(
+                                expr_type):
                             # Wrap in list to be able to subscript later
                             unrolled_value = ast.Call(
                                 func=ast.Name(id='list', ctx=ast.Load()),
@@ -379,7 +394,8 @@ def unroll_unpacking_assignments(func: FunctionDecomposition):
                         # If not, the value should be a subscriptable type
                         # and the subscripting has to happen at runtime
                         if isinstance(i, int):
-                            s = ast.Index(value=ast.Constant(value=i, kind=None))
+                            s = ast.Index(
+                                value=ast.Constant(value=i, kind=None))
                         elif isinstance(i, slice):
                             lower = i.start
                             upper = i.stop + 1 if i.stop < -1 else None
@@ -415,6 +431,14 @@ def map_expressions(func: FunctionDecomposition):
     Map all expressions on the right hand side to the corresponding variable on
     the left hand using a dictionary. Also replace names in expressions with
     its corresponding expression.
+
+    Parameters
+    ----------
+    func : FunctionDecomposition
+
+    Returns
+    -------
+    FunctionDecomposition
     """
 
     class ReplaceSymbolicValues(ast.NodeTransformer):
@@ -435,10 +459,7 @@ def map_expressions(func: FunctionDecomposition):
     return func.update(unrolled_exprs_map=unrolled_exprs_map)
 
 
-def build_xun_graph(
-        func: FunctionDecomposition,
-        dependencies={},
-    ):
+def build_xun_graph(func: FunctionDecomposition, dependencies={}):
     """Build Xun Graph Transformation
 
     This transformation will generate code from a FunctionDecompositions
@@ -533,10 +554,7 @@ def build_xun_graph(
     return func.update(xun_graph=xun_graph)
 
 
-def load_from_store(
-        func: FunctionDecomposition,
-        dependencies={},
-    ):
+def load_from_store(func: FunctionDecomposition, dependencies={}):
     """Load from Store Transformation
 
     Transform any call to xun functions into loads from the xun store. This
@@ -606,8 +624,10 @@ def load_from_store(
                 return ast.Call(
                     func=ast.Name(id='_xun_CallNode', ctx=ast.Load()),
                     args=[
-                        ast.Constant(node.func.id, kind=None),
-                        ast.Constant(dependencies[node.func.id].hash, kind=None),
+                        ast.Constant(node.func.id,
+                                     kind=None),
+                        ast.Constant(dependencies[node.func.id].hash,
+                                     kind=None),
                         *node.args,
                     ],
                     keywords=node.keywords,
@@ -626,21 +646,22 @@ def load_from_store(
         def visit_ListComp(self, node):
             expr_type = func.expr_name_type_map[self.expr_name]
             loaded_node = node
-            if is_typing_list(expr_type):
+            if is_list_type(expr_type):
                 elts_type = expr_type.__args__[0]
-                if is_typing_tuple(elts_type):
+                if is_tuple_type(elts_type):
                     loaded_elts = []
                     for index, elt in enumerate(node.elt.elts):
                         elt_type = elts_type.__args__[index]
-                        if type_is_xun_type(elt_type):
+                        if is_xun_type(elt_type):
                             loaded_elts.append(prefix_load_result(elt))
                         else:
                             loaded_elts.append(elt)
-                    loaded_node.elt = ast.Tuple(elts=loaded_elts, ctx=ast.Load())
-                elif type_is_xun_type(elts_type):
+                    loaded_node.elt = ast.Tuple(elts=loaded_elts,
+                                                ctx=ast.Load())
+                elif is_xun_type(elts_type):
                     loaded_node.elt = prefix_load_result(node.elt)
             else:
-                if type_is_xun_type(expr_type):
+                if is_xun_type(expr_type):
                     loaded_node.elt = prefix_load_result(node.elt)
 
             return loaded_node

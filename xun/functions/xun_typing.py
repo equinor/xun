@@ -1,3 +1,17 @@
+"""Xun typing
+
+This module provide a typing system for the xun environment.
+
+Types used are:
+* XunType: call to a xun function
+* Any: everything else
+* Tuple: several possible different types, one for each element of the tuple
+* List: one type that denotes the entire list
+* Union
+* TerminalType: can be returned, but not be reused in comprehensions
+"""
+
+
 from .compatibility import ast
 from .errors import XunSyntaxError
 from .util import assignment_target_shape
@@ -33,38 +47,28 @@ class TerminalType:
 TerminalType = TerminalType()
 
 
-"""
-Types used:
-* Xun
-* Any
-* Tuple: several possible different types
-* List: one type that denotes the entire list
-* Union
-* TerminalType (can't be reused in comprehensions)
-"""
-
-def is_typing_tuple(t):
+def is_tuple_type(t):
     # Python 3.6 operates with t.__origin__ is typing.Tuple, but for >3.6 it
     # is t.__origin__ is tuple
     return hasattr(t, '__origin__') and (
         t.__origin__ is tuple or t.__origin__ is typing.Tuple)
 
 
-def is_typing_list(t):
+def is_list_type(t):
     return hasattr(t, '__origin__') and (
         t.__origin__ is list or t.__origin__ is typing.List)
 
 
-def type_is_set(t):
+def is_set_type(t):
     return hasattr(t, '__origin__') and (
         t.__origin__ is set or t.__origin__ is typing.Set)
 
 
-def type_is_xun_type(t):
+def is_xun_type(t):
     return t is XunType
 
 
-def type_is_iterator(t):
+def is_iterator_type(t):
     return t is typing.Iterator
 
 
@@ -126,12 +130,12 @@ class TypeDeducer:
             for index, target in zip(indices, flatten_targets):
                 self.with_names.append(target.id)
                 target_type = value_type
-                if is_typing_list(target_type):
+                if is_list_type(target_type):
                     target_type = target_type.__args__[0]
                 for i in index:
-                    if is_typing_tuple(target_type):
+                    if is_tuple_type(target_type):
                         target_type = target_type.__args__[i]
-                    elif is_typing_list(target_type):
+                    elif is_list_type(target_type):
                         target_type = target_type.__args__[0]
                 mm.set(target.id, target_type)
             new_map = mm.finish()
@@ -229,8 +233,8 @@ class TypeDeducer:
         self.raise_class_not_allowed(node)
 
     def visit_Call(self, node):
-        if (isinstance(node.func, ast.Name) and
-            node.func.id in self.known_xun_functions):
+        if (isinstance(node.func, ast.Name)
+                and node.func.id in self.known_xun_functions):
             return XunType
         return typing.Any
 
@@ -290,7 +294,8 @@ class TypeDeducer:
     #
 
     def raise_class_not_allowed(self, node):
-        raise XunSyntaxError(f'{node.__class__} not allowed in xun definitions')
+        raise XunSyntaxError(
+            f'{node.__class__} not allowed in xun definitions')
 
     def visit_comp(self, node):
         # Register the local variables in each generator
@@ -302,27 +307,27 @@ class TypeDeducer:
                 target_shape = assignment_target_shape(target)
 
                 if target_shape == (1,):
-                    if type_is_xun_type(iter_types):
-                        raise XunSyntaxError('CallNode not allowed in iterator')
+                    if is_xun_type(iter_types):
+                        raise XunSyntaxError(
+                            'CallNode not allowed in iterator')
                     local_scope.set(target.id, iter_types)
                     continue
 
                 indices = indices_from_shape(target_shape)
                 flatten_targets = flatten_assignment_targets(target)
 
-
                 for index, target in zip(indices, flatten_targets):
                     target_type = iter_types
-                    if is_typing_list(target_type):
+                    if is_list_type(target_type):
                         target_type = target_type.__args__[0]
                     for i in index:
-                        if is_typing_tuple(target_type):
+                        if is_tuple_type(target_type):
                             target_type = target_type.__args__[i]
-                        elif is_typing_list(target_type):
+                        elif is_list_type(target_type):
                             target_type = iter_types.__args__[0]
                     local_scope.set(target.id, target_type)
 
             # Add mapping over known local variables while visiting the element
             # of the comprehension
-            return self._replace(expr_name_type_map=local_scope.finish()
-                ).visit(node.elt)
+            return self._replace(
+                expr_name_type_map=local_scope.finish()).visit(node.elt)

@@ -96,7 +96,7 @@ class Function:
 
         @property
         def source_str(self):
-            return astor.to_source(self.source)
+            return self.owner.desc.src
 
     def __init__(self, desc, dependencies, max_parallel):
         self.desc = desc

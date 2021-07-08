@@ -14,7 +14,6 @@ The code is represented by and manipulated with the python ast module [1][2].
 
 from .compatibility import ast
 from .function_description import FunctionDescription
-from .function_description import describe
 from .function_image import FunctionImage
 from .util import assignment_target_introduced_names
 from .util import assignment_target_shape
@@ -25,179 +24,59 @@ from .util import separate_constants_ast
 from .util import shape_to_ast_tuple
 from .util import sort_constants_ast
 from .util import stmt_introduced_names
+import functools
 from itertools import chain
+from typing import List
 import copy
-import types
 
 
-class FunctionDecomposition(types.SimpleNamespace):
-    """ FunctionDecomposition
+def assemble(desc, *nodes):
+    """Assemble serializable `FunctionImage` representation
 
-    Immutable decomposition of a function. Instance of FunctionDecomposition are
-    used to transform functions as represented by syntax trees.
+    Takes a list of lists of statements and assembles a serializable
+    `FunctionImage` object.
 
-    Methods
+    Parameters
+    ----------
+    *nodes : vararg of list of ast.AST nodes
+        Lists of statements (in order) to be used as the statements of the
+        generated function body
+
+    Returns
     -------
-    apply(transform, *args, **kwargs)
-        Apply transform and return new FunctionDecomposition
-    assemble(*nodes)
-        Assemble FunctionDecomposition into Function object with the given
-        function body ast.AST nodes.
-    update(changed, new_desc)
-        Create a new FunctionDecomposition object with the given changes
-
-    Examples
-    --------
-
-    Apply transformations to a FunctionDecomposition
-
-    >>> def func():
-    ...     return 1
-    ...     return 2
-    ...
-    >>> def transformation(img: FunctionDecomposition):
-    ...     # remove first return
-    ...     cropped_ast = img.ast.body[0].body[:1]
-    ...     return img.update(
-    ...         # Delete the original ast from FunctionDecomposition
-    ...         ['ast'],
-    ...         {
-    ...             # Add cropped_ast as attribute
-    ...             'cropped_ast': cropped_ast,
-    ...         }
-    ...     )
-    ...
-    >>> img = FunctionDecomposition(func)
-    >>> transformed = img.apply(transformation)
-    >>> f = img.assemble(img.ast.body[0].body)
-    >>> g = transformed.assemble(transformed.cropped_ast)
-    >>> f()
-    1
-    >>> g()
-    2
+    FunctionImage
+        Serializable `FunctionImage` representation
     """
-    def __init__(self, func_or_desc, attrs=None):
-        self.desc = (
-            func_or_desc if isinstance(func_or_desc, FunctionDescription)
-            else describe(func_or_desc)
-        )
-        self.ast = copy.deepcopy(self.desc.ast)
+    args = desc.ast.body[0].args
 
-        if attrs is not None:
-            self.__dict__.update(attrs)
+    body = list(chain(*nodes))
 
-        self._lock = True
+    fdef = ast.fix_missing_locations(ast.Module(
+        type_ignores=[],
+        body=[
+            ast.FunctionDef(
+                name=desc.name,
+                args=args,
+                decorator_list=[],
+                body=body,
+                returns=None,
+                type_comment=None,
+            )
+        ],
+    ))
 
-    @property
-    def attrs(self):
-        skipped = ('desc', 'ast', '_lock')
-        return {k: v for k, v in self.__dict__.items() if k not in skipped}
+    f = FunctionImage(
+        fdef,
+        desc.name,
+        desc.qualname,
+        desc.doc,
+        desc.annotations,
+        desc.module,
+        desc.globals,
+        desc.referenced_modules,
+    )
 
-    def __copy__(self):
-        # Some of the attribute magic breaks copy
-        return FunctionDecomposition(self.desc, self.attrs)
-
-    def __setattr__(self, name, value):
-        if hasattr(self, '_lock'):
-            raise AttributeError('can\'t set attribute')
-        super().__setattr__(name, value)
-
-    def apply(self, transformation, *args, **kwargs):
-        """Apply transformation
-
-        Parameters
-        ----------
-        transformation : callable
-            Callable that takes a FunctionDecomposition, computes new attributes
-            and returns a new, updated FunctionDecomposition. This is typically
-            a function of the following form::
-
-                def transform(image: FunctionDecomposition) -> FunctionDecomposition:
-                    ...
-                    return image.update(
-                        new_attributes,
-                    )
-        *args
-            Arguments to pass to the transformation function
-        **kwargs
-            Keyword arguments to pass to the transformation function
-
-        Returns
-        -------
-        FunctionDecomposition
-            The transformed function image
-        """
-        return transformation(copy.copy(self), *args, **kwargs)
-
-    def assemble(self, *nodes):
-        """Assemble serializable `FunctionImage` representation
-
-        Takes a list of lists of statements and assembles a serializable
-        `FunctionImage` object.
-
-        Parameters
-        ----------
-        *nodes : vararg of list of ast.AST nodes
-            lists of statements (in order) to be used as the statements of the
-            generated function body
-
-        Returns
-        -------
-        FunctionImage
-            Serializable `FunctionImage` representation
-        """
-        args = self.desc.ast.body[0].args
-
-        body = list(chain(*nodes))
-
-        fdef = ast.fix_missing_locations(ast.Module(
-            type_ignores=[],
-            body=[
-                ast.FunctionDef(
-                    name=self.desc.name,
-                    args=args,
-                    decorator_list=[],
-                    body=body,
-                    returns=None,
-                    type_comment=None,
-                )
-            ],
-        ))
-
-        f = FunctionImage(
-            fdef,
-            self.desc.name,
-            self.desc.qualname,
-            self.desc.doc,
-            self.desc.annotations,
-            self.desc.module,
-            self.desc.globals,
-            self.desc.referenced_modules,
-        )
-
-        return f
-
-    def update(self, **kwargs):
-        """Update
-
-        Create a new FunctionDecomposition object with the given changes
-
-        Parameters
-        ----------
-        changed : Mapping from str to Any
-            Dictionary containing the new fields to be added to the
-            FunctionDecomposition
-        new_desc : xun.functions.FunctionDescription, optional
-            use with care, replaces the underlying function description
-
-        Returns
-        -------
-        FunctionDecomposition
-            The updated FunctionDecomposition
-        """
-        attrs = self.attrs
-        attrs.update(kwargs)
-        return FunctionDecomposition(self.desc, attrs)
+    return f
 
 
 def unpack_unpacking_assignments(nodes):
@@ -248,11 +127,26 @@ def unpack_unpacking_assignments(nodes):
     ]
 
 
+def pass_by_value(func):
+    """
+    NodeTransformers modify ASTs inplace, this decorator can be used to ensure
+    such modifications don't leak back to the original description.
+    """
+    def wrapper(*args, **kwargs):
+        return func(
+            *[copy.deepcopy(a) for a in args],
+            **{copy.deepcopy(k): copy.deepcopy(v) for k, v in kwargs.items()}
+        )
+    functools.update_wrapper(wrapper, func)
+    return wrapper
+
+
 #
 # Transformations
 #
 
-def separate_constants(func: FunctionDecomposition):
+@pass_by_value
+def separate_constants(func_desc: FunctionDescription):
     """Separate constants
 
     Seperate the with constants from the body. The FunctionDecomposition is
@@ -261,17 +155,18 @@ def separate_constants(func: FunctionDecomposition):
 
     Parameters
     ----------
-    func : FunctionDecomposition
+    func_desc : FunctionDescription
 
     Returns
     -------
     FunctionDecomposition
     """
-    body, constants = separate_constants_ast(func.ast.body[0].body)
-    return func.update(body=body, constants=constants)
+    body, constants = separate_constants_ast(func_desc.ast.body[0].body)
+    return body, constants
 
 
-def sort_constants(func: FunctionDecomposition):
+@pass_by_value
+def sort_constants(constants: List[ast.AST]):
     """Sort constants
 
     Sort the statements from the with constants statement such that they can be
@@ -281,23 +176,18 @@ def sort_constants(func: FunctionDecomposition):
 
     Parameters
     ----------
-    func : FunctionDecomposition
+    constants : List[ast.AST]
 
     Returns
     -------
-    FunctionDecomposition
+    Tuple[List[ast.AST], List[ast.AST]]
     """
-    sorted_constants, constant_graph = sort_constants_ast(func.constants)
-    return func.update(
-        sorted_constants=sorted_constants,
-        constant_graph=constant_graph,
-    )
+    sorted_constants, constant_graph = sort_constants_ast(constants)
+    return sorted_constants, constant_graph
 
 
-def copy_only_constants(
-        func: FunctionDecomposition,
-        dependencies={},
-    ):
+@pass_by_value
+def copy_only_constants(sorted_constants: List[ast.AST], dependencies={}):
     """Copy only constants
 
     Working on the FunctionDecomposition `sorted_constants`. Change any
@@ -319,13 +209,13 @@ def copy_only_constants(
 
     Parameters
     ----------
-    func : FunctionDecomposition
+    sorted_constants: List[ast.AST]
     dependencies : mapping from str to Function
         maps names of dependencies to their Functions
 
     Returns
     -------
-    FunctionDecomposition
+    List[ast.AST]
     """
     def gen_deepcopy_expr(expr):
         deepcopy_id = ast.Name(id='deepcopy', ctx=ast.Load())
@@ -351,7 +241,7 @@ def copy_only_constants(
             return copy_result
 
     transformer = CallArgumentCopyTransformer()
-    transformed = [transformer.visit(stmt) for stmt in func.sorted_constants]
+    transformed = [transformer.visit(stmt) for stmt in sorted_constants]
 
     from_copy_import_deepcopy = ast.ImportFrom(
         module='copy',
@@ -360,13 +250,11 @@ def copy_only_constants(
     )
     copy_only_constants = [from_copy_import_deepcopy, *transformed]
 
-    return func.update(copy_only_constants=copy_only_constants)
+    return copy_only_constants
 
 
-def build_xun_graph(
-        func: FunctionDecomposition,
-        dependencies={},
-    ):
+@pass_by_value
+def build_xun_graph(copy_only_constants: List[ast.AST], dependencies={}):
     """Build Xun Graph Transformation
 
     This transformation will generate code from a FunctionDecompositions
@@ -380,13 +268,13 @@ def build_xun_graph(
 
     Parameters
     ----------
-    func : FunctionDecomposition
+    copy_only_constants : List[ast.AST]
     dependencies : mapping from str to Function
         maps names of dependencies to their Functions
 
     Returns
     -------
-    FunctionDecomposition
+    List[ast.AST]
     """
 
     # The following code is never executed here, but is injected into the
@@ -449,7 +337,7 @@ def build_xun_graph(
         RegisterCallWrapper().visit(stmt)
         if isinstance(stmt, ast.Assign) or isinstance(stmt, ast.Expr)
         else stmt
-        for stmt in func.copy_only_constants
+        for stmt in copy_only_constants
     ]
 
     resolved_body = unpack_unpacking_assignments(body)
@@ -460,13 +348,13 @@ def build_xun_graph(
         return_graph
     ]
 
-    return func.update(xun_graph=xun_graph)
+    return xun_graph
 
 
-def load_from_store(
-        func: FunctionDecomposition,
-        dependencies={},
-    ):
+@pass_by_value
+def load_from_store(body: List[ast.AST],
+                    copy_only_constants: List[ast.AST],
+                    dependencies={}):
     """Load from Store Transformation
 
     Transform any call to xun functions into loads from the xun store. This
@@ -476,22 +364,23 @@ def load_from_store(
 
     Parameters
     ----------
-    func : FunctionDecomposition
+    body : List[ast.AST]
+    copy_only_constants : List[ast.AST]
     dependencies : mapping from str to Function
         maps names of dependencies to their Functions
 
     Returns
     -------
-    FunctionDecomposition
+    List[ast.AST]
     """
     class DiscoverReferences(ast.NodeVisitor):
         def __init__(self):
             self.seen_targets = []
 
-            for node in func.copy_only_constants:
+            for node in copy_only_constants:
                 self.visit(node)
 
-            self.body_external_names = body_external_names(func.body)
+            self.body_external_names = body_external_names(body)
 
             self.referenced_in_body = frozenset(
                 t for t in self.seen_targets if t in self.body_external_names
@@ -588,12 +477,11 @@ def load_from_store(
     # If No dependencies are referenced in the body of the function, there is
     # nothing to load
     if len(discovered_reference.referenced_in_body) == 0:
-        return func.update(load_from_store=[])
+        return []
 
     # Assigned values will be made available to the function body
     assignments = [
-        node for node in func.copy_only_constants
-        if isinstance(node, ast.Assign)
+        node for node in copy_only_constants if isinstance(node, ast.Assign)
     ]
 
     # Converts calls to xun functions to CallNodes
@@ -605,7 +493,7 @@ def load_from_store(
 
     imports = [
         *[
-            node for node in func.copy_only_constants
+            node for node in copy_only_constants
             if isinstance(node, (ast.Import, ast.ImportFrom))
         ],
         ast.ImportFrom(
@@ -682,4 +570,4 @@ def load_from_store(
         load_call,
     ]
 
-    return func.update(load_from_store=lfs)
+    return lfs

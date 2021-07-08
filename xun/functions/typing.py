@@ -21,30 +21,56 @@ from immutables import Map as frozenmap
 import typing
 
 
+def deduce_types(stmts, known_xun_functions):
+    deducer = TypeDeducer(known_xun_functions=known_xun_functions)
+
+    for stmt in stmts:
+        deducer.visit(stmt)
+
+    return deducer.type_of
+
+
 class XunType:
     def __call__(self, *args, **kwargs):
         raise TypeError('XunType should not be used')
 
     def __repr__(self):
         return self.__class__.__name__
+
+    def __eq__(self, other):
+        return self.__class__ is other.__class__
 XunType = XunType()
 
 
 class TerminalType:
+    _is_terminal = True
+    _seen_types = {}
     def __call__(self, *args, **kwargs):
         raise TypeError('TerminalType should not be used')
 
     def __getitem__(self, key):
-        inst = self.__class__.__new__(self.__class__)
-        inst.generic_type = key
-        return inst
+        if key in self._seen_types:
+            return self._seen_types[key]
+        else:
+            inst = self.__class__.__new__(self.__class__)
+            inst.generic_type = key
+            self._seen_types[key] = inst
+            return inst
 
     def __repr__(self):
         r = self.__class__.__name__
         if hasattr(self, 'generic_type'):
             r += f'[{self.generic_type}]'
         return r
+
+    def __eq__(self, other):
+        return (self.__class__ is other.__class__
+            and self.generic_type == other.generic_type)
 TerminalType = TerminalType()
+
+
+def is_terminal_type(t):
+    return hasattr(t, '_is_terminal')
 
 
 def type_not_allowed_error(node):
@@ -82,8 +108,7 @@ class TypeDeducer:
     """
     def __init__(self, known_xun_functions):
         self.known_xun_functions = known_xun_functions
-        self.with_names = []
-        self.expr_name_type_map = frozenmap()
+        self.type_of = frozenmap()
 
     def _replace(self, **kwargs):
         """
@@ -121,18 +146,16 @@ class TypeDeducer:
         value_type = self.visit(node.value)
 
         if target_shape == (1,):
-            self.with_names.append(target.id)
-            with self.expr_name_type_map.mutate() as mm:
+            with self.type_of.mutate() as mm:
                 mm[target.id] = value_type
-                self.expr_name_type_map = mm.finish()
+                self.type_of = mm.finish()
             return value_type
 
         indices = indices_from_shape(target_shape)
         flatten_targets = flatten_assignment_targets(target)
 
-        with self.expr_name_type_map.mutate() as mm:
+        with self.type_of.mutate() as mm:
             for index, target in zip(indices, flatten_targets):
-                self.with_names.append(target.id)
                 target_type = value_type
                 if is_list_type(target_type):
                     target_type = target_type.__args__[0]
@@ -143,12 +166,20 @@ class TypeDeducer:
                         target_type = target_type.__args__[0]
                 mm.set(target.id, target_type)
             new_map = mm.finish()
-        self.expr_name_type_map = new_map
+        self.type_of = new_map
 
         return value_type
 
+    def visit_Expr(self, node):
+        return None
+
     def visit_BoolOp(self, node):
-        raise NotImplementedError
+        if any(selt.visit(v) is XunType for v in node.values):
+            raise XunSyntaxError(
+                'Cannot use xun function results as values in xun '
+                'definition'
+            )
+        return typing.Any
 
     def visit_BinOp(self, node):
         left_type = self.visit(node.left)
@@ -161,7 +192,11 @@ class TypeDeducer:
         return typing.Any
 
     def visit_UnaryOp(self, node):
-        raise NotImplementedError
+        type = self.visit(node.operand)
+        if type is XunType:
+            raise XunSyntaxError('Cannot apply unary operator to xun type')
+        else:
+            return type
 
     def visit_IfExp(self, node):
         body_type = self.visit(node.body)
@@ -203,7 +238,7 @@ class TypeDeducer:
 
         Result will be a list where all elements have the same type
         """
-        return typing.List[self.visit_comp(node)]
+        return self.visit_comp(node)
 
     def visit_SetComp(self, node):
         # Example: {i for i in range(10)}
@@ -262,8 +297,8 @@ class TypeDeducer:
         raise NotImplementedError
 
     def visit_Name(self, node: ast.Name):
-        if node.id in self.expr_name_type_map.keys():
-            return self.expr_name_type_map[node.id]
+        if node.id in self.type_of.keys():
+            return self.type_of[node.id]
         return typing.Any
 
     def visit_List(self, node):
@@ -300,7 +335,7 @@ class TypeDeducer:
 
     def visit_comp(self, node):
         # Register the local variables in each generator
-        with self.expr_name_type_map.mutate() as local_scope:
+        with self.type_of.mutate() as local_scope:
             for generator in node.generators:
                 iter_types = self.visit(generator.iter)
 
@@ -331,4 +366,4 @@ class TypeDeducer:
             # Add mapping over known local variables while visiting the element
             # of the comprehension
             return self._replace(
-                expr_name_type_map=local_scope.finish()).visit(node.elt)
+                type_of=local_scope.finish()).visit(node.elt)

@@ -988,7 +988,7 @@ def test_list_as_arg():
     assert result == (1, 2, 3)
 
 
-@pytest.mark.xfail('Deep callnodes not supported yet')
+@pytest.mark.xfail
 def test_deep_callnode_arguments():
     @xun.function()
     def f(arg):
@@ -1078,6 +1078,22 @@ def test_terminal_type():
 
     with pytest.raises(XunSyntaxError):
         h.callable()
+
+
+def test_dictonaries():
+    @xun.function()
+    def f(arg):
+        return arg
+
+    @xun.function()
+    def g():
+        return result
+        with ...:
+            args = {'a': f(10)}
+            result = f(args)
+
+    print(run_in_process(g.blueprint()))
+    assert run_in_process(g.blueprint()) == {'a': 10}
 
 
 @pytest.mark.xfail

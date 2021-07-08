@@ -25,12 +25,12 @@ from .util import indices_from_shape
 from .util import prefix_load_result
 from .util import separate_constants_ast
 from .util import sort_constants_ast
-from .xun_typing import TypeDeducer
-from .xun_typing import is_iterator_type
-from .xun_typing import is_list_type
-from .xun_typing import is_set_type
-from .xun_typing import is_tuple_type
-from .xun_typing import is_xun_type
+from .typing import TypeDeducer
+from .typing import is_iterator_type
+from .typing import is_list_type
+from .typing import is_set_type
+from .typing import is_tuple_type
+from .typing import is_xun_type
 from itertools import chain
 import copy
 import types
@@ -273,8 +273,7 @@ def deduce_types(func: FunctionDecomposition, dependencies={}):
         if isinstance(stmt, ast.Assign):
             type_deducer.visit(stmt)
 
-    return func.update(expr_name_type_map=type_deducer.expr_name_type_map,
-                       with_names=type_deducer.with_names)
+    return func.update(type_of=type_deducer.type_of)
 
 
 def copy_only_constants(func: FunctionDecomposition, dependencies={}):
@@ -381,7 +380,7 @@ def unroll_unpacking_assignments(func: FunctionDecomposition):
                         # elements will be available as elements
                         unrolled_value = unrolled_value.elts[i]
                     else:
-                        expr_type = func.expr_name_type_map[target.id]
+                        expr_type = func.type_of[target.id]
                         if is_iterator_type(expr_type) or is_set_type(
                                 expr_type):
                             # Wrap in list to be able to subscript later
@@ -644,7 +643,7 @@ def load_from_store(func: FunctionDecomposition, dependencies={}):
             return self.generic_visit(node)
 
         def visit_ListComp(self, node):
-            expr_type = func.expr_name_type_map[self.expr_name]
+            expr_type = func.type_of[self.expr_name]
             loaded_node = node
             if is_list_type(expr_type):
                 elts_type = expr_type.__args__[0]
@@ -668,7 +667,7 @@ def load_from_store(func: FunctionDecomposition, dependencies={}):
 
     loads = []
     output_targets = []
-    for name in func.with_names:
+    for name in func.type_of.keys():
         if is_referenced_in_body(name):
             output_targets.append(ast.Name(id=name, ctx=ast.Store()))
             unrolled_expr = copy.deepcopy(func.unrolled_exprs_map[name])

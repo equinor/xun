@@ -1,6 +1,7 @@
 from .helpers import check_ast_equals
 from .helpers import run_in_process
 from typing import List
+from xun.functions import transformations as xform
 from xun.functions.compatibility import ast
 import astor
 import pytest
@@ -19,11 +20,11 @@ def has_side_effect(L: List[int], kw=None):
 
 
 def as_callable_python(func):
-    fcode = (xun.functions.FunctionDecomposition(func)
-        .apply(xun.functions.separate_constants)
-        .apply(xun.functions.sort_constants)
-        .apply(xun.functions.copy_only_constants))
-    f = fcode.assemble(fcode.copy_only_constants, fcode.body)
+    desc = xun.functions.describe(func)
+    body, constants = xform.separate_constants(desc)
+    sorted_constants, _ = xform.sort_constants(constants)
+    copy_only_constants = xform.copy_only_constants(sorted_constants)
+    f = xform.assemble(desc, copy_only_constants, body)
 
     return f.compile()
 
@@ -47,12 +48,13 @@ def test_statement_dag():
         (ln[0], 'd')
     ])
 
-    fcode = xun.functions.FunctionDecomposition(f)
-    fcode = fcode.apply(xun.functions.separate_constants)
+    fdesc = xun.functions.describe(f)
+    _, constants = xform.separate_constants(fdesc)
 
-    constant_graph = xun.functions.stmt_dag(fcode.constants)
+    constant_graph = xun.functions.stmt_dag(constants)
 
-    # Relabel nodes to their original source code, as ast.AST cannot be compared
+    # Relabel nodes to their original source code, as ast.AST cannot be
+    # compared
     mapping = {
         node: astor.to_source(node).strip()
         for node in constant_graph.nodes
@@ -76,10 +78,10 @@ def test_fail_when_with_constant_statement_is_not_a_dag():
         with ...:
             d = a + b
             a = b
-            b = a # Loop
+            b = a  # Loop
 
     with pytest.raises(xun.functions.NotDAGError):
-        fcode = xun.functions.FunctionDecomposition(f)
+        xun.functions.describe(f)
 
 
 def test_with_constants():
@@ -145,13 +147,12 @@ def test_load_from_store_transformation():
         pass
     known_functions = {'f': dummy}
 
-    code = (xun.functions.FunctionDecomposition(desc)
-        .apply(xun.functions.separate_constants)
-        .apply(xun.functions.sort_constants)
-        .apply(xun.functions.copy_only_constants, known_functions)
-        .apply(xun.functions.load_from_store, known_functions))
+    body, constants = xform.separate_constants(desc)
+    sorted_constants, _ = xform.sort_constants(constants)
+    copy_only = xform.copy_only_constants(sorted_constants, known_functions)
+    load_from_store = xform.load_from_store(body, copy_only, known_functions)
 
-    generated = [*code.load_from_store, *code.body]
+    generated = [*load_from_store, *body]
     reference = reference_source.body[0].body
 
     ok, diff = check_ast_equals(generated, reference)
@@ -176,59 +177,16 @@ def test_load_from_store_skip_if_unecessary():
         pass
     known_functions = {'f': dummy}
 
-    code = (xun.functions.FunctionDecomposition(desc)
-        .apply(xun.functions.separate_constants)
-        .apply(xun.functions.sort_constants)
-        .apply(xun.functions.copy_only_constants, known_functions)
-        .apply(xun.functions.load_from_store, known_functions))
+    body, constants = xform.separate_constants(desc)
+    sorted_constants, _ = xform.sort_constants(constants)
+    copy_only = xform.copy_only_constants(sorted_constants, known_functions)
+    load_from_store = xform.load_from_store(body, copy_only, known_functions)
 
-    generated = [*code.load_from_store, *code.body]
+    generated = [*load_from_store, *body]
     reference = reference_source.body[0].body
 
     ok, diff = check_ast_equals(generated, reference)
     assert ok, diff
-
-
-def test_FunctionDecomposition():
-    def f(a):
-        pass
-
-    g = xun.functions.FunctionDecomposition(f)
-    h = g.update(a=1, b=2)
-    k = h.update(a=3)
-
-    assert h.a == 1
-    assert h.b == 2
-
-    assert k.a == 3
-    assert k.b == 2
-
-    # g is Immutable
-    with pytest.raises(AttributeError):
-        g.a = 1
-
-    # existing keys are immutable
-    with pytest.raises(AttributeError):
-        h.a = 1
-
-
-def test_FunctionDecomposition_compilation():
-    def f():
-        return global_c
-        return 7
-
-    g_img = xun.functions.FunctionDecomposition(f)
-    g = g_img.assemble(g_img.ast.body[0].body).compile()
-    assert g() == f() and g() == global_c
-
-    new_nodes = g_img.ast.body[0].body[1:]
-    h_img = g_img.update(cropped_ast=new_nodes)
-    h = h_img.assemble(h_img.cropped_ast).compile()
-    assert h() == 7
-
-    # g shohuld not have changed
-    g = g_img.assemble(g_img.ast.body[0].body).compile()
-    assert g() == f() and g() == global_c
 
 
 def test_dependency_without_target():
@@ -281,11 +239,10 @@ def test_structured_unpacking_transformation():
         pass
     known_functions = {'f': dummy, 'h': dummy}
 
-    code = (xun.functions.FunctionDecomposition(desc)
-        .apply(xun.functions.separate_constants)
-        .apply(xun.functions.sort_constants)
-        .apply(xun.functions.copy_only_constants, known_functions)
-        .apply(xun.functions.load_from_store, known_functions))
+    body, constants = xform.separate_constants(desc)
+    sorted_constants, _ = xform.sort_constants(constants)
+    copy_only = xform.copy_only_constants(sorted_constants, known_functions)
+    load_from_store = xform.load_from_store(body, copy_only, known_functions)
 
     @xun.function_ast
     def reference_source():
@@ -304,7 +261,7 @@ def test_structured_unpacking_transformation():
         (a, b, ((x, y, z), (𝛂, β)), c, d), something = _xun_load_constants()
         return a * b * x * y * z * 𝛂 * β * c * d + something
 
-    generated = [*code.load_from_store, *code.body]
+    generated = [*load_from_store, *body]
     reference = reference_source.body[0].body
 
     ok, diff = check_ast_equals(generated, reference)
@@ -327,11 +284,10 @@ def test_unreferenced_names_are_not_loaded():
         pass
     known_functions = {'f': dummy, 'h': dummy, 'g': dummy}
 
-    code = (xun.functions.FunctionDecomposition(desc)
-        .apply(xun.functions.separate_constants)
-        .apply(xun.functions.sort_constants)
-        .apply(xun.functions.copy_only_constants, known_functions)
-        .apply(xun.functions.load_from_store, known_functions))
+    body, constants = xform.separate_constants(desc)
+    sorted_constants, _ = xform.sort_constants(constants)
+    copy_only = xform.copy_only_constants(sorted_constants, known_functions)
+    load_from_store = xform.load_from_store(body, copy_only, known_functions)
 
     @xun.function_ast
     def reference_source():
@@ -349,7 +305,7 @@ def test_unreferenced_names_are_not_loaded():
         a, c = _xun_load_constants()
         return a + c
 
-    generated = [*code.load_from_store, *code.body]
+    generated = [*load_from_store, *body]
     reference = reference_source.body[0].body
 
     ok, diff = check_ast_equals(generated, reference)

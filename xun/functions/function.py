@@ -1,7 +1,7 @@
 from .blueprint import Blueprint
 from .function_description import describe
 from .graph import CallNode
-from . import transformations
+from . import transformations as xform
 from yapf.yapflib.yapf_api import FormatCode
 from yapf.yapflib.style import CreatePEP8Style
 import astor
@@ -223,14 +223,12 @@ class Function:
             Serializable `FunctionImage` representation
         """
         if self._graph_builder is None:
-            decomposed = (transformations.FunctionDecomposition(self.desc)
-                .apply(transformations.separate_constants)
-                .apply(transformations.sort_constants)
-                .apply(transformations.copy_only_constants, self.dependencies)
-                .apply(transformations.build_xun_graph, self.dependencies)
-            )
-
-            self._graph_builder = decomposed.assemble(decomposed.xun_graph)
+            deps = self.dependencies
+            _, constants = xform.separate_constants(self.desc)
+            sorted_constants, _ = xform.sort_constants(constants)
+            copy_only = xform.copy_only_constants(sorted_constants, deps)
+            xun_graph = xform.build_xun_graph(copy_only, deps)
+            self._graph_builder = xform.assemble(self.desc, xun_graph)
         return self._graph_builder
 
     def graph(self, *args, **kwargs):
@@ -273,14 +271,12 @@ class Function:
         --------
         Store : xun store
         """
-        decomp = (transformations.FunctionDecomposition(self.desc)
-            .apply(transformations.separate_constants)
-            .apply(transformations.sort_constants)
-            .apply(transformations.copy_only_constants, self.dependencies)
-            .apply(transformations.load_from_store, self.dependencies)
-        )
-
-        f = decomp.assemble(decomp.load_from_store, decomp.body)
+        deps = self.dependencies
+        body, constants = xform.separate_constants(self.desc)
+        sorted_constants, _ = xform.sort_constants(constants)
+        copy_only = xform.copy_only_constants(sorted_constants, deps)
+        load_from_store = xform.load_from_store(body, copy_only, deps)
+        f = xform.assemble(self.desc, load_from_store, body)
 
         # Remove any refernces to function dependencies, they may be
         # unpicklable and their code has been replaced

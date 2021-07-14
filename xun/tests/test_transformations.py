@@ -113,30 +113,28 @@ def test_with_constants_no_side_effects():
 
 
 def test_load_from_store_transformation():
-    def g():
+    def func():
         with ...:
             a = f()
-            b = f(a)
-            c = f(b)
+            b = h(a)
+            c = g(b)
         value = a + c
         return value
 
-    desc = xun.describe(g)
+    desc = xun.describe(func)
 
     @xun.function_ast
     def reference_source():
         def _xun_load_constants():
-            from copy import deepcopy  # noqa: F401
+            from xun.functions import unpack as _xun_unpack
+            from copy import deepcopy as _xun_deepcopy  # noqa: F401
             from xun.functions import CallNode as _xun_CallNode
             from xun.functions.store import StoreAccessor as _xun_StoreAccessor
             _xun_store_accessor = _xun_StoreAccessor(_xun_store)
             a = _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')
-            b = _xun_CallNode('f', 'K9ZuxDD5x6atLkNd', a)
-            c = _xun_CallNode('f', 'K9ZuxDD5x6atLkNd', b)
-            return (
-                _xun_store_accessor.load_result(_xun_CallNode('f', 'K9ZuxDD5x6atLkNd')),
-                _xun_store_accessor.load_result(_xun_CallNode('f', 'K9ZuxDD5x6atLkNd', b)),
-            )
+            b = _xun_CallNode('h', 'K9ZuxDD5x6atLkNd', a)
+            c = _xun_CallNode('g', 'K9ZuxDD5x6atLkNd', b)
+            return _xun_store_accessor.deepload(a, c)
         a, c = _xun_load_constants()
         value = a + c
         return value
@@ -145,12 +143,60 @@ def test_load_from_store_transformation():
     @xun.function()
     def dummy():
         pass
-    known_functions = {'f': dummy}
+    known_functions = {'f': dummy, 'h': dummy, 'g': dummy}
 
     body, constants = xform.separate_constants(desc)
     sorted_constants, _ = xform.sort_constants(constants)
     copy_only = xform.copy_only_constants(sorted_constants, known_functions)
-    load_from_store = xform.load_from_store(body, copy_only, known_functions)
+    unpacked = xform.unpack_unpacking_assignments(copy_only)
+    load_from_store = xform.load_from_store(body, unpacked, known_functions)
+
+    generated = [*load_from_store, *body]
+    reference = reference_source.body[0].body
+
+    ok, diff = check_ast_equals(generated, reference)
+    assert ok, diff
+
+
+def test_structured_unpacking_transformation():
+    def g():
+        with ...:
+            a, b, ((x, y, z), (𝛂, β)), c, d = f()
+            something = h(x, y, z)
+        return a * b * x * y * z * 𝛂 * β * c * d + something
+
+    desc = xun.describe(g)
+
+    # Dummy dependency
+    @xun.function()
+    def dummy():
+        pass
+    known_functions = {'f': dummy, 'h': dummy}
+
+    body, constants = xform.separate_constants(desc)
+    sorted_constants, _ = xform.sort_constants(constants)
+    copy_only = xform.copy_only_constants(sorted_constants, known_functions)
+    unpacked = xform.unpack_unpacking_assignments(copy_only)
+    load_from_store = xform.load_from_store(body, unpacked, known_functions)
+
+    @xun.function_ast
+    def reference_source():
+        def _xun_load_constants():
+            from xun.functions import unpack as _xun_unpack
+            from copy import deepcopy as _xun_deepcopy  # noqa: F401
+            from xun.functions import CallNode as _xun_CallNode
+            from xun.functions.store import StoreAccessor as _xun_StoreAccessor
+            _xun_store_accessor = _xun_StoreAccessor(_xun_store)
+            a, b, ((x, y, z), (𝛂, β)), c, d = _xun_unpack(
+                (2, ((3,), (2,)), 2),
+                _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')
+            )
+            something = _xun_CallNode('h', 'K9ZuxDD5x6atLkNd', x, y, z)
+            return _xun_store_accessor.deepload(
+                a, b, c, d, something, x, y, z, α, β
+            )
+        a, b, c, d, something, x, y, z, α, β = _xun_load_constants()
+        return a * b * x * y * z * 𝛂 * β * c * d + something
 
     generated = [*load_from_store, *body]
     reference = reference_source.body[0].body
@@ -222,91 +268,3 @@ def test_xun_function_to_source():
 
     tree = g.callable().tree
     assert isinstance(astor.to_source(tree), str)
-
-
-def test_structured_unpacking_transformation():
-    def g():
-        with ...:
-            a, b, ((x, y, z), (𝛂, β)), c, d = f()
-            something = h(x, y, z)
-        return a * b * x * y * z * 𝛂 * β * c * d + something
-
-    desc = xun.describe(g)
-
-    # Dummy dependency
-    @xun.function()
-    def dummy():
-        pass
-    known_functions = {'f': dummy, 'h': dummy}
-
-    body, constants = xform.separate_constants(desc)
-    sorted_constants, _ = xform.sort_constants(constants)
-    copy_only = xform.copy_only_constants(sorted_constants, known_functions)
-    load_from_store = xform.load_from_store(body, copy_only, known_functions)
-
-    @xun.function_ast
-    def reference_source():
-        def _xun_load_constants():
-            from copy import deepcopy  # noqa: F401
-            from xun.functions import CallNode as _xun_CallNode
-            from xun.functions.store import StoreAccessor as _xun_StoreAccessor
-            _xun_store_accessor = _xun_StoreAccessor(_xun_store)
-            a, b, ((x, y, z), (𝛂, β)), c, d = _xun_CallNode('f', 'K9ZuxDD5x6atLkNd').unpack(
-                (2, ((3,), (2,)), 2))
-            something = _xun_CallNode('h', 'K9ZuxDD5x6atLkNd', x, y, z)
-            return (
-                _xun_store_accessor.load_result(_xun_CallNode('f', 'K9ZuxDD5x6atLkNd')),
-                _xun_store_accessor.load_result(_xun_CallNode('h', 'K9ZuxDD5x6atLkNd', x, y, z)),
-            )
-        (a, b, ((x, y, z), (𝛂, β)), c, d), something = _xun_load_constants()
-        return a * b * x * y * z * 𝛂 * β * c * d + something
-
-    generated = [*load_from_store, *body]
-    reference = reference_source.body[0].body
-
-    ok, diff = check_ast_equals(generated, reference)
-    assert ok, diff
-
-
-def test_unreferenced_names_are_not_loaded():
-    def func():
-        with ...:
-            a = f()
-            b = h(a)
-            c = g(b)
-        return a + c
-
-    desc = xun.describe(func)
-
-    # Dummy dependency
-    @xun.function()
-    def dummy():
-        pass
-    known_functions = {'f': dummy, 'h': dummy, 'g': dummy}
-
-    body, constants = xform.separate_constants(desc)
-    sorted_constants, _ = xform.sort_constants(constants)
-    copy_only = xform.copy_only_constants(sorted_constants, known_functions)
-    load_from_store = xform.load_from_store(body, copy_only, known_functions)
-
-    @xun.function_ast
-    def reference_source():
-        def _xun_load_constants():
-            from copy import deepcopy  # noqa: F401
-            from xun.functions import CallNode as _xun_CallNode
-            from xun.functions.store import StoreAccessor as _xun_StoreAccessor
-            _xun_store_accessor = _xun_StoreAccessor(_xun_store)
-            a = _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')
-            b = _xun_CallNode('h', 'K9ZuxDD5x6atLkNd', a)
-            c = _xun_CallNode('g', 'K9ZuxDD5x6atLkNd', b)
-            return (_xun_store_accessor.load_result(_xun_CallNode('f', 'K9ZuxDD5x6atLkNd')),
-                    _xun_store_accessor.load_result(_xun_CallNode('g', 'K9ZuxDD5x6atLkNd', b)),
-            )
-        a, c = _xun_load_constants()
-        return a + c
-
-    generated = [*load_from_store, *body]
-    reference = reference_source.body[0].body
-
-    ok, diff = check_ast_equals(generated, reference)
-    assert ok, diff

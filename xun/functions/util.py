@@ -3,6 +3,8 @@ from .errors import NotDAGError
 from .errors import XunSyntaxError
 from immutables import Map as frozenmap
 from itertools import chain
+from itertools import count
+from itertools import islice
 from itertools import tee
 import collections
 import copy
@@ -10,6 +12,45 @@ import inspect
 import networkx as nx
 import textwrap
 import types
+
+
+#
+# Runtime helpers
+#
+
+
+def unpack(shape, obj):
+    def split_tuple(t: tuple, delimiter):
+        delim_index = t.index(delimiter) if delimiter in t else None
+        head = t[:delim_index]
+        tail = t[delim_index + 1:] if delim_index is not None else ()
+        return head, tail, delim_index
+
+    def λ(shape, indices):
+        for s in shape:
+            if isinstance(s, int):
+                yield from (obj[idx] for idx in islice(indices, s))
+            elif isinstance(s, tuple):
+                yield unpack(s, obj[next(indices)])
+            else:
+                raise RuntimeError(f'Invalid shape {s}')
+
+    try:
+        obj = list(obj)
+    except TypeError:
+        pass
+
+    shape_head, shape_tail, ellipsis_index = split_tuple(shape, Ellipsis)
+    head_indices = count()
+    yield from tuple(λ(shape_head, head_indices))
+    if ellipsis_index is not None:
+        tail_indices = count(-1, -1)
+        tail = tuple(λ(shape_tail[::-1], tail_indices))
+        starred_start = next(head_indices)
+        starred_end = next(tail_indices) + 1
+        starred_slice = slice(starred_start, starred_end if tail else None)
+        yield obj[starred_slice]
+        yield from reversed(tail)
 
 
 #

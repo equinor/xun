@@ -24,6 +24,7 @@ from .util import function_ast
 from .util import function_source
 from .util import stmt_dag
 from .util import strip_decorators
+from .util import unpack
 
 from . import cli
 from . import compatibility

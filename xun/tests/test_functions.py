@@ -293,14 +293,22 @@ def test_starred_unpacking_from_list():
     @xun.function()
     def h():
         with ...:
-            head, *body, foot = f()
-        return head, body, foot
+            lit_head, *lit_body, lit_tail = [1, 2, 3, 4, 5, 6]
+            xun_head, *xun_body, xun_tail = f()
+        return lit_head, lit_body, lit_tail, xun_head, xun_body, xun_tail
 
-    head, body, foot = run_in_process(h.blueprint())
+    (
+        lit_head,
+        lit_body,
+        lit_tail,
+        xun_head,
+        xun_body,
+        xun_tail,
+    ) = run_in_process(h.blueprint())
 
-    assert head == 1
-    assert body == [2, 3, 4, 5]
-    assert foot == 6
+    assert lit_head == xun_head == 1
+    assert lit_body == xun_body == [2, 3, 4, 5]
+    assert lit_tail == xun_tail == 6
 
 
 def test_starred_unpacking_from_function():
@@ -356,7 +364,6 @@ def test_subscripted_function():
     assert result == 'b'
 
 
-@pytest.mark.xfail(reason="Subscript result not implemented")
 def test_subscript_result():
     @xun.function()
     def f():
@@ -366,13 +373,13 @@ def test_subscript_result():
     def h():
         with ...:
             r = f()
-            b, c = r
-            c = r[1]
-        return b + c
+            a, b = r
+            b2 = r[1]
+        return a + b + b2
 
     result = run_in_process(h.blueprint())
 
-    assert result == 'bc'
+    assert result == 'abb'
 
 
 def test_unpack_subscripted_function():
@@ -838,3 +845,209 @@ def test_funcntions_with_dict_arguments():
             u = a(d={'a': 2})
         return v, u
     assert run_in_process(f.blueprint()) == (1, 2)
+
+
+def test_unpacking_to_intermediate():
+    @xun.function()
+    def f(arg):
+        return 'd'
+
+    @xun.function()
+    def g():
+        return 'a', 'c'
+
+    @xun.function()
+    def h():
+        with ...:
+            (r_a, c), r_b = g(), 'b'
+            inter_a = r_a
+            a, b = inter_a, r_b
+            d = f(c)
+        return a + b + c + d
+
+    result = run_in_process(h.blueprint())
+
+    assert result == 'abcd'
+
+
+def test_unpacking_list_comp():
+    @xun.function()
+    def double(arg):
+        return arg * 2
+
+    @xun.function()
+    def triple(arg):
+        return arg * 3
+
+    @xun.function()
+    def h(n_values):
+        return [(i, d, t, td) for i, d, t, td in result]
+        with ...:
+            value_pairs = [(i, double(i)) for i in range(n_values)]
+            result = [(s, d, triple(s), triple(d)) for s, d in value_pairs]
+
+    n = 4
+    blueprint = h.blueprint(n)
+    expected = [(i, 2 * i, 3 * i, 3 * 2 * i) for i in range(n)]
+
+    result = run_in_process(blueprint)
+
+    assert result == expected
+
+
+def test_unpacking_generator():
+    @xun.function()
+    def double(arg):
+        return arg * 2
+
+    @xun.function()
+    def h():
+        with ...:
+            gen = (double(i) for i in range(3))
+            (a, b, c), d = gen, 3
+        return a + b + c + d
+
+    result = run_in_process(h.blueprint())
+    assert result == 9
+
+
+def test_unpacking_list_comprehension():
+    @xun.function()
+    def double(arg):
+        return arg * 2
+
+    @xun.function()
+    def h():
+        with ...:
+            list_comp = [double(i) for i in range(3)]
+            (a, b, c), d = list_comp, 3
+        return a + b + c + d
+
+    result = run_in_process(h.blueprint())
+    assert result == 9
+
+
+def test_unpacking_set_comprehension():
+    @xun.function()
+    def double(arg):
+        return arg * 2
+
+    @xun.function()
+    def h():
+        with ...:
+            set_comp = {double(i) for i in range(3)}
+            (a, b, c), d = set_comp, 3
+        return a + b + c + d
+
+    result = run_in_process(h.blueprint())
+    assert result == 9
+
+
+def test_unpacking_dict_comprehension():
+    @xun.function()
+    def double(arg):
+        return arg * 2
+
+    @xun.function()
+    def h():
+        with ...:
+            keys = [0, 1, 2]
+            values = [0, 1, 2]
+            dict_comp = {k: double(v) for k, v in zip(keys, values)}
+            a = dict_comp[0]
+            b = dict_comp[1]
+            c = dict_comp[2]
+        return a + b + c
+
+    result = run_in_process(h.blueprint())
+    assert result == 6
+
+
+@pytest.mark.xfail
+def test_list_as_arg():
+    @xun.function()
+    def f(arg):
+        return arg
+
+    @xun.function()
+    def h():
+        with ...:
+            my_list = [1, 2, f(3)]
+            new_list = f(my_list)
+        return new_list
+
+    result = run_in_process(h.blueprint())
+
+    assert result == (1, 2, 3)
+
+
+@pytest.mark.xfail
+def test_deep_callnode_arguments():
+    @xun.function()
+    def f(arg):
+        return arg
+
+    @xun.function()
+    def h():
+        with ...:
+            my_dict = {
+                'a': 1,
+                'b': f(2),
+                'c': f(f(3)),
+            }
+            new_dict = f(my_dict)
+        a = new_dict['a']
+        b = new_dict['b']
+        c = new_dict['c']
+        return a + b + c
+
+    result = run_in_process(h.blueprint())
+
+    assert result == 6
+
+
+def test_fails_when_iterating_over_callnode():
+    @xun.function()
+    def f():
+        return [1, 2, 3]
+
+    @xun.function()
+    def h():
+        with ...:
+            values = [i for i in f()]
+        return values
+
+    with pytest.raises(TypeError):
+        run_in_process(h.blueprint())
+
+
+def test_set():
+    @xun.function()
+    def f(arg):
+        return arg
+
+    @xun.function()
+    def h():
+        with ...:
+            only_values = {'a', 'b', 'c', 'd'}
+            only_xun_calls = {f('a'), f('b'), f('c'), f('d')}
+        return only_values, only_xun_calls
+
+    assert run_in_process(h.blueprint()) == (
+        {'a', 'b', 'c', 'd'}, {'a', 'b', 'c', 'd'}
+    )
+
+
+@pytest.mark.xfail
+def test_different_function_same_name():
+    @xun.function()
+    def f():
+        return 1
+
+    @xun.function()
+    def f():
+        with ...:
+            value = f()
+        return value
+
+    assert run_in_process(f.blueprint()) == 1

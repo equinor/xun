@@ -227,7 +227,8 @@ class Function:
             _, constants = xform.separate_constants(self.desc)
             sorted_constants, _ = xform.sort_constants(constants)
             copy_only = xform.copy_only_constants(sorted_constants, deps)
-            xun_graph = xform.build_xun_graph(copy_only, deps)
+            unpacked = xform.unpack_unpacking_assignments(copy_only)
+            xun_graph = xform.build_xun_graph(unpacked, deps)
             self._graph_builder = xform.assemble(self.desc, xun_graph)
         return self._graph_builder
 
@@ -275,7 +276,8 @@ class Function:
         body, constants = xform.separate_constants(self.desc)
         sorted_constants, _ = xform.sort_constants(constants)
         copy_only = xform.copy_only_constants(sorted_constants, deps)
-        load_from_store = xform.load_from_store(body, copy_only, deps)
+        unpacked = xform.unpack_unpacking_assignments(copy_only)
+        load_from_store = xform.load_from_store(body, unpacked, deps)
         f = xform.assemble(self.desc, load_from_store, body)
 
         # Remove any refernces to function dependencies, they may be

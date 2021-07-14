@@ -1,7 +1,9 @@
-import networkx as nx
 from .errors import CopyError
 from .errors import NotDAGError
 from .util import make_hashable
+from contextlib import contextmanager
+import networkx as nx
+import threading
 
 
 def sink_nodes(dag):
@@ -46,6 +48,9 @@ class CallNode:
     kwargs : mapping of str to arguments
         the keyword arguments of this call
     """
+
+    _thread_allows_copy = threading.local()
+
     def __init__(self, function_name, function_hash, *args, **kwargs):
         self.function_name = function_name
         self.function_hash = function_hash
@@ -56,11 +61,25 @@ class CallNode:
     def __getitem__(self, key):
         return self._replace(subscript=self.subscript + (key,))
 
+    def __iter__(self):
+        raise TypeError('Cannot iterate xun function results at schedule time')
+
     def __copy__(self):
-        raise CopyError('Cannot copy value')
+        if not hasattr(CallNode._thread_allows_copy, 'accessor'):
+            raise CopyError('Cannot copy value')
+        return CallNode._thread_allows_copy.accessor.load_result(self)
 
     def __deepcopy__(self, memo=None):
-        raise CopyError('Cannot copy value')
+        if not hasattr(CallNode._thread_allows_copy, 'accessor'):
+            raise CopyError('Cannot copy value')
+        return CallNode._thread_allows_copy.accessor.load_result(self)
+
+    @classmethod
+    @contextmanager
+    def _load_on_copy_context(cls, accessor):
+        CallNode._thread_allows_copy.accessor = accessor
+        yield
+        delattr(CallNode._thread_allows_copy, 'accessor')
 
     def __eq__(self, other):
         try:
@@ -112,40 +131,3 @@ class CallNode:
         inst = CallNode.__new__(CallNode)
         inst.__dict__.update(attribs)
         return inst
-
-    def unpack(self, shape, *, _subscript=()):
-        """
-        Unpack a CallNode into a tuple of CallNodes with a given shape using
-        recursion.
-
-        Examples
-        --------
-        >>> CallNode('f').unpack((2, (2,)))
-        (
-            CallNode('f', (0,)),
-            CallNode('f', (1,)),
-            (
-                CallNode('f', (2, 0)),
-                CallNode('f', (2, 1))
-            )
-        )
-        """
-        output = ()
-        idx = 0
-        for element in shape:
-            if isinstance(element, int):
-                for _ in range(element):
-                    new_instance = self._replace(subscript=_subscript + (idx,))
-                    output += (new_instance,)
-                    idx += 1
-            elif isinstance(element, tuple):
-                subscript = _subscript + (idx,)
-                idx += 1
-                output += (self.unpack(shape=element, _subscript=subscript),)
-            elif isinstance(element, type(Ellipsis)):
-                new_instance = self._replace(subscript=_subscript + (idx,))
-                output += (new_instance,)
-                idx += 1
-            else:
-                raise TypeError("Invalid content in shape tuple")
-        return output

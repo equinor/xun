@@ -1,4 +1,5 @@
 from .. import CallNode
+from copy import deepcopy
 
 
 class StoreAccessor:
@@ -36,18 +37,24 @@ class StoreAccessor:
         else:
             return self
 
+    def deepload(self, *args):
+        with CallNode._load_on_copy_context(self):
+            return deepcopy(tuple(args))
+
     def load_result(self, call):
-        namespace = self.store / 'results' / call
-        return namespace[call.function_hash]
+        namespace = self.store / call.function_hash
+        result = namespace[(call.args, call.kwargs)]
+        for subscript in call.subscript:
+            result = result[subscript]
+        return result
 
     def store_result(self, call, result):
-        namespace = self.store / 'results' / call
-        namespace[call.function_hash] = result
-        namespace['latest'] = call.function_hash
+        namespace = self.store / call.function_hash
+        namespace[(call.args, call.kwargs)] = result
 
     def completed(self, call):
-        namespace = self.store / 'results' / call
-        return call.function_hash in namespace
+        namespace = self.store / call.function_hash
+        return (call.args, call.kwargs) in namespace
 
     def resolve_call_args(self, call):
         """
@@ -63,33 +70,4 @@ class StoreAccessor:
         (list, dict)
             Pair of resolved arguments and keyword arguments
         """
-        cache = {}
-
-        def load_arg_value(arg):
-            """
-            If the argument is a Callnode, the result must be loaded from the
-            store, unless it is already loaded in the cache.
-            """
-            if isinstance(arg, CallNode):
-                if len(arg.subscript) == 0:
-                    return cache.setdefault(arg, self.load_result(arg))
-                # In case subscript is specified, find the value at the correct
-                # subscript by iterating thgough the result
-                result = iter(cache.setdefault(arg, self.load_result(arg)))
-                for subscript in arg.subscript:
-                    for _ in range(subscript):
-                        next(result)
-                    result = iter(next(result))
-                return next(result)
-            else:
-                return arg
-
-        args = [
-            load_arg_value(arg)
-            for arg in call.args
-        ]
-        kwargs = {
-            key: load_arg_value(arg)
-            for key, arg in call.kwargs.items()
-        }
-        return args, kwargs
+        return self.deepload(call.args, call.kwargs)

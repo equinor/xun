@@ -90,7 +90,6 @@ def create_tls_identities(args):
 
 def update_config(config, path):
     path.parent.mkdir(exist_ok=True, parents=True)
-    print(path)
 
     if path.exists():
         old_config = load_yaml(path) or {}

@@ -135,7 +135,6 @@ class SFTPDriver(StoreDriver):
             assert self.is_file(self.root / 'keys' / b64)
             assert self.is_file(self.root / 'values' / b64)
         else:
-            print(self.index)
             assert b64 not in self.index
             assert not self.is_file(self.root / 'keys' / b64)
             assert not self.is_file(self.root / 'values' / b64)

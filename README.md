@@ -87,7 +87,7 @@ The decorator `@context.function()` marks this function as a context function, o
 ```python
 def fibonacci_number(n):
 ```
-The function definition is just normal a python function definition.
+The function definition is just a normal python function definition.
 ```python
     return f_n_1 + f_n_2
 ```
@@ -101,9 +101,9 @@ The body of the function is just regular python, it has as expected access to th
         )
         f_n_2 = fibonacci_number(n - 2) if n > 1 else 0
 ```
-Statements on form `with ...:` we refere to as with constant statments, they introduce new syntex and rules that we'll get move into in the next section. But important to note is that the recursive calls to `fibonacci_number(n)` are memoized in the context store, and can after scheduling, be run in parallel.
+Statements on the form `with ...:` we refer to as with constants statments. They introduce new syntax and rules that we will get more into in the next section. Note for example that the recursive calls to `fibonacci_number(n)` are memoized in the context store and can therefore, after scheduling, be run in parallel.
 
-In fact, `xun` works by first figuring out all the calls that will happen to context functions, building a call graph, and scheduling the calls such that any previous call that we may depend on is executed before we evaluate the current call. This requires the call graph to be a DAG, or directed acyclic graph.
+In fact, `xun` works by first figuring out all the calls that will happen to context functions, building a call graph, and scheduling the calls such that any previous call that we may depend on is executed before we evaluate the current call. This requires the call graph to be a directed acyclic graph (DAG).
 
 ## With Constants Statement
 
@@ -116,7 +116,7 @@ def do_some_work(some_values):
         fixed_values = [fix(v) for v in some_values]
 ```
 
-In the above example a job takes in some iterable, `some_values` as argument, polished the values in it and calls another context function that it depends on. Note that the order of the statements inside the with constants statements does not matter. The syntax of with constants statements is similar to where clauses in Haskell and has rules that differ from standard python. In general, for with constants statements the following apply:
+In the above example, a job takes in some iterable `some_values` as argument, polishes the values in it and calls another context function that it depends on. Note that the order of the statements inside the with constants statements does not matter. The syntax of with constants statements is similar to where clauses in Haskell and has rules that differ from standard python. In general, for with constants statements the following apply:
 
 * Order of statements is arbitrary
 * Calling context functions is only allowed within with constants statements
@@ -124,9 +124,9 @@ In the above example a job takes in some iterable, `some_values` as argument, po
 * There can only be one with constants statements per context function
 * Values cannot be modified
 * If a function modifies a value passed to it, the changes will not be reflected for the value in the with constants statement
-* Any code in with constants statements will be executed during scheduling, so the heavy lifting should be done in fully in the function body, and not inside the with constants statements
+* Any code in with constants statements will be executed during scheduling, so the heavy lifting should be done in the function body, and not inside the with constants statements
 
-With constants statements allows xun to figure out the order of calls needed to execute a xun program.
+With constants statements allow xun to figure out the order of calls needed to execute a xun program.
 
 ## Stores
 
@@ -134,7 +134,7 @@ As calls to context functions are executed and finished, the results are saved i
 
 ## Drivers
 
-Drivers are the classes that have the responsibility of executing programs. This includes scheduling the calls of the call graph and managing any concurency.
+Drivers are the classes that have the responsibility of executing programs. This includes scheduling the calls of the call graph and managing any concurrency.
 
 ## The `@xun.make_shared` decorator
 
@@ -160,4 +160,4 @@ def context_function():
     np.array([1, 2, 3])        # OK because the function is defined in an installed module
 ```
 
-Because context functions are pickled, any function they reference must either be installed on the system, be represented differently. `xun` comes with a decorator, `@xun.make_shared`, that can make many functions serializable, which you need to use if you wish to call functions defined in your project file.
+Because context functions are pickled, any function they reference must either be installed on the system or be represented differently. `xun` comes with a decorator, `@xun.make_shared`, that can make many functions serializable, and that you need to use if you wish to call functions defined in your project file.

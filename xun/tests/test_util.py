@@ -8,6 +8,7 @@ from xun.functions import function_source
 from xun.functions.compatibility import ast
 from xun.functions.util import assignment_target_introduced_names
 from xun.functions.util import assignment_target_shape
+from xun.functions.util import call_from_function_definition
 from xun.functions.util import func_external_names
 from xun.functions.util import overwrite_scope
 from xun.functions.util import shape_to_ast_tuple
@@ -230,3 +231,23 @@ def test_assignment_target_introduced_names():
     assert assignment_target_introduced_names(stmts[2]) == {'d', 'e'}
     assert assignment_target_introduced_names(stmts[3]) == {'f', 'g'}
     assert assignment_target_introduced_names(stmts[4]) == {'h'}
+
+
+def test_call_from_function_definition():
+    # Simple example
+    f_def = ast.parse('def f(a, b=1, *args, **kwargs): pass').body[0]
+    expected_call = ast.parse('f(a, b, *args, **kwargs)').body[0].value
+    generated_call = call_from_function_definition(f_def)
+
+    ok, diff = check_ast_equals(generated_call, expected_call)
+    assert ok, diff
+
+    # Advanced example
+    f_def = ast.parse(
+        'def f(a, b, c, d=2, *, e=3, **my_kwargs): pass'
+    ).body[0]
+    expected_call = ast.parse('f(a, b, c, d, e, **my_kwargs)').body[0].value
+    generated_call = call_from_function_definition(f_def)
+
+    ok, diff = check_ast_equals(generated_call, expected_call)
+    assert ok, diff

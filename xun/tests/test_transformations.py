@@ -125,15 +125,14 @@ def test_load_from_store_transformation():
 
     @xun.function_ast
     def reference_source():
+        _xun_store_accessor = yield
+        yield
         def _xun_load_constants():
             from xun.functions import unpack as _xun_unpack  # noqa: F401
             from copy import deepcopy as _xun_deepcopy  # noqa: F401
-            from xun.functions import CallNode as _xun_CallNode
-            from xun.functions.store import StoreAccessor as _xun_StoreAccessor
-            _xun_store_accessor = _xun_StoreAccessor(_xun_store)
-            a = _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')
-            b = _xun_CallNode('h', 'K9ZuxDD5x6atLkNd', a)
-            c = _xun_CallNode('g', 'K9ZuxDD5x6atLkNd', b)
+            a = f()
+            b = h(a)
+            c = g(b)
             return _xun_store_accessor.deepload(a, c)
         a, c = _xun_load_constants()
         value = a + c
@@ -145,13 +144,14 @@ def test_load_from_store_transformation():
         pass
     known_functions = {'f': dummy, 'h': dummy, 'g': dummy}
 
+    head = xform.generate_header()
     body, constants = xform.separate_constants(desc)
     sorted_constants, _ = xform.sort_constants(constants)
     copy_only = xform.copy_only_constants(sorted_constants, known_functions)
     unpacked = xform.unpack_unpacking_assignments(copy_only)
     load_from_store = xform.load_from_store(body, unpacked, known_functions)
 
-    generated = [*load_from_store, *body]
+    generated = [*head, *load_from_store, *body]
     reference = reference_source.body[0].body
 
     ok, diff = check_ast_equals(generated, reference)
@@ -173,6 +173,7 @@ def test_structured_unpacking_transformation():
         pass
     known_functions = {'f': dummy, 'h': dummy}
 
+    head = xform.generate_header()
     body, constants = xform.separate_constants(desc)
     sorted_constants, _ = xform.sort_constants(constants)
     copy_only = xform.copy_only_constants(sorted_constants, known_functions)
@@ -181,24 +182,76 @@ def test_structured_unpacking_transformation():
 
     @xun.function_ast
     def reference_source():
+        _xun_store_accessor = yield
+        yield
         def _xun_load_constants():
             from xun.functions import unpack as _xun_unpack
             from copy import deepcopy as _xun_deepcopy  # noqa: F401
-            from xun.functions import CallNode as _xun_CallNode
-            from xun.functions.store import StoreAccessor as _xun_StoreAccessor
-            _xun_store_accessor = _xun_StoreAccessor(_xun_store)
             a, b, ((x, y, z), (𝛂, β)), c, d = _xun_unpack(
-                (2, ((3,), (2,)), 2),
-                _xun_CallNode('f', 'K9ZuxDD5x6atLkNd')
+                (2, ((3,), (2,)), 2), f()
             )
-            something = _xun_CallNode('h', 'K9ZuxDD5x6atLkNd', x, y, z)
+            something = h(x, y, z)
             return _xun_store_accessor.deepload(
                 a, b, c, d, something, x, y, z, α, β
             )
         a, b, c, d, something, x, y, z, α, β = _xun_load_constants()
         return a * b * x * y * z * 𝛂 * β * c * d + something
 
-    generated = [*load_from_store, *body]
+    generated = [*head, *load_from_store, *body]
+    reference = reference_source.body[0].body
+
+    ok, diff = check_ast_equals(generated, reference)
+    assert ok, diff
+
+
+def test_interface_graph_transformation():
+    @xun.function()
+    def f(arg):
+        return arg
+
+    def g(arg):
+        yield from f(arg * 2)
+
+    desc = xun.describe(g)
+
+    interface_call, target_call = xform.separate_interface_and_target(desc, f)
+    interface = xform.build_interface_graph(interface_call, target_call)
+    generated = [*interface]
+
+    @xun.function_ast
+    def reference_source(arg):
+        import networkx as _xun_nx
+        _xun_graph = _xun_nx.DiGraph()
+        _xun_graph.add_edge(f(arg * 2), g(arg))
+        return _xun_graph
+
+    reference = reference_source.body[0].body
+
+    ok, diff = check_ast_equals(generated, reference)
+    assert ok, diff
+
+
+def test_interface_task_transformation():
+    @xun.function()
+    def f(arg):
+        return arg
+
+    def g(arg):
+        yield from f(arg * 2)
+
+    desc = xun.describe(g)
+
+    interface_call, target_call = xform.separate_interface_and_target(desc, f)
+    interface = xform.interface_raise_on_execution(interface_call, target_call)
+    generated = [*interface]
+
+    @xun.function_ast
+    def reference_source(arg):
+        from xun.functions import XunInterfaceError as _xun_InterfaceError
+        raise _xun_InterfaceError(
+            f'{f(arg * 2)} did not produce a result for {g(arg)}'
+        )
+
     reference = reference_source.body[0].body
 
     ok, diff = check_ast_equals(generated, reference)
@@ -266,5 +319,5 @@ def test_xun_function_to_source():
         value = a + c
         return value
 
-    tree = g.callable().tree
+    tree = g.callable.tree
     assert isinstance(astor.to_source(tree), str)

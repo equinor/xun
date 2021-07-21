@@ -1,4 +1,5 @@
 from .function_description import describe
+from .util import overwrite_scope
 import functools
 import importlib
 
@@ -143,7 +144,7 @@ class FunctionImage:
         """
         function_code = compile(self.tree, '<ast>', 'exec')
 
-        namespace = {
+        globals = {
             '__builtins__': __builtins__,
             **self.globals,
             **{
@@ -151,8 +152,10 @@ class FunctionImage:
                 for m in self.referenced_modules
             },
         }
+        namespace = {}
         exec(function_code, namespace)  # nosec
         f = namespace[self.name]
+        f = overwrite_scope(f, globals, module=self.__module__)
 
         functools.update_wrapper(f, self)
 
@@ -203,6 +206,9 @@ class FunctionImage:
         self.referenced_modules = state[7]
         self.hash = state[8]
         self._func = None
+
+    def __repr__(self):
+        return f'<FunctionImage: {self.__name__} #{self.hash}>'
 
 
 def make_shared(func):

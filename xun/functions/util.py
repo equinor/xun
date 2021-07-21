@@ -648,3 +648,40 @@ def make_hashable(a):
         return a
     else:
         raise TypeError(f'unhashable type {a.__class__}')
+
+
+def call_from_function_definition(f_def):
+    f_name = ast.Name(id=f_def.name, ctx=ast.Load())
+
+    f_args = []
+    for arg in f_def.args.posonlyargs:
+        f_args.append(ast.Name(id=arg.arg, ctx=ast.Load()))
+
+    for arg in f_def.args.args:
+        f_args.append(ast.Name(id=arg.arg, ctx=ast.Load()))
+
+    if f_def.args.vararg is not None:
+        f_args.append(
+            ast.Starred(
+                value=ast.Name(id=f_def.args.vararg.arg, ctx=ast.Load()),
+                ctx=ast.Load(),
+            )
+        )
+
+    for arg in f_def.args.kwonlyargs:
+        f_args.append(ast.Name(id=arg.arg, ctx=ast.Load()))
+
+    f_keywords = []
+    if f_def.args.kwarg is not None:
+        f_keywords.append(
+            ast.keyword(
+                arg=None,
+                value=ast.Name(id=f_def.args.kwarg.arg, ctx=ast.Load()),
+            )
+        )
+
+    return ast.Call(
+        func=f_name,
+        args=f_args,
+        keywords=f_keywords,
+    )

@@ -1,7 +1,10 @@
 from .blueprint import Blueprint
 from .function_description import describe
+from .function_image import FunctionImage
 from .graph import CallNode
 from . import transformations as xform
+from abc import ABC
+from abc import abstractmethod
 from yapf.yapflib.yapf_api import FormatCode
 from yapf.yapflib.style import CreatePEP8Style
 import astor
@@ -16,7 +19,172 @@ def adjusted_line_layout(style=CreatePEP8Style()):
     return style
 
 
-class Function:
+def callnode_constructor(func):
+    @FunctionImage.from_function
+    def construct_callnode(*args, **kwargs):
+        from xun.functions import CallNode
+        return CallNode(func.name, func.hash, *args, **kwargs)
+    return construct_callnode
+
+
+class AbstractFunction(ABC):
+    class FunctionCode:
+        """FunctionCode
+
+        Xun function code. Helper for checking/debugging generated code of
+        xun function.
+        """
+        def __init__(self, func):
+            self.owner = func
+
+        @property
+        def graph(self):
+            source = astor.to_source(self.owner.graph_builder.tree)
+            return FormatCode(source, style_config=adjusted_line_layout())[0]
+
+        @property
+        def task(self):
+            source = astor.to_source(self.owner.callable.tree)
+            return FormatCode(source, style_config=adjusted_line_layout())[0]
+
+        @property
+        def source(self):
+            return self.owner.desc.src
+
+    @property
+    @abstractmethod
+    def name(self):
+        pass
+
+    @property
+    @abstractmethod
+    def hash(self):
+        pass
+
+    @property
+    def code(self):
+        return self.FunctionCode(self)
+
+    @property
+    @abstractmethod
+    def dependencies(self):
+        pass
+
+    def sha256(self):
+        """SHA256
+
+        Calculate a hash identifier for a function with the given description
+        and dependencies.
+
+        Parameters
+        ----------
+        desc : xun.functions.FunctionDescription
+            Description of the hashed function
+        dependencies : mapping of name to Function
+            The dependencies of the hashed function
+
+        Returns
+        -------
+        str
+            Hex digest of function hash
+        """
+        sha256 = hashlib.sha256()
+        sha256.update(self.desc.src.encode())
+        for dependency in self.dependencies.values():
+            if dependency is not self:
+                sha256.update(dependency.hash.encode())
+        truncated = sha256.digest()[:12]
+        return base64.urlsafe_b64encode(truncated).decode()
+
+    def callnode(self, *args, **kwargs):
+        """Call Node
+
+        Create a CallNode for a call to this function
+
+        Parameters
+        ----------
+        *args
+        **kwargs
+
+        Returns
+        -------
+        CallNode
+            CallNode representing a call to this function
+
+        See Also
+        --------
+        CallNode : Symbolic representation of a call to this function
+        """
+        return CallNode(self.name, self.hash, *args, **kwargs)
+
+    def blueprint(self, *args, **kwargs):
+        """Blueprint
+
+        Create a blueprint for a call to this function
+
+        Parameters
+        ----------
+        *args
+        **kwargs
+
+        Returns
+        -------
+        Blueprint
+            Blueprint representing the call to this function
+
+        See Also
+        --------
+        Blueprint : Comprises the call, call graph, and required functions
+        """
+        return Blueprint(self, *args, **kwargs)
+
+    @property
+    @abstractmethod
+    def graph_builder(self):
+        """graph builder
+
+        Preparation step for Graph function. Build call graph for a call to
+        this function
+
+        Returns
+        FunctionImage
+            Serializable `FunctionImage` representation
+        """
+        pass
+
+    def graph(self, *args, **kwargs):
+        """Graph
+
+        Build call graph for a call to this function
+
+        Parameters
+        ----------
+        *args
+        **kwargs
+
+        Returns
+        nx.DiGraph
+            The call graph for the call
+        """
+        return self.graph_builder(*args, **kwargs)
+
+    @property
+    @abstractmethod
+    def callable(self):
+        """Callable
+
+        Creates a callable version of this function, usually executed by
+        drivers. It is required to provide a store in extra_globals
+
+        Returns
+        -------
+        FunctionImage
+            Serializable callable function image
+        """
+        pass
+
+
+class Function(AbstractFunction):
     """Function
 
     Xun functions. These are the distributed functions that xun executes. A xun
@@ -37,7 +205,7 @@ class Function:
         Creates xun blueprint representing a call to this function
     graph(*args, **kwargs)
         Creates a call graph for a call to this function
-    callable(extra_globals=dict())
+    callable()
         Creates a callable version of this function, usually executed by
         drivers
 
@@ -63,78 +231,26 @@ class Function:
     function : Function decorator to create xun functions
     """
 
-    class FunctionCode:
-        """FunctionCode
-
-        Xun function code. Helper for checking/debugging generated code of
-        xun function.
-        """
-        def __init__(self, func):
-            self.owner = func
-
-        @property
-        def graph(self):
-            return self.owner.createGraphBuilder().tree
-
-        @property
-        def graph_str(self):
-            source = astor.to_source(self.graph)
-            return FormatCode(source, style_config=adjusted_line_layout())[0]
-
-        @property
-        def task(self):
-            return self.owner.callable().tree
-
-        @property
-        def task_str(self):
-            source = astor.to_source(self.task)
-            return FormatCode(source, style_config=adjusted_line_layout())[0]
-
-        @property
-        def source(self):
-            return self.owner.desc.ast
-
-        @property
-        def source_str(self):
-            return self.owner.desc.src
-
     def __init__(self, desc, dependencies, max_parallel):
         self.desc = desc
-        self.dependencies = dependencies
+        self._dependencies = dependencies
+        self.interfaces = {}
         self.max_parallel = max_parallel
-        self.hash = Function.sha256(desc, dependencies)
+        self._hash = self.sha256()
         self._graph_builder = None
-        self.code = self.FunctionCode(self)
+        self._callable = None
 
     @property
     def name(self):
         return self.desc.name
 
-    @staticmethod
-    def sha256(desc, dependencies):
-        """SHA256
+    @property
+    def hash(self):
+        return self._hash
 
-        Calculate a hash identifier for a function with the given description
-        and dependencies.
-
-        Parameters
-        ----------
-        desc : xun.functions.FunctionDescription
-            Description of the hashed function
-        dependencies : mapping of name to Function
-            The dependencies of the hashed function
-
-        Returns
-        -------
-        str
-            Hex digest of function hash
-        """
-        sha256 = hashlib.sha256()
-        sha256.update(desc.src.encode())
-        for dependency in dependencies.values():
-            sha256.update(dependency.hash.encode())
-        truncated = sha256.digest()[:12]
-        return base64.urlsafe_b64encode(truncated).decode()
+    @property
+    def dependencies(self):
+        return self._dependencies
 
     @staticmethod
     def from_function(func, max_parallel=None):
@@ -170,129 +286,57 @@ class Function:
 
         return f
 
-    def blueprint(self, *args, **kwargs):
-        """Blueprint
-
-        Create a blueprint for a call to this function
-
-        Parameters
-        ----------
-        *args
-        **kwargs
-
-        Returns
-        -------
-        Blueprint
-            Blueprint representing the call to this function
-
-        See Also
-        --------
-        Blueprint : Comprises the call, call graph, and required functions
-        """
-        return Blueprint(self, *args, **kwargs)
-
-    def callnode(self, *args, **kwargs):
-        """Call Node
-
-        Create a CallNode for a call to this function
-
-        Parameters
-        ----------
-        *args
-        **kwargs
-
-        Returns
-        -------
-        CallNode
-            CallNode representing a call to this function
-
-        See Also
-        --------
-        CallNode : Symbolic representation of a call to this function
-        """
-        return CallNode(self.name, self.hash, *args, **kwargs)
-
-    def createGraphBuilder(self):
-        """CreateGraphBuilder
-
-        Preparation step for Graph function. Build call graph for a call to
-        this function
-
-        Returns
-        FunctionImage
-            Serializable `FunctionImage` representation
-        """
+    @property
+    def graph_builder(self):
         if self._graph_builder is None:
             deps = self.dependencies
+
             _, constants = xform.separate_constants(self.desc)
             sorted_constants, _ = xform.sort_constants(constants)
             copy_only = xform.copy_only_constants(sorted_constants, deps)
             unpacked = xform.unpack_unpacking_assignments(copy_only)
             xun_graph = xform.build_xun_graph(unpacked, deps)
+
             self._graph_builder = xform.assemble(self.desc, xun_graph)
         return self._graph_builder
 
-    def graph(self, *args, **kwargs):
-        """Graph
+    @property
+    def callable(self):
+        if self._callable is None:
+            deps = self.dependencies
 
-        Build call graph for a call to this function
+            head = xform.generate_header()
+            body, constants = xform.separate_constants(self.desc)
+            sorted_constants, _ = xform.sort_constants(constants)
+            copy_only = xform.copy_only_constants(sorted_constants, deps)
+            unpacked = xform.unpack_unpacking_assignments(copy_only)
+            yields = xform.transform_yields(body, self.interfaces)
+            load_from_store = xform.load_from_store(yields, unpacked, deps)
 
-        Parameters
-        ----------
-        *args
-        **kwargs
+            f = xform.assemble(self.desc, head, load_from_store, yields)
+            f.globals = {
+                **{
+                    name: value for name, value in self.desc.globals.items()
+                    if not isinstance(value, AbstractFunction)
+                },
+                **{
+                    name: callnode_constructor(f)
+                    for name, f in self.dependencies.items()
+                },
+                **{
+                    name: callnode_constructor(i)
+                    for name, i in self.interfaces.items()
+                }
+            }
+            f.hash = self.hash
+            self._callable = f
+        return self._callable
 
-        Returns
-        nx.DiGraph
-            The call graph for the call
-        """
-        return self.createGraphBuilder()(*args, **kwargs)
-
-    def callable(self, extra_globals=None):
-        """Callable
-
-        Creates a callable version of this function, usually executed by
-        drivers. It is required to provide a store in extra_globals
-
-        Parameters
-        ----------
-        extra_globals : dict
-            Mapping names to any references that should be made available to
-            the callable. A reference named `'_xun_store'` pointing to a
-            `Store` is required to be able to execute the callable. Any globals
-            provided should be picklable if the function is intended to be
-            serialized
-
-        Returns
-        -------
-        FunctionImage
-            Serializable callable function image
-
-        See Also
-        --------
-        Store : xun store
-        """
-        deps = self.dependencies
-        body, constants = xform.separate_constants(self.desc)
-        sorted_constants, _ = xform.sort_constants(constants)
-        copy_only = xform.copy_only_constants(sorted_constants, deps)
-        unpacked = xform.unpack_unpacking_assignments(copy_only)
-        load_from_store = xform.load_from_store(body, unpacked, deps)
-        f = xform.assemble(self.desc, load_from_store, body)
-
-        # Remove any refernces to function dependencies, they may be
-        # unpicklable and their code has been replaced
-        new_globals = {
-            name: value for name, value in self.desc.globals.items()
-            if not isinstance(value, Function)
-        }
-        if extra_globals is not None:
-            new_globals.update(extra_globals)
-
-        f.globals = new_globals
-        f.hash = self.hash
-
-        return f
+    def interface(self, func):
+        interface_desc = describe(func)
+        interface = Interface(self, interface_desc)
+        self.interfaces[interface.name] = interface
+        return interface
 
 
 def function(max_parallel=None):
@@ -333,3 +377,73 @@ def function(max_parallel=None):
     def decorator(func):
         return Function.from_function(func, max_parallel)
     return decorator
+
+
+class Interface(AbstractFunction):
+    """Interface
+
+    """
+
+    def __init__(self, target, desc):
+        self.target = target
+        self.desc = desc
+        self._dependencies = {
+            self.name: self,
+            target.name: target,
+        }
+        self._hash = self.sha256()
+        self._graph_builder = None
+        self._callable = None
+
+    @property
+    def name(self):
+        return self.desc.name
+
+    @property
+    def hash(self):
+        return self._hash
+
+    @property
+    def dependencies(self):
+        return self._dependencies
+
+    @property
+    def globals(self):
+        return {
+            **{
+                name: value for name, value in self.desc.globals.items()
+                if not isinstance(value, AbstractFunction)
+            },
+            **{
+                name: callnode_constructor(f)
+                for name, f in self.dependencies.items()
+            }
+        }
+
+    @property
+    def graph_builder(self):
+        if self._graph_builder is None:
+            (interface_call,
+             target_call,
+            ) = xform.separate_interface_and_target(self.desc, self.target)
+            interface = xform.build_interface_graph(interface_call,
+                                                    target_call)
+
+            f = xform.assemble(self.desc, interface)
+            f.globals = self.globals
+            self._graph_builder = f
+        return self._graph_builder
+
+    @property
+    def callable(self):
+        if self._callable is None:
+            (interface_call,
+             target_call,
+            ) = xform.separate_interface_and_target(self.desc, self.target)
+            interface = xform.interface_raise_on_execution(interface_call,
+                                                           target_call)
+            f = xform.assemble(self.desc, interface)
+            f.globals = self.globals
+            f.hash = self.hash
+            self._callable = f
+        return self._callable

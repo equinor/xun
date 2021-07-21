@@ -6,6 +6,7 @@ from .errors import FunctionError
 from .errors import FunctionDefNotFoundError
 from .errors import NotDAGError
 from .errors import XunSyntaxError
+from .errors import XunInterfaceError
 from .function import Function
 from .function import function
 from .function_description import FunctionDescription

@@ -27,11 +27,8 @@ def compute_proxy(store_accessor, func):
     """Dask 'handles' functools.partial so that we can't use it. Create a new
        function instead."""
     def λ(node):
-        args, kwargs = store_accessor.resolve_call_args(node)
-        result = func(*args, **kwargs)
-        store_accessor.store_result(node, result)
-        return node
-    functools.update_wrapper(λ,  func)
+        return Driver.compute_and_store(node, func, store_accessor)
+    functools.update_wrapper(λ, func)
     return λ
 
 

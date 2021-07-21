@@ -18,5 +18,9 @@ class NotDAGError(Exception):
     pass
 
 
+class XunInterfaceError(Exception):
+    pass
+
+
 class XunSyntaxError(Exception):
     pass

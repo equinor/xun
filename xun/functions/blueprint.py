@@ -59,14 +59,14 @@ class Blueprint:
             # The callable functions_images of the necessary xun functions
             # _must_ be picklable
             pickle.loads(pickle.dumps({
-                name: func.callable()
+                name: func.callable
                 for name, func in self.functions.items()
             }))
             if not isinstance(store, Memory):
                 pickle.loads(pickle.dumps(store))
 
         function_images = {
-            name: func.callable(extra_globals={'_xun_store': store})
+            name: func.callable
             for name, func in self.functions.items()
         }
 

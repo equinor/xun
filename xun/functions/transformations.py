@@ -13,19 +13,22 @@ The code is represented by and manipulated with the python ast module [1][2].
 
 
 from .compatibility import ast
+from .errors import XunInterfaceError
+from .errors import XunSyntaxError
 from .function_description import FunctionDescription
 from .function_image import FunctionImage
 from .util import assignment_target_introduced_names
 from .util import assignment_target_shape
 from .util import body_external_names
+from .util import call_from_function_definition
 from .util import function_ast
 from .util import separate_constants_ast
 from .util import shape_to_ast_tuple
 from .util import sort_constants_ast
-import functools
 from itertools import chain
 from typing import List
 import copy
+import functools
 
 
 def assemble(desc, *nodes):
@@ -94,6 +97,27 @@ def pass_by_value(func):
 #
 # Transformations
 #
+
+
+@pass_by_value
+def generate_header():
+    """Generate header
+
+    Provide a header with necessary statements.
+
+    Returns
+    -------
+    List[ast.Ast]
+    """
+    return [
+        ast.Assign(
+            targets=[ast.Name(id='_xun_store_accessor', ctx=ast.Store())],
+            value=ast.Yield(value=None),
+            type_comment=None,
+        ),
+        ast.Expr(ast.Yield(value=None), type_ignores=[]),
+    ]
+
 
 @pass_by_value
 def separate_constants(func_desc: FunctionDescription):
@@ -270,6 +294,49 @@ def unpack_unpacking_assignments(copy_only_constants: List[ast.AST]):
 
 
 @pass_by_value
+def transform_yields(body: List[ast.AST], interfaces):
+    """Transform Yields
+
+    This transformation will change any yields from the form
+    `yield xun_function(args) is value` to `yield xun_function(args), value`.
+
+    Parameters
+    ----------
+    body : List[ast.AST]
+    interfaces : mapping from interface name (str) to Interface
+
+    Returns
+    -------
+    List[ast.AST]
+    """
+    class yield_transformer(ast.NodeTransformer):
+        def visit_Expr(self, node):
+            if not isinstance(node.value, ast.Yield):
+                return node
+            if not isinstance(node.value.value, ast.Compare):
+                raise XunSyntaxError
+            if not len(node.value.value.ops) == 1:
+                raise XunSyntaxError
+            if not isinstance(node.value.value.ops[0], ast.Is):
+                raise XunSyntaxError
+            call = node.value.value.left
+            value = node.value.value.comparators[0]
+
+            if call.func.id not in interfaces:
+                msg = f'Missing interface definition for {call.func.id}'
+                raise XunInterfaceError(msg)
+
+            return ast.Expr(
+                ast.Yield(ast.Tuple(
+                    elts=[call, value],
+                    ctx=ast.Load(),
+                ))
+            )
+    y = yield_transformer()
+    return [y.visit(stmt) for stmt in body]
+
+
+@pass_by_value
 def build_xun_graph(unpacked_assignments: List[ast.AST], dependencies={}):
     """Build Xun Graph Transformation
 
@@ -415,29 +482,6 @@ def load_from_store(body: List[ast.AST],
             node.func.id in dependencies
         )
 
-    class NodeMapper(ast.NodeTransformer):
-        def map(self, nodes):
-            transformed = (self.visit(copy.deepcopy(node)) for node in nodes)
-            return [node for node in transformed if node is not None]
-
-    class Call2CallNode(NodeMapper):
-        def visit_Call(self, node):
-            node = self.generic_visit(node)
-
-            if not is_xun_call(node):
-                return node
-
-            construct_call = ast.Call(
-                func=ast.Name(id='_xun_CallNode', ctx=ast.Load()),
-                args=[
-                    ast.Constant(node.func.id, kind=None),
-                    ast.Constant(dependencies[node.func.id].hash, kind=None),
-                    *node.args
-                ],
-                keywords=node.keywords,
-            )
-            return construct_call
-
     # If No dependencies are referenced in the body of the function, there is
     # nothing to load
     if len(discovered_reference.referenced_in_body) == 0:
@@ -448,34 +492,11 @@ def load_from_store(body: List[ast.AST],
         node for node in unpacked_assignments if isinstance(node, ast.Assign)
     ]
 
-    # Converts calls to xun functions to CallNodes
-    call_nodes = Call2CallNode().map(assignments)
-
     imports = [
         *[
             node for node in unpacked_assignments
             if isinstance(node, (ast.Import, ast.ImportFrom))
         ],
-        ast.ImportFrom(
-            module='xun.functions',
-            names=[
-                ast.alias(
-                    name='CallNode',
-                    asname='_xun_CallNode',
-                ),
-            ],
-            level=0,
-        ),
-        ast.ImportFrom(
-            module='xun.functions.store',
-            names=[
-                ast.alias(
-                    name='StoreAccessor',
-                    asname='_xun_StoreAccessor'
-                ),
-            ],
-            level=0
-        ),
     ]
 
     store_accessor_deepload = ast.Attribute(
@@ -500,16 +521,7 @@ def load_from_store(body: List[ast.AST],
                            defaults=[]),
         body=[
             *imports,
-            ast.Assign(
-                targets=[ast.Name(id='_xun_store_accessor', ctx=ast.Store())],
-                value=ast.Call(
-                    func=ast.Name(id='_xun_StoreAccessor', ctx=ast.Load()),
-                    args=[ast.Name(id='_xun_store', ctx=ast.Load())],
-                    keywords=[],
-                ),
-                type_comment=None,
-            ),
-            *call_nodes,
+            *assignments,
             ast.Return(deep_load_referenced),
         ],
         decorator_list=[],
@@ -541,3 +553,110 @@ def load_from_store(body: List[ast.AST],
     ]
 
     return lfs
+
+
+#
+# Interface Transformations
+#
+
+@pass_by_value
+def separate_interface_and_target(func_desc: FunctionDescription, target):
+    fdef = func_desc.ast.body[0]
+    interface_call = call_from_function_definition(fdef)
+
+    if len(fdef.body) != 1 or not (
+            isinstance(fdef.body[0], ast.Expr) and
+            isinstance(fdef.body[0].value, ast.YieldFrom)):
+        msg = 'Interface defintions should a single "yield from" expression'
+        raise XunSyntaxError(msg)
+
+    target_call = func_desc.ast.body[0].body[0].value.value
+
+    if not isinstance(target_call, ast.Call):
+        raise XunSyntaxError('Can only yield from calls to xun functions')
+
+    if not target_call.func.id == target.name:
+        msg = (
+            f'Interface should yield from {target.name} not '
+            f'{target_call.func.id}'
+        )
+        raise XunInterfaceError(msg)
+
+    return interface_call, target_call
+
+
+@pass_by_value
+def build_interface_graph(interface_call: ast.expr, target_call: ast.expr):
+    """Interface
+
+    Transform function into an interface.
+
+    Returns
+    -------
+    List[ast.Ast]
+    """
+    import_nx = ast.Import([ast.alias(name='networkx', asname='_xun_nx')])
+    xun_graph = ast.Assign(
+        targets=[ast.Name(id='_xun_graph', ctx=ast.Store())],
+        value=ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id='_xun_nx', ctx=ast.Load()),
+                attr='DiGraph',
+                ctx=ast.Load(),
+            ),
+            args=[],
+            keywords=[],
+        ),
+        type_comment=None,
+    )
+    add_edge = ast.Expr(
+        value=ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id='_xun_graph', ctx=ast.Load()),
+                attr='add_edge',
+                ctx=ast.Load(),
+            ),
+            args=[target_call, interface_call],
+            keywords=[],
+        )
+    )
+    return_graph = ast.Return(ast.Name(id='_xun_graph', ctx=ast.Load()))
+
+    return [
+        import_nx,
+        xun_graph,
+        add_edge,
+        return_graph,
+    ]
+
+
+@pass_by_value
+def interface_raise_on_execution(interface_call: ast.expr,
+                                 target_call: ast.expr):
+    import_interface_error = ast.ImportFrom(
+        module='xun.functions',
+        names=[ast.alias(name='XunInterfaceError',
+                         asname='_xun_InterfaceError')],
+        level=0,
+    )
+    raise_interface_error = ast.Raise(
+        exc=ast.Call(
+            func=ast.Name(id='_xun_InterfaceError', ctx=ast.Load()),
+            args=[
+                ast.JoinedStr([
+                    ast.FormattedValue(target_call, -1, None),
+                    ast.Constant(
+                        value=' did not produce a result for ',
+                        kind=None,
+                    ),
+                    ast.FormattedValue(interface_call, -1, None),
+                ]),
+            ],
+            keywords=[]
+        ),
+        cause=None,
+    )
+    return [
+        import_interface_error,
+        raise_interface_error,
+    ]

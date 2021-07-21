@@ -41,6 +41,12 @@ class StoreAccessor:
         with CallNode._load_on_copy_context(self):
             return deepcopy(tuple(args))
 
+    def guarded(self):
+        inst = GuardedStoreAccessor.__new__(GuardedStoreAccessor)
+        inst.__dict__.update(vars(self))
+        inst._written = set()
+        return inst
+
     def load_result(self, call):
         namespace = self.store / call.function_hash
         result = namespace[(call.args, call.kwargs)]
@@ -71,3 +77,14 @@ class StoreAccessor:
             Pair of resolved arguments and keyword arguments
         """
         return self.deepload(call.args, call.kwargs)
+
+
+class GuardedStoreAccessor(StoreAccessor):
+    class StoreError(Exception):
+        pass
+
+    def store_result(self, call, result):
+        if call in self._written:
+            raise self.StoreError(f'Multiple results for {call}')
+        self._written.add(call)
+        super().store_result(call, result)

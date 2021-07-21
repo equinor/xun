@@ -12,11 +12,6 @@ class Sequential(Driver):
     Does a topological sort of the graph, and runs the jobs sequentially
     """
 
-    def run_and_store(self, call, func, store_accessor):
-        args, kwargs = store_accessor.resolve_call_args(call)
-        result = func(*args, **kwargs)
-        store_accessor.store_result(call, result)
-
     def _exec(self, graph, entry_call, function_images, store_accessor):
         assert nx.is_directed_acyclic_graph(graph)
 
@@ -36,7 +31,7 @@ class Sequential(Driver):
 
             logger.info('Running {}'.format(node))
             try:
-                self.run_and_store(node, func, store_accessor)
+                self.compute_and_store(node, func, store_accessor)
             except Exception as e:
                 logger.error(
                     '{} failed with {}'.format(node, str(e))

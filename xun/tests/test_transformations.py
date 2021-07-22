@@ -126,7 +126,7 @@ def test_load_from_store_transformation():
     @xun.function_ast
     def reference_source():
         def _xun_load_constants():
-            from xun.functions import unpack as _xun_unpack
+            from xun.functions import unpack as _xun_unpack  # noqa: F401
             from copy import deepcopy as _xun_deepcopy  # noqa: F401
             from xun.functions import CallNode as _xun_CallNode
             from xun.functions.store import StoreAccessor as _xun_StoreAccessor

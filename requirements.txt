@@ -1,10 +1,10 @@
 cookiecutter
 cryptography
 dask[distributed]
-fastavro
 immutables
 matplotlib
 nbformat
 networkx
+paramiko
 redis
 yapf

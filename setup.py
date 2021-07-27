@@ -36,12 +36,16 @@ if __name__ == '__main__':
         include_package_data=True,
 
         install_requires = [
-            'fastavro',
+            'cookiecutter',
+            'cryptography',
+            'dask[distributed]',
+            'immutables',
             'matplotlib',
+            'nbformat',
             'networkx',
             'paramiko',
             'redis',
-            'immutables',
+            'yapf',
         ],
 
         setup_requires = [

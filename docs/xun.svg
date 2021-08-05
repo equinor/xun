@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 25.3.1, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<svg version="1.1"
+	 id="svg5" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:svg="http://www.w3.org/2000/svg"
+	 xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 300 300"
+	 style="enable-background:new 0 0 300 300;" xml:space="preserve">
+<style type="text/css">
+	.st0{fill:url(#rect2299_1_);}
+	.st1{fill:url(#rect2299-2_1_);}
+	.st2{fill:url(#rect2301_1_);}
+	.st3{fill:url(#rect2301-4_1_);}
+</style>
+<sodipodi:namedview  bordercolor="#666666" borderopacity="1.0" id="namedview7" inkscape:current-layer="layer1" inkscape:cx="149.89704" inkscape:cy="190" inkscape:document-units="px" inkscape:guide-bbox="true" inkscape:pagecheckerboard="0" inkscape:pageopacity="0.0" inkscape:pageshadow="2" inkscape:window-height="1003" inkscape:window-maximized="0" inkscape:window-width="1312" inkscape:window-x="0" inkscape:window-y="23" inkscape:zoom="2.0447368" pagecolor="#ffffff" showgrid="false" showguides="true" units="px">
+	</sodipodi:namedview>
+<g>
+	<g id="layer1" inkscape:groupmode="layer" inkscape:label="Layer 1">
+		
+			<linearGradient id="rect2299_1_" gradientUnits="userSpaceOnUse" x1="-424.412" y1="664.6587" x2="-345.1433" y2="664.6587" gradientTransform="matrix(1.5973 3.4254 3.4254 -1.5973 -1514.835 2443.875)">
+			<stop  offset="0" style="stop-color:#095479"/>
+			<stop  offset="1" style="stop-color:#9700FF"/>
+		</linearGradient>
+		<rect id="rect2299" x="25" y="52.5" class="st0" width="250" height="35"/>
+		
+			<linearGradient id="rect2299-2_1_" gradientUnits="userSpaceOnUse" x1="-426.0752" y1="655.7133" x2="-346.8065" y2="655.7133" gradientTransform="matrix(1.5973 3.4254 3.4254 -1.5973 -1514.835 2443.875)">
+			<stop  offset="0" style="stop-color:#095479"/>
+			<stop  offset="1" style="stop-color:#9700FF"/>
+		</linearGradient>
+		<rect id="rect2299-2" x="25" y="132.5" class="st1" width="250" height="35"/>
+		
+			<linearGradient id="rect2301_1_" gradientUnits="userSpaceOnUse" x1="-426.7347" y1="628.7833" x2="-348.5518" y2="628.7833" gradientTransform="matrix(1.5973 3.4254 3.4254 -1.5973 -1514.835 2443.875)">
+			<stop  offset="0" style="stop-color:#095479"/>
+			<stop  offset="1" style="stop-color:#9700FF"/>
+		</linearGradient>
+		<rect id="rect2301" x="25" y="212.5" class="st2" width="100" height="35"/>
+		
+			<linearGradient id="rect2301-4_1_" gradientUnits="userSpaceOnUse" x1="-426.2369" y1="664.7524" x2="-348.054" y2="664.7524" gradientTransform="matrix(1.5973 3.4254 3.4254 -1.5973 -1514.835 2443.875)">
+			<stop  offset="0" style="stop-color:#095479"/>
+			<stop  offset="1" style="stop-color:#9700FF"/>
+		</linearGradient>
+		<rect id="rect2301-4" x="175" y="212.5" class="st3" width="100" height="35"/>
+	</g>
+</g>
+</svg>

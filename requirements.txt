@@ -1,3 +1,4 @@
+astor
 cookiecutter
 cryptography
 dask[distributed]

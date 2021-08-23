@@ -19,11 +19,11 @@ def adjusted_line_layout(style=CreatePEP8Style()):
     return style
 
 
-def callnode_constructor(func):
+def callnode_constructor(name, hash):
     @FunctionImage.from_function
     def construct_callnode(*args, **kwargs):
         from xun.functions import CallNode
-        return CallNode(func.name, func.hash, *args, **kwargs)
+        return CallNode(name, hash, *args, **kwargs)
     return construct_callnode
 
 
@@ -320,11 +320,11 @@ class Function(AbstractFunction):
                     if not isinstance(value, AbstractFunction)
                 },
                 **{
-                    name: callnode_constructor(f)
+                    name: callnode_constructor(f.name, f.hash)
                     for name, f in self.dependencies.items()
                 },
                 **{
-                    name: callnode_constructor(i)
+                    name: callnode_constructor(i.name, i.hash)
                     for name, i in self.interfaces.items()
                 }
             }
@@ -415,7 +415,7 @@ class Interface(AbstractFunction):
                 if not isinstance(value, AbstractFunction)
             },
             **{
-                name: callnode_constructor(f)
+                name: callnode_constructor(f.name, f.hash)
                 for name, f in self.dependencies.items()
             }
         }

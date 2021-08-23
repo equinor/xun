@@ -109,7 +109,8 @@ class DaskSchedule:
             G.remove_node(node)
             for descendant in descendants:
                 G.remove_node(descendant)
-                logger.error(f'{node} cancelled due to failed dependency')
+                logger.info(
+                    f'{descendant} cancelled due to failed dependency')
 
 
 class GraphLock:

@@ -1,8 +1,8 @@
+from ... import serialization
+from .store import NamespacedKey
 from .store import Store
 from .store import StoreDriver
-from .store import NamespacedKey
 from collections.abc import KeysView
-import pickle
 import redis
 
 
@@ -49,7 +49,7 @@ class RedisDriver(StoreDriver):
 
         k = key_to_redis_key(key)
         v = self.redis.get(k)
-        return pickle.loads(v)
+        return serialization.loads(v.decode())
 
     def __iter__(self):
         return (redis_key_to_key(k) for k in self.redis.scan_iter())
@@ -59,7 +59,7 @@ class RedisDriver(StoreDriver):
 
     def __setitem__(self, key, value):
         k = key_to_redis_key(key)
-        v = pickle.dumps(value)
+        v = serialization.dumps(value)
         self.redis.set(k, v)
 
     def scan_namespace_iter(self, namespace):
@@ -93,8 +93,8 @@ class RedisDriver(StoreDriver):
 def decode_hex_bytes(hex_bytes):
     """Decode hex bytes
 
-    Given a byte string of a hex encoded pickle dump, decode and load the
-    pickled object.
+    Given a byte string of a hex encoded dump, decode and load the
+    serialized object.
 
     Parameters
     ----------
@@ -107,8 +107,8 @@ def decode_hex_bytes(hex_bytes):
         Decoded python object
     """
     hex = hex_bytes.decode()
-    byte_string = bytes.fromhex(hex)
-    return pickle.loads(byte_string)
+    key_string = bytes.fromhex(hex).decode()
+    return serialization.loads(key_string)
 
 
 def encode_hex_bytes(obj):
@@ -125,15 +125,15 @@ def encode_hex_bytes(obj):
     Return
     -------
     str
-        Pickled object encoded as hex
+        Serialized object encoded as hex
     """
-    return pickle.dumps(obj).hex().encode()
+    return serialization.dumps(obj).encode().hex().encode()
 
 
 def key_to_redis_key(key):
     """Key to redis key
 
-    The reason we encode the keys as hex bytes is that the pickle bytestring is
+    The reason we encode the keys as hex bytes is that the serialization string is
     raw binary data. It can contain anything, including the character : and
     even \\x00. This means that we can't split the key on : when we parse it
     back out

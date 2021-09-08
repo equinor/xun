@@ -1,16 +1,16 @@
+from ... import serialization
 from .store import Store
 from .store import StoreDriver
 from pathlib import Path
 import base64
 import hashlib
-import pickle
 
 
 def key_hash_str(key):
-    pickled = pickle.dumps(key)
+    serialized = serialization.dumps(key).encode()
     sha256 = hashlib.sha256()
-    sha256.update(pickled)
-    truncated = sha256.digest()[:12]
+    sha256.update(serialized)
+    truncated = sha256.digest()
     return base64.urlsafe_b64encode(truncated).decode()
 
 
@@ -48,9 +48,9 @@ class DiskDriver(StoreDriver):
         ]
         for path in files:
             if path.name not in self.index:
-                with open(str(path.resolve()), 'rb') as f:
+                with open(str(path.resolve()), 'r') as f:
                     try:
-                        key = pickle.load(f)
+                        key = serialization.load(f)
                     except EOFError:
                         # This can occur if the index file is currently
                         # being written to somewhere else on the network.
@@ -103,8 +103,8 @@ class DiskDriver(StoreDriver):
             raise KeyError('KeyError: {}'.format(str(key)))
 
         b64 = key_hash_str(key)
-        with open(str(self.dir / 'values' / b64), 'rb') as f:
-            return pickle.load(f)
+        with open(str(self.dir / 'values' / b64), 'r') as f:
+            return serialization.load(f)
 
     def __iter__(self):
         self.refresh_index()
@@ -117,10 +117,10 @@ class DiskDriver(StoreDriver):
     def __setitem__(self, key, value):
         b64 = key_hash_str(key)
 
-        with open(str(self.dir / 'keys' / b64), 'wb') as kf, \
-             open(str(self.dir / 'values' / b64), 'wb') as vf:
-            pickle.dump(key, kf)
-            pickle.dump(value, vf)
+        with open(str(self.dir / 'keys' / b64), 'w') as kf, \
+             open(str(self.dir / 'values' / b64), 'w') as vf:
+            serialization.dump(key, kf)
+            serialization.dump(value, vf)
 
         self.index[b64] = key
 

@@ -1,9 +1,9 @@
+from ... import serialization
+from .disk import key_hash_str
 from .store import Store
 from .store import StoreDriver
-from .disk import key_hash_str
 from pathlib import Path
 import paramiko
-import pickle
 import stat
 
 
@@ -108,8 +108,8 @@ class SFTPDriver(StoreDriver):
         files = list(self.key_files())
         for path in files:
             if path.name not in self.index:
-                with self.sftp.open(str(path), 'rb') as f:
-                    key = pickle.load(f)
+                with self.sftp.open(str(path), 'r') as f:
+                    key = serialization.load(f)
                 self.index[path.name] = key
                 if __debug__:
                     assert key_hash_str(key) == path.name
@@ -162,8 +162,8 @@ class SFTPDriver(StoreDriver):
             raise KeyError('KeyError: {}'.format(str(key)))
 
         b64 = key_hash_str(key)
-        with self.sftp.open(str(self.root / 'values' / b64), 'rb') as f:
-            return pickle.load(f)
+        with self.sftp.open(str(self.root / 'values' / b64), 'r') as f:
+            return serialization.load(f)
 
     def __iter__(self):
         self.refresh_index()
@@ -176,10 +176,10 @@ class SFTPDriver(StoreDriver):
     def __setitem__(self, key, value):
         b64 = key_hash_str(key)
 
-        with self.sftp.open(str(self.root / 'keys' / b64), 'wb') as kf, \
-             self.sftp.open(str(self.root / 'values' / b64), 'wb') as vf:
-            pickle.dump(key, kf)
-            pickle.dump(value, vf)
+        with self.sftp.open(str(self.root / 'keys' / b64), 'w') as kf, \
+             self.sftp.open(str(self.root / 'values' / b64), 'w') as vf:
+            serialization.dump(key, kf)
+            serialization.dump(value, vf)
 
         self.index[b64] = key
 

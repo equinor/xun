@@ -112,7 +112,6 @@ def test_pandas_series_datetime_index_serialization():
     series = pd.Series(np.random.randn(10), index=index)
     yml = xun.serialization.dumps(series)
     loaded = xun.serialization.loads(yml)
-    print(yml)
     pd.testing.assert_series_equal(loaded, series)
 
 
@@ -121,3 +120,10 @@ def test_pandas_frame_serialization():
     yml = xun.serialization.dumps(frame)
     loaded = xun.serialization.loads(yml)
     pd.testing.assert_frame_equal(loaded, frame)
+
+
+def test_numpy_serialization():
+    numpy_array = np.random.randn(10, 3)
+    yml = xun.serialization.dumps(numpy_array)
+    loaded = xun.serialization.loads(yml)
+    assert (loaded == numpy_array).all()

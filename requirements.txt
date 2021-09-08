@@ -6,6 +6,7 @@ immutables
 matplotlib
 nbformat
 networkx
+numpy
 pandas
 paramiko
 redis

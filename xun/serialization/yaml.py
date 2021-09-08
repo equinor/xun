@@ -1,8 +1,5 @@
 from . import python_types
-from .pandas_types import FrameFunctor
-from .pandas_types import SeriesFunctor
-from .xun_types import CallNodeFunctor
-from .xun_types import NamespacedKeyFunctor
+from . import xun_types
 from io import StringIO
 import datetime
 import hashlib
@@ -18,8 +15,8 @@ _xun_functors = (
     python_types.SetFunctor,
     python_types.TupleFunctor,
 
-    CallNodeFunctor,
-    NamespacedKeyFunctor,
+    xun_types.CallNodeFunctor,
+    xun_types.NamespacedKeyFunctor,
 )
 mapping_type = (dict, )
 sequence_types = (tuple, list)

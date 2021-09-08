@@ -1,3 +1,5 @@
+from . import numpy_types
+from . import pandas_types
 from . import python_types
 from . import xun_types
 from io import StringIO
@@ -7,8 +9,10 @@ import yaml
 
 
 _xun_functors = (
-    FrameFunctor,
-    SeriesFunctor,
+    numpy_types.NumpyFunctor,
+
+    pandas_types.FrameFunctor,
+    pandas_types.SeriesFunctor,
 
     python_types.FrozenmapFunctor,
     python_types.FrozensetFunctor,

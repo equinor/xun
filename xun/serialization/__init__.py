@@ -1,3 +1,4 @@
+from . import pandas_types
 from .python_types import FrozenmapFunctor
 from .python_types import FrozensetFunctor
 from .python_types import SetFunctor

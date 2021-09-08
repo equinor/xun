@@ -1,3 +1,4 @@
+from datetime import datetime
 from immutables import Map as frozenmap
 import numpy as np
 import os
@@ -88,3 +89,41 @@ def test_callnode_serialization():
     yml = xun.serialization.dumps(cn)
     loaded = xun.serialization.loads(yml)
     assert loaded == cn
+
+
+def test_pandas_series_serialization():
+    series = pd.Series(np.random.randn(10))
+    yml = xun.serialization.dumps(series)
+    loaded = xun.serialization.loads(yml)
+    pd.testing.assert_series_equal(loaded, series)
+
+
+def test_pandas_series_mean_serialization():
+    mean = pd.Series(np.random.randn(10)).mean()
+    yml = xun.serialization.dumps(mean)
+    loaded = xun.serialization.loads(yml)
+    assert loaded == mean
+    assert type(loaded) == type(mean)
+
+
+def test_pandas_series_datetime_index_serialization():
+    date_range = pd.date_range(datetime.now(), periods=10, tz='UTC')
+    index = pd.DatetimeIndex(date_range, freq=None)
+    series = pd.Series(np.random.randn(10), index=index)
+    yml = xun.serialization.dumps(series)
+    loaded = xun.serialization.loads(yml)
+    pd.testing.assert_series_equal(loaded, series)
+
+
+def test_pandas_frame_serialization():
+    frame = pd.DataFrame(np.random.randn(10, 3))
+    yml = xun.serialization.dumps(frame)
+    loaded = xun.serialization.loads(yml)
+    pd.testing.assert_frame_equal(loaded, frame)
+
+
+def test_numpy_serialization():
+    numpy_array = np.random.randn(10, 3)
+    yml = xun.serialization.dumps(numpy_array)
+    loaded = xun.serialization.loads(yml)
+    assert (loaded == numpy_array).all()

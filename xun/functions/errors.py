@@ -1,4 +1,4 @@
-class ContextError(Exception):
+class ComputeError(Exception):
     pass
 
 

@@ -4,6 +4,7 @@ from .store import StoreDriver
 from pathlib import Path
 import base64
 import hashlib
+import tempfile
 
 
 def key_hash_str(key):
@@ -117,10 +118,16 @@ class DiskDriver(StoreDriver):
     def __setitem__(self, key, value):
         b64 = key_hash_str(key)
 
-        with open(str(self.dir / 'keys' / b64), 'w') as kf, \
-             open(str(self.dir / 'values' / b64), 'w') as vf:
-            serialization.dump(key, kf)
-            serialization.dump(value, vf)
+        with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
+            tmpdir = Path(tmpdir)
+            key_tmpfile = (tmpdir / b64).with_suffix('.key')
+            val_tmpfile = (tmpdir / b64).with_suffix('.value')
+            with key_tmpfile.open('w') as kf, val_tmpfile.open('w') as vf:
+                serialization.dump(key, kf)
+                serialization.dump(value, vf)
+            # If succeeded, move files
+            key_tmpfile.replace(self.dir / 'keys' / b64)
+            val_tmpfile.replace(self.dir / 'values' / b64)
 
         self.index[b64] = key
 

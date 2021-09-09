@@ -5,6 +5,7 @@ from .store import StoreDriver
 from pathlib import Path
 import paramiko
 import stat
+import tempfile
 
 
 class SFTP(Store):
@@ -176,10 +177,16 @@ class SFTPDriver(StoreDriver):
     def __setitem__(self, key, value):
         b64 = key_hash_str(key)
 
-        with self.sftp.open(str(self.root / 'keys' / b64), 'w') as kf, \
-             self.sftp.open(str(self.root / 'values' / b64), 'w') as vf:
-            serialization.dump(key, kf)
-            serialization.dump(value, vf)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            key_tmpfile = (tmpdir / b64).with_suffix('.key')
+            val_tmpfile = (tmpdir / b64).with_suffix('.value')
+            with key_tmpfile.open('w') as kf, val_tmpfile.open('w') as vf:
+                serialization.dump(key, kf)
+                serialization.dump(value, vf)
+            # If succeeded, move files
+            self.sftp.put(str(key_tmpfile), str(self.root / 'keys' / b64))
+            self.sftp.put(str(val_tmpfile), str(self.root / 'values' / b64))
 
         self.index[b64] = key
 

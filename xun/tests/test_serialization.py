@@ -3,6 +3,7 @@ from immutables import Map as frozenmap
 import numpy as np
 import os
 import pandas as pd
+import pathlib
 import xun
 
 
@@ -67,6 +68,13 @@ def test_serialization_frozenmap():
     yml = xun.serialization.dumps(value)
     loaded = xun.serialization.loads(yml)
     assert loaded == value
+
+
+def test_serialization_pathlib():
+    path = pathlib.Path('/hello/world')
+    yml = xun.serialization.dumps(path)
+    loaded = xun.serialization.loads(yml)
+    assert loaded == path
 
 
 def test_namespacedkey_serialization():

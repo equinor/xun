@@ -1,6 +1,7 @@
 from .functor import IsoFunctor
 from .functor import _internal_type
 from immutables import Map as frozenmap
+import pathlib
 
 
 @_internal_type(tuple)
@@ -70,6 +71,22 @@ class FrozenmapFunctor(metaclass=IsoFunctor):
 
     def __call__(cls, value):
         return dict(value)
+
+    def __invert__(cls):
+        return cls._Inverse
+
+
+@_internal_type(mro_types=(pathlib.Path, ))
+class PathFunctor(metaclass=IsoFunctor):
+    class _Inverse(metaclass=IsoFunctor):
+        def __call__(cls, value):
+            return pathlib.Path(value)
+
+        def __invert__(cls):
+            return PathFunctor
+
+    def __call__(cls, value):
+        return str(value)
 
     def __invert__(cls):
         return cls._Inverse

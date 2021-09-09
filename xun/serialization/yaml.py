@@ -16,6 +16,7 @@ _xun_functors = (
 
     python_types.FrozenmapFunctor,
     python_types.FrozensetFunctor,
+    python_types.PathFunctor,
     python_types.SetFunctor,
     python_types.TupleFunctor,
 

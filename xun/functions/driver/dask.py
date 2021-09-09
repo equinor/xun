@@ -1,4 +1,5 @@
 from .. import graph as graph_helpers
+from ..errors import ComputeError
 from .driver import Driver
 import asyncio
 import functools
@@ -47,10 +48,13 @@ class DaskSchedule:
         self.client = client
         self.function_images = function_images
         self.store_accessor = store_accessor
+        self.errored = False
 
     def __call__(self, entry_call, graph):
         self.client.sync(self.run, graph)
-        return self.store_accessor.load_result(entry_call)
+        if not self.errored:
+            return self.store_accessor.load_result(entry_call)
+        raise ComputeError('One or more jobs failed')
 
     async def run(self, graph):
         atomic_graph = GraphLock(graph)
@@ -86,6 +90,7 @@ class DaskSchedule:
                 future = self.client.submit(func, node)
                 await self.client.gather(future, asynchronous=True)
         except Exception as e:
+            self.errored = True
             logger.error(f'{node} failed with {str(e)}')
             await self.cancel_descendants(atomic_graph, node)
         else:

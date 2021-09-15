@@ -49,9 +49,18 @@ class DaskSchedule:
         self.function_images = function_images
         self.store_accessor = store_accessor
         self.errored = False
+        self.futures = {}
 
     def __call__(self, entry_call, graph):
-        self.client.sync(self.run, graph)
+        try:
+            # Run async regardless of client state
+            # https://distributed.dask.org/en/latest/asynchronous.html
+            self.client.sync(self.run, graph)
+        except KeyboardInterrupt:
+            for node, future in self.futures.items():
+                logger.debug(f'{node} cancelled due to keyboard interrupt')
+                future.cancel(force=True)
+            raise
         if not self.errored:
             return self.store_accessor.load_result(entry_call)
         raise ComputeError('One or more jobs failed')
@@ -88,6 +97,7 @@ class DaskSchedule:
                                      self.function_images[node.function_name])
 
                 future = self.client.submit(func, node)
+                self.futures[node] = future
                 await self.client.gather(future, asynchronous=True)
         except Exception as e:
             self.errored = True

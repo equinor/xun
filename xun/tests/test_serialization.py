@@ -4,6 +4,7 @@ import numpy as np
 import os
 import pandas as pd
 import pathlib
+import pytest
 import xun
 
 
@@ -135,3 +136,50 @@ def test_numpy_serialization():
     yml = xun.serialization.dumps(numpy_array)
     loaded = xun.serialization.loads(yml)
     assert (loaded == numpy_array).all()
+
+
+@pytest.mark.xfail
+def test_xun_serialization():
+    """
+    This test is a sketch of what the feature should look like, may be faulty
+    """
+    class Functor(metaclass=xun.serialization.functor.IsoFunctor):
+        class _Inverse(metaclass=xun.serialization.functor.IsoFunctor):
+            def __call__(cls, value):
+                return value / 10
+            def __invert__(cls):
+                return Functor
+        def __call__(cls, value):
+            return value * 10
+        def __invert__(cls):
+            return cls._Inverse
+
+    @xun.function()
+    def f(v: Functor) -> Functor:
+        return v
+
+    @xun.function()
+    def g():
+        return v
+        with ...:
+            v = f(10)
+
+    assert run_in_process(g.blueprint()) == 10
+
+
+@pytest.mark.xfail(reason='Composition not implemented')
+def test_xun_serialization_composition():
+    """
+    This test is a sketch of what the feature should look like, may be faulty
+    """
+    from xun.serialization.pandas_types import SeriesFunctor
+    from xun.serialization.functor import ListFunctor
+    from xun.serialization.functor import GZip
+
+    T = ListFunctor & SeriesFunctor & GZip.GZStrFunctor
+    L = [pd.Series(np.random.randn(10)) for _ in range(3)]
+
+    yml = xun.serialization.dumps(L, functor=T)
+    loaded = xun.serialization.loads(yml, functor=T)
+    for loaded, reference in zip(loaded, L):
+        pd.testing.assert_series_equal(loaded, reference)

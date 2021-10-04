@@ -1,6 +1,5 @@
 from ..errors import CopyError
 from .store import Store
-from .store import StoreDriver
 
 
 class Memory(Store):
@@ -11,21 +10,19 @@ class Memory(Store):
     may make them incompatible with multiprocessing drivers.
     """
     def __init__(self):
-        self._driver = type('MemoryDriver', (dict, StoreDriver), {})()
+        self._store = {}
 
-    @property
-    def driver(self):
-        return self._driver
+    def __contains__(self, key):
+        return key in self._store
 
-    def __truediv__(self, other):
-        """
-        Store.__truediv__ relies on copying, which is disallowed for memory
-        stores.
-        """
-        new_instance = Memory.__new__(Memory)
-        new_instance._driver = self._driver
-        new_instance._namespace = (*self._namespace, other)
-        return new_instance
+    def load(self, key):
+        return self._store[key]
+
+    def metadata(self, key):
+        return NotImplementedError
+
+    def store(self, key, value, **metadata):
+        self._store[key] = value
 
     def __copy__(self):
         raise CopyError('Cannot copy in-memory store')

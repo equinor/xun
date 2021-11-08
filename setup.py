@@ -44,6 +44,8 @@ if __name__ == '__main__':
             'matplotlib',
             'nbformat',
             'networkx',
+            'numpy',
+            'pandas',
             'paramiko',
             'redis',
             'yapf',

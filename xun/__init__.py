@@ -5,6 +5,7 @@ except pkg_resources.DistributionNotFound:
     pass
 
 
+from . import fs
 from . import serialization
 from .core import ExportError
 from .core import SchemaError

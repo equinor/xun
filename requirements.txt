@@ -9,5 +9,6 @@ networkx
 numpy
 pandas
 paramiko
+pyparsing
 redis
 yapf

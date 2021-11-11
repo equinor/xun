@@ -21,17 +21,22 @@ from .util import assignment_target_introduced_names
 from .util import assignment_target_shape
 from .util import body_external_names
 from .util import call_from_function_definition
-from .util import function_ast
 from .util import separate_constants_ast
 from .util import shape_to_ast_tuple
 from .util import sort_constants_ast
 from itertools import chain
 from typing import List
+import contextvars
 import copy
 import functools
 
 
-def assemble(desc, *nodes):
+def assemble(desc,
+             *nodes,
+             globals=None,
+             hash=None,
+             original_source_code=None,
+             interface_hashes=frozenset()):
     """Assemble serializable `FunctionImage` representation
 
     Takes a list of lists of statements and assembles a serializable
@@ -39,9 +44,18 @@ def assemble(desc, *nodes):
 
     Parameters
     ----------
+    desc : FunctionDescription
     *nodes : vararg of list of ast.AST nodes
         Lists of statements (in order) to be used as the statements of the
         generated function body
+    globals : dict
+        The assembled functions global scope
+    hash : str
+        Xun function hash
+    original_source_code : str
+        The source code of the original function this is generated from
+    interface_hashes : frozenset[str]
+        The hashes of any defined interface of the (xun?) function
 
     Returns
     -------
@@ -73,14 +87,17 @@ def assemble(desc, *nodes):
         desc.doc,
         desc.annotations,
         desc.module,
-        desc.globals,
+        globals if globals is not None else desc.globals,
         desc.referenced_modules,
+        original_source_code=original_source_code,
+        interface_hashes=interface_hashes,
+        hash=hash,
     )
 
     return f
 
 
-def pass_by_value(func):
+def ast_pass_by_value(func):
     """
     NodeTransformers modify ASTs inplace, this decorator can be used to ensure
     such modifications don't leak back to the original description.
@@ -99,7 +116,7 @@ def pass_by_value(func):
 #
 
 
-@pass_by_value
+@ast_pass_by_value
 def generate_header():
     """Generate header
 
@@ -119,7 +136,7 @@ def generate_header():
     ]
 
 
-@pass_by_value
+@ast_pass_by_value
 def separate_constants(func_desc: FunctionDescription):
     """Separate constants
 
@@ -139,7 +156,7 @@ def separate_constants(func_desc: FunctionDescription):
     return body, constants
 
 
-@pass_by_value
+@ast_pass_by_value
 def sort_constants(constants: List[ast.AST]):
     """Sort constants
 
@@ -160,74 +177,46 @@ def sort_constants(constants: List[ast.AST]):
     return sorted_constants, constant_graph
 
 
-@pass_by_value
-def copy_only_constants(sorted_constants: List[ast.AST], dependencies={}):
-    """Copy only constants
+@ast_pass_by_value
+def pass_by_value(sorted_constants: List[ast.AST]):
+    """Pass by Value
 
-    Working on the FunctionDecomposition `sorted_constants`. Change any
-    expression leaving the with constants statement through function calls to a
-    copy of the expression. Change any expression entering as a result of a
-    function to a copy of that expression. This ensures that any value inside
-    the with constants statement never changes, e.g. acts as if it is a value,
-    never a reference. This is necessary to ensure immutability in constant
-    fields, and is what is responsible for the constness of the fields. If a
-    function took a reference to a value instead of a copy, it could change the
-    value. This would result in us not being able to evaluate and know its value
-    when scheduling, since order is arbitrary.
-
-    Calls to xun functions will later be replaced by sentinel nodes, which are
-    not copyable, and should therefore not be made copy only. Managing which
-    statements to skip is done through the skip_if predicate.
-
-    The `sorted_constants` attribute is replaced by `copy_only_constants`.
+    To ensure immutability calls to functions from xun defintions statements
+    are done by value. That is any argument is copied before leaving the
+    statement, and the return value is copied before it is exposed to the
+    statement.
 
     Parameters
     ----------
     sorted_constants: List[ast.AST]
-    dependencies : mapping from str to Function
-        maps names of dependencies to their Functions
 
     Returns
     -------
     List[ast.AST]
     """
-    def gen_deepcopy_expr(expr):
-        deepcopy_id = ast.Name(id='_xun_deepcopy', ctx=ast.Load())
-        return ast.Call(func=deepcopy_id, args=[expr], keywords=[])
-
     class CallArgumentCopyTransformer(ast.NodeTransformer):
         def visit_Call(self, node):
             node = self.generic_visit(node)
 
-            if not isinstance(node.func, ast.Name):
-                return node
-
-            if node.func.id in dependencies:
-                return node
-
-            args = [gen_deepcopy_expr(arg) for arg in node.args]
-            keywords = [
-                ast.keyword(kw.arg, gen_deepcopy_expr(kw.value))
-                for kw in node.keywords
-            ]
-            new_call = ast.Call(func=node.func, args=args, keywords=keywords)
-            copy_result = gen_deepcopy_expr(new_call)
-            return copy_result
+            pass_by_value = ast.Name(id='_xun_pass_by_value', ctx=ast.Load())
+            return ast.Call(func=pass_by_value,
+                            args=[node.func, *node.args],
+                            keywords=node.keywords)
 
     transformer = CallArgumentCopyTransformer()
     transformed = [transformer.visit(stmt) for stmt in sorted_constants]
 
-    from_copy_import_deepcopy = ast.ImportFrom(
-        module='copy',
-        names=[ast.alias(name='deepcopy', asname='_xun_deepcopy')],
+    import_pass_by_value = ast.ImportFrom(
+        module='xun.functions.runtime',
+        names=[ast.alias(name='pass_by_value', asname='_xun_pass_by_value')],
         level=0
     )
-    copy_only_constants = [from_copy_import_deepcopy, *transformed]
+    copy_only_constants = [import_pass_by_value, *transformed]
 
     return copy_only_constants
 
 
-@pass_by_value
+@ast_pass_by_value
 def unpack_unpacking_assignments(copy_only_constants: List[ast.AST]):
     """Unpack Unpacking Assignments
 
@@ -286,58 +275,15 @@ def unpack_unpacking_assignments(copy_only_constants: List[ast.AST]):
     transformer = UnpackUnpackingAssignments()
     transformed = [transformer.visit(stmt) for stmt in copy_only_constants]
     import_xun_unpack = ast.ImportFrom(
-        module='xun.functions',
+        module='xun.functions.runtime',
         names=[ast.alias(name='unpack', asname='_xun_unpack')],
         level=0
     )
     return [import_xun_unpack, *transformed]
 
 
-@pass_by_value
-def transform_yields(body: List[ast.AST], interfaces):
-    """Transform Yields
-
-    This transformation will change any yields from the form
-    `yield xun_function(args) is value` to `yield xun_function(args), value`.
-
-    Parameters
-    ----------
-    body : List[ast.AST]
-    interfaces : mapping from interface name (str) to Interface
-
-    Returns
-    -------
-    List[ast.AST]
-    """
-    class yield_transformer(ast.NodeTransformer):
-        def visit_Expr(self, node):
-            if not isinstance(node.value, ast.Yield):
-                return node
-            if not isinstance(node.value.value, ast.Compare):
-                raise XunSyntaxError
-            if not len(node.value.value.ops) == 1:
-                raise XunSyntaxError
-            if not isinstance(node.value.value.ops[0], ast.Is):
-                raise XunSyntaxError
-            call = node.value.value.left
-            value = node.value.value.comparators[0]
-
-            if call.func.id not in interfaces:
-                msg = f'Missing interface definition for {call.func.id}'
-                raise XunInterfaceError(msg)
-
-            return ast.Expr(
-                ast.Yield(ast.Tuple(
-                    elts=[call, value],
-                    ctx=ast.Load(),
-                ))
-            )
-    y = yield_transformer()
-    return [y.visit(stmt) for stmt in body]
-
-
-@pass_by_value
-def build_xun_graph(unpacked_assignments: List[ast.AST], dependencies={}):
+@ast_pass_by_value
+def build_xun_graph(unpacked_assignments: List[ast.AST]):
     """Build Xun Graph Transformation
 
     This transformation will generate code such that any call to a xun function
@@ -349,90 +295,178 @@ def build_xun_graph(unpacked_assignments: List[ast.AST], dependencies={}):
     Parameters
     ----------
     unpacked_assignments : List[ast.AST]
-    dependencies : mapping from str to Function
-        maps names of dependencies to their Functions
 
     Returns
     -------
     List[ast.AST]
     """
+    class AssignVisitor(ast.NodeVisitor):
+        def __init__(self):
+            self.introduced_names = set()
 
-    # The following code is never executed here, but is injected into the
-    # FunctionDecomposition body. (`xun_graph` attribute). The injected code
-    # provides a graph, and a funtion _xun_register_call that is used to
-    # populate the graph.
-    @function_ast
-    def helper_code():
-        from itertools import chain as _xun_chain
-        from xun.functions import CallNode as _xun_CallNode
-        import networkx as _xun_nx
+            for node in unpacked_assignments:
+                self.visit(node)
 
-        _xun_graph = _xun_nx.DiGraph()
-
-        def _xun_register_call(fname,
-                               fhash,
-                               *args,
-                               **kwargs):
-
-            # Any references to results from other xun functions must be loaded
-            dependencies = filter(
-                lambda a: isinstance(a, _xun_CallNode),
-                _xun_chain(args, kwargs.values())
+        def visit_Assign(self, node):
+            self.generic_visit(node)
+            target = node.targets[0]
+            self.introduced_names.update(
+                assignment_target_introduced_names(target)
             )
-            call = _xun_CallNode(fname, fhash, *args, **kwargs)
-            _xun_graph.add_node(call)
-            _xun_graph.add_edges_from((dep, call) for dep in dependencies)
-            return call
 
-    header = helper_code.body[0].body
+    assign_visitor = AssignVisitor()
 
-    class RegisterCallWrapper(ast.NodeTransformer):
-        """
-        Transformation any calls to a xun function to _xun_register_call
-        """
-        def visit_Call(self, node):
-            node = self.generic_visit(node)
+    import_detect_dependencies_by_deepcopy = ast.ImportFrom(
+        module='xun.functions.runtime',
+        names=[
+            ast.alias(
+                name='detect_dependencies_by_deepcopy',
+                asname='_xun_detect_dependencies_by_deepcopy',
+            ),
+        ],
+        level=0
+    )
 
-            if not isinstance(node.func, ast.Name):
-                return node
+    detect_dependencies_by_deepcopy = ast.Name(
+        id='_xun_detect_dependencies_by_deepcopy', context=ast.Load())
 
-            if node.func.id not in dependencies:
-                return node
+    unnamed_statements = [
+        expr for expr in unpacked_assignments
+        if isinstance(expr, ast.Expr)
+    ]
 
-            register_call = ast.Call(
-                func=ast.Name(id='_xun_register_call', ctx=ast.Load()),
-                args=[
-                    ast.Constant(node.func.id, kind=None),
-                    ast.Constant(dependencies[node.func.id].hash, kind=None),
-                    *node.args
+    named_statements = [
+        stmt for stmt in unpacked_assignments
+        if not isinstance(stmt, ast.Expr)
+    ]
+
+    call_detect_dependencies_by_deepcopy = ast.Call(
+        func=detect_dependencies_by_deepcopy,
+        args=[
+            *[
+                ast.Name(id=name, ctx=ast.Load())
+                for name in assign_visitor.introduced_names
+            ],
+            *[expr for expr in unnamed_statements],
+        ],
+        keywords=[],
+    )
+
+    return [
+        import_detect_dependencies_by_deepcopy,
+        *named_statements,
+        ast.Return(call_detect_dependencies_by_deepcopy),
+    ]
+
+
+@ast_pass_by_value
+def load_args(body: List[ast.AST], function_arg_names):
+    import_load_args = ast.ImportFrom(
+        module='xun.functions.runtime',
+        names=[ast.alias(name='resolve_args_by_deepcopy',
+                         asname='_xun_resolve_args_by_deepcopy')],
+        level=0,
+    )
+    load_args = ast.Assign(
+        targets=[
+            ast.Tuple(
+                elts=[
+                    *[
+                        ast.Name(id=name, ctx=ast.Store())
+                        for name in function_arg_names
+                    ],
+                    ast.Name(id='_xun_symbolic_args', ctx=ast.Store()),
                 ],
-                keywords=node.keywords,
-                type_comment=None,
+                ctx=ast.Store(),
             )
-            return register_call
-
-    return_graph = ast.Return(value=ast.Name(id='_xun_graph', ctx=ast.Load()))
-
-    body = [
-        RegisterCallWrapper().visit(stmt)
-        if isinstance(stmt, ast.Assign) or isinstance(stmt, ast.Expr)
-        else stmt
-        for stmt in unpacked_assignments
-    ]
-
-    xun_graph = [
-        *header,
+        ],
+        value=ast.Call(
+            func=ast.Name(id='_xun_resolve_args_by_deepcopy', ctx=ast.Load()),
+            args=[
+                ast.Name(
+                    id='_xun_store_accessor',
+                    ctx=ast.Load()
+                ),
+            ],
+            keywords=[
+                ast.keyword(arg=name, value=ast.Name(id=name, ctx=ast.Load()))
+                for name in function_arg_names
+            ],
+        ),
+        type_comment=None,
+    )
+    return [
+        import_load_args,
+        load_args,
         *body,
-        return_graph
     ]
 
-    return xun_graph
+
+@ast_pass_by_value
+def transform_yields(body: List[ast.AST], function_arg_names):
+    """Transform Yields
+
+    This transformation will change any yields from the form
+    `yield xun_function(args) is value` to `yield xun_function(args), value`.
+
+    Parameters
+    ----------
+    body : List[ast.AST]
+    function_arg_names : List[str]
+
+    Returns
+    -------
+    List[ast.AST]
+    """
+    class yield_transformer(ast.NodeTransformer):
+        is_interface_args = contextvars.ContextVar(
+            'is_interface_args', default=False)
+
+        def visit_Expr(self, node):
+            if not isinstance(node.value, ast.Yield):
+                return node
+            if not isinstance(node.value.value, ast.Compare):
+                raise XunSyntaxError
+            if not len(node.value.value.ops) == 1:
+                raise XunSyntaxError
+            if not isinstance(node.value.value.ops[0], ast.Is):
+                raise XunSyntaxError
+
+            original_call = node.value.value.left
+
+            argctx = contextvars.copy_context()
+            argctx.run(yield_transformer.is_interface_args.set, True)
+            call = argctx.run(self.generic_visit, original_call)
+
+            value = node.value.value.comparators[0]
+
+            # if call.func.id not in interfaces:
+            #     msg = f'Missing interface definition for {call.func.id}'
+            #     raise XunInterfaceError(msg)
+
+            return ast.Expr(
+                ast.Yield(ast.Tuple(
+                    elts=[call, value],
+                    ctx=ast.Load(),
+                ))
+            )
+
+        def visit_Name(self, node):
+            is_interface_args = yield_transformer.is_interface_args.get()
+            if is_interface_args and node.id in function_arg_names:
+                return ast.Attribute(
+                    value=ast.Name(id='_xun_symbolic_args', ctx=ast.Load()),
+                    attr=node.id,
+                    ctx=ast.Load(),
+                )
+            return node
+
+    y = yield_transformer()
+    return [y.visit(stmt) for stmt in body]
 
 
-@pass_by_value
-def load_from_store(body: List[ast.AST],
-                    unpacked_assignments: List[ast.AST],
-                    dependencies={}):
+@ast_pass_by_value
+def load_constants(body: List[ast.AST], unpacked_assignments: List[ast.AST]):
     """Load from Store Transformation
 
     Transform any call to xun functions into loads from the xun store. This
@@ -442,8 +476,6 @@ def load_from_store(body: List[ast.AST],
     ----------
     body : List[ast.AST]
     unpacked_assignments : List[ast.AST]
-    dependencies : mapping from str to Function
-        maps names of dependencies to their Functions
 
     Returns
     -------
@@ -472,16 +504,6 @@ def load_from_store(body: List[ast.AST],
             return node
     discovered_reference = DiscoverReferences()
 
-    def is_referenced_in_body(name):
-        return name in discovered_reference.referenced_in_body
-
-    def is_xun_call(node):
-        return (
-            isinstance(node, ast.Call) and
-            isinstance(node.func, ast.Name) and
-            node.func.id in dependencies
-        )
-
     # If No dependencies are referenced in the body of the function, there is
     # nothing to load
     if len(discovered_reference.referenced_in_body) == 0:
@@ -493,23 +515,32 @@ def load_from_store(body: List[ast.AST],
     ]
 
     imports = [
+        ast.ImportFrom(
+            module='xun.functions.runtime',
+            names=[ast.alias(name='load_results_by_deepcopy',
+                             asname='_xun_load_results_by_deepcopy')],
+            level=0,
+        ),
         *[
             node for node in unpacked_assignments
             if isinstance(node, (ast.Import, ast.ImportFrom))
         ],
     ]
 
-    store_accessor_deepload = ast.Attribute(
-        value=ast.Name(id='_xun_store_accessor', ctx=ast.Load()),
-        attr='deepload',
-        ctx=ast.Load(),
-    )
-
     deep_load_referenced = ast.Call(
-        func=store_accessor_deepload,
+        func=ast.Name(
+            id='_xun_load_results_by_deepcopy',
+            ctx=ast.Load()
+        ),
         args=[
-            ast.Name(id=name, ctx=ast.Load())
-            for name in discovered_reference.referenced_in_body
+            ast.Name(
+                id='_xun_store_accessor',
+                ctx=ast.Load()
+            ),
+            *[
+                ast.Name(id=name, ctx=ast.Load())
+                for name in discovered_reference.referenced_in_body
+            ],
         ],
         keywords=[],
     )
@@ -559,7 +590,7 @@ def load_from_store(body: List[ast.AST],
 # Interface Transformations
 #
 
-@pass_by_value
+@ast_pass_by_value
 def separate_interface_and_target(func_desc: FunctionDescription, target):
     fdef = func_desc.ast.body[0]
     interface_call = call_from_function_definition(fdef)
@@ -585,7 +616,7 @@ def separate_interface_and_target(func_desc: FunctionDescription, target):
     return interface_call, target_call
 
 
-@pass_by_value
+@ast_pass_by_value
 def build_interface_graph(interface_call: ast.expr, target_call: ast.expr):
     """Interface
 
@@ -595,16 +626,24 @@ def build_interface_graph(interface_call: ast.expr, target_call: ast.expr):
     -------
     List[ast.Ast]
     """
-    import_nx = ast.Import([ast.alias(name='networkx', asname='_xun_nx')])
+    import_detect_dependencies_by_deepcopy = ast.ImportFrom(
+        module='xun.functions.runtime',
+        names=[
+            ast.alias(
+                name='detect_dependencies_by_deepcopy',
+                asname='_xun_detect_dependencies_by_deepcopy',
+            ),
+        ],
+        level=0
+    )
+    detect_dependencies_by_deepcopy = ast.Name(
+        id='_xun_detect_dependencies_by_deepcopy', ctx=ast.Load())
+
     xun_graph = ast.Assign(
         targets=[ast.Name(id='_xun_graph', ctx=ast.Store())],
         value=ast.Call(
-            func=ast.Attribute(
-                value=ast.Name(id='_xun_nx', ctx=ast.Load()),
-                attr='DiGraph',
-                ctx=ast.Load(),
-            ),
-            args=[],
+            func=detect_dependencies_by_deepcopy,
+            args=[target_call],
             keywords=[],
         ),
         type_comment=None,
@@ -623,14 +662,14 @@ def build_interface_graph(interface_call: ast.expr, target_call: ast.expr):
     return_graph = ast.Return(ast.Name(id='_xun_graph', ctx=ast.Load()))
 
     return [
-        import_nx,
+        import_detect_dependencies_by_deepcopy,
         xun_graph,
         add_edge,
         return_graph,
     ]
 
 
-@pass_by_value
+@ast_pass_by_value
 def interface_raise_on_execution(interface_call: ast.expr,
                                  target_call: ast.expr):
     import_interface_error = ast.ImportFrom(

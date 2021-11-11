@@ -1,12 +1,14 @@
-from .blueprint import Blueprint
-from .function_description import describe
-from .function_image import FunctionImage
-from .graph import CallNode
 from . import transformations as xform
+from .blueprint import Blueprint
+from .errors import XunSyntaxError
+from .function_description import describe
+from .graph import CallNode
+from .util import func_arg_names
 from abc import ABC
 from abc import abstractmethod
-from yapf.yapflib.yapf_api import FormatCode
+from itertools import chain
 from yapf.yapflib.style import CreatePEP8Style
+from yapf.yapflib.yapf_api import FormatCode
 import astor
 import base64
 import hashlib
@@ -19,12 +21,17 @@ def adjusted_line_layout(style=CreatePEP8Style()):
     return style
 
 
-def callnode_constructor(name, hash):
-    @FunctionImage.from_function
-    def construct_callnode(*args, **kwargs):
+class SymbolicFunction:
+    def __init__(self, name, hash):
+        self.name = name
+        self.hash = hash
+
+    def __call__(self, *args, **kwargs):
+        return self.callnode(*args, **kwargs)
+
+    def callnode(self, *args, **kwargs):
         from xun.functions import CallNode
-        return CallNode(name, hash, *args, **kwargs)
-    return construct_callnode
+        return CallNode(self.name, self.hash, *args, **kwargs)
 
 
 class AbstractFunction(ABC):
@@ -51,6 +58,10 @@ class AbstractFunction(ABC):
         def source(self):
             return self.owner.desc.src
 
+    def __call__(self, *args, **kwargs):
+        raise XunSyntaxError(f'xun functions, like {self.name}, can only be '
+                             'called from xun definitions statements.')
+
     @property
     @abstractmethod
     def name(self):
@@ -67,6 +78,11 @@ class AbstractFunction(ABC):
 
     @property
     @abstractmethod
+    def globals(self):
+        pass
+
+    @property
+    @abstractmethod
     def dependencies(self):
         pass
 
@@ -75,13 +91,6 @@ class AbstractFunction(ABC):
 
         Calculate a hash identifier for a function with the given description
         and dependencies.
-
-        Parameters
-        ----------
-        desc : xun.functions.FunctionDescription
-            Description of the hashed function
-        dependencies : mapping of name to Function
-            The dependencies of the hashed function
 
         Returns
         -------
@@ -163,6 +172,7 @@ class AbstractFunction(ABC):
         **kwargs
 
         Returns
+        -------
         nx.DiGraph
             The call graph for the call
         """
@@ -252,6 +262,20 @@ class Function(AbstractFunction):
     def dependencies(self):
         return self._dependencies
 
+    @property
+    def globals(self):
+        return {
+            **{
+                name: value for name, value in self.desc.globals.items()
+                if not isinstance(value, AbstractFunction)
+            },
+            **{
+                name: SymbolicFunction(f.name, f.hash)
+                for name, f in chain(self.dependencies.items(),
+                                     self.interfaces.items())
+            },
+        }
+
     @staticmethod
     def from_function(func, max_parallel=None):
         """From Function
@@ -276,7 +300,9 @@ class Function(AbstractFunction):
 
         desc = describe(func)
         dependencies = {
-            g.name: g for g in desc.globals.values() if isinstance(g, Function)
+            g.name: g
+            for g in desc.globals.values()
+            if isinstance(g, AbstractFunction)
         }
 
         f = Function(desc, dependencies, max_parallel)
@@ -289,47 +315,50 @@ class Function(AbstractFunction):
     @property
     def graph_builder(self):
         if self._graph_builder is None:
-            deps = self.dependencies
-
             _, constants = xform.separate_constants(self.desc)
             sorted_constants, _ = xform.sort_constants(constants)
-            copy_only = xform.copy_only_constants(sorted_constants, deps)
-            unpacked = xform.unpack_unpacking_assignments(copy_only)
-            xun_graph = xform.build_xun_graph(unpacked, deps)
+            pass_by_value = xform.pass_by_value(sorted_constants)
+            unpacked = xform.unpack_unpacking_assignments(pass_by_value)
+            xun_graph = xform.build_xun_graph(unpacked)
 
-            self._graph_builder = xform.assemble(self.desc, xun_graph)
+            self._graph_builder = xform.assemble(
+                self.desc,
+                xun_graph,
+                globals=self.globals,
+                hash=self.hash,
+                original_source_code=self.code.source,
+                interface_hashes=frozenset(
+                    i.hash for i in self.interfaces.values()
+                ),
+            )
         return self._graph_builder
 
     @property
     def callable(self):
         if self._callable is None:
-            deps = self.dependencies
+            arg_names = func_arg_names(self.desc.ast.body[0])
 
             head = xform.generate_header()
             body, constants = xform.separate_constants(self.desc)
             sorted_constants, _ = xform.sort_constants(constants)
-            copy_only = xform.copy_only_constants(sorted_constants, deps)
-            unpacked = xform.unpack_unpacking_assignments(copy_only)
-            yields = xform.transform_yields(body, self.interfaces)
-            load_from_store = xform.load_from_store(yields, unpacked, deps)
+            pass_by_value = xform.pass_by_value(sorted_constants)
+            unpacked = xform.unpack_unpacking_assignments(pass_by_value)
+            load_args = xform.load_args(body, arg_names)
+            yields = xform.transform_yields(load_args, arg_names)
+            load_constants = xform.load_constants(yields, unpacked)
 
-            f = xform.assemble(self.desc, head, load_from_store, yields)
-            f.globals = {
-                **{
-                    name: value for name, value in self.desc.globals.items()
-                    if not isinstance(value, AbstractFunction)
-                },
-                **{
-                    name: callnode_constructor(f.name, f.hash)
-                    for name, f in self.dependencies.items()
-                },
-                **{
-                    name: callnode_constructor(i.name, i.hash)
-                    for name, i in self.interfaces.items()
-                }
-            }
-            f.hash = self.hash
-            self._callable = f
+            self._callable = xform.assemble(
+                self.desc,
+                head,
+                load_constants,
+                yields,
+                globals=self.globals,
+                hash=self.hash,
+                original_source_code=self.code.source,
+                interface_hashes=frozenset(
+                    i.hash for i in self.interfaces.values()
+                ),
+        )
         return self._callable
 
     def interface(self, func):
@@ -415,9 +444,9 @@ class Interface(AbstractFunction):
                 if not isinstance(value, AbstractFunction)
             },
             **{
-                name: callnode_constructor(f.name, f.hash)
+                name: SymbolicFunction(f.name, f.hash)
                 for name, f in self.dependencies.items()
-            }
+            },
         }
 
     @property
@@ -428,10 +457,10 @@ class Interface(AbstractFunction):
             ) = xform.separate_interface_and_target(self.desc, self.target)
             interface = xform.build_interface_graph(interface_call,
                                                     target_call)
-
-            f = xform.assemble(self.desc, interface)
-            f.globals = self.globals
-            self._graph_builder = f
+            self._graph_builder = xform.assemble(self.desc,
+                                                 interface,
+                                                 globals=self.globals,
+                                                 hash=self.hash)
         return self._graph_builder
 
     @property
@@ -442,8 +471,8 @@ class Interface(AbstractFunction):
             ) = xform.separate_interface_and_target(self.desc, self.target)
             interface = xform.interface_raise_on_execution(interface_call,
                                                            target_call)
-            f = xform.assemble(self.desc, interface)
-            f.globals = self.globals
-            f.hash = self.hash
-            self._callable = f
+            self._callable = xform.assemble(self.desc,
+                                            interface,
+                                            globals=self.globals,
+                                            hash=self.hash)
         return self._callable

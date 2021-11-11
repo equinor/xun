@@ -23,8 +23,8 @@ def as_callable_python(func):
     desc = xun.functions.describe(func)
     body, constants = xform.separate_constants(desc)
     sorted_constants, _ = xform.sort_constants(constants)
-    copy_only_constants = xform.copy_only_constants(sorted_constants)
-    f = xform.assemble(desc, copy_only_constants, body)
+    pass_by_value = xform.pass_by_value(sorted_constants)
+    f = xform.assemble(desc, pass_by_value, body)
 
     return f.compile()
 
@@ -112,7 +112,7 @@ def test_with_constants_no_side_effects():
     assert g() == 1 + 42 + 7
 
 
-def test_load_from_store_transformation():
+def test_load_constants_transformation():
     def func():
         with ...:
             a = f()
@@ -128,12 +128,13 @@ def test_load_from_store_transformation():
         _xun_store_accessor = yield
         yield
         def _xun_load_constants():
-            from xun.functions import unpack as _xun_unpack  # noqa: F401
-            from copy import deepcopy as _xun_deepcopy  # noqa: F401
-            a = f()
-            b = h(a)
-            c = g(b)
-            return _xun_store_accessor.deepload(a, c)
+            from xun.functions.runtime import load_results_by_deepcopy as _xun_load_results_by_deepcopy
+            from xun.functions.runtime import unpack as _xun_unpack  # noqa: F401
+            from xun.functions.runtime import pass_by_value as _xun_pass_by_value  # noqa: F401
+            a = _xun_pass_by_value(f)
+            b = _xun_pass_by_value(h, a)
+            c = _xun_pass_by_value(g, b)
+            return _xun_load_results_by_deepcopy(_xun_store_accessor, a, c)
         a, c = _xun_load_constants()
         value = a + c
         return value
@@ -147,11 +148,11 @@ def test_load_from_store_transformation():
     head = xform.generate_header()
     body, constants = xform.separate_constants(desc)
     sorted_constants, _ = xform.sort_constants(constants)
-    copy_only = xform.copy_only_constants(sorted_constants, known_functions)
+    copy_only = xform.pass_by_value(sorted_constants)
     unpacked = xform.unpack_unpacking_assignments(copy_only)
-    load_from_store = xform.load_from_store(body, unpacked, known_functions)
+    load_constants = xform.load_constants(body, unpacked)
 
-    generated = [*head, *load_from_store, *body]
+    generated = [*head, *load_constants, *body]
     reference = reference_source.body[0].body
 
     ok, diff = check_ast_equals(generated, reference)
@@ -176,28 +177,29 @@ def test_structured_unpacking_transformation():
     head = xform.generate_header()
     body, constants = xform.separate_constants(desc)
     sorted_constants, _ = xform.sort_constants(constants)
-    copy_only = xform.copy_only_constants(sorted_constants, known_functions)
+    copy_only = xform.pass_by_value(sorted_constants)
     unpacked = xform.unpack_unpacking_assignments(copy_only)
-    load_from_store = xform.load_from_store(body, unpacked, known_functions)
+    load_constants = xform.load_constants(body, unpacked)
 
     @xun.function_ast
     def reference_source():
         _xun_store_accessor = yield
         yield
         def _xun_load_constants():
-            from xun.functions import unpack as _xun_unpack
-            from copy import deepcopy as _xun_deepcopy  # noqa: F401
+            from xun.functions.runtime import load_results_by_deepcopy as _xun_load_results_by_deepcopy
+            from xun.functions.runtime import unpack as _xun_unpack  # noqa: F401
+            from xun.functions.runtime import pass_by_value as _xun_pass_by_value  # noqa: F401
             a, b, ((x, y, z), (𝛂, β)), c, d = _xun_unpack(
-                (2, ((3,), (2,)), 2), f()
+                (2, ((3,), (2,)), 2), _xun_pass_by_value(f)
             )
-            something = h(x, y, z)
-            return _xun_store_accessor.deepload(
-                a, b, c, d, something, x, y, z, α, β
+            something = _xun_pass_by_value(h, x, y, z)
+            return _xun_load_results_by_deepcopy(
+                _xun_store_accessor, a, b, c, d, something, x, y, z, α, β
             )
         a, b, c, d, something, x, y, z, α, β = _xun_load_constants()
         return a * b * x * y * z * 𝛂 * β * c * d + something
 
-    generated = [*head, *load_from_store, *body]
+    generated = [*head, *load_constants, *body]
     reference = reference_source.body[0].body
 
     ok, diff = check_ast_equals(generated, reference)
@@ -220,8 +222,8 @@ def test_interface_graph_transformation():
 
     @xun.function_ast
     def reference_source(arg):
-        import networkx as _xun_nx
-        _xun_graph = _xun_nx.DiGraph()
+        from xun.functions.runtime import detect_dependencies_by_deepcopy as _xun_detect_dependencies_by_deepcopy
+        _xun_graph = _xun_detect_dependencies_by_deepcopy(f(arg * 2))
         _xun_graph.add_edge(f(arg * 2), g(arg))
         return _xun_graph
 
@@ -258,7 +260,7 @@ def test_interface_task_transformation():
     assert ok, diff
 
 
-def test_load_from_store_skip_if_unecessary():
+def test_load_constants_skip_if_unecessary():
     def g(a, b):
         value = a + b
         return value
@@ -278,10 +280,10 @@ def test_load_from_store_skip_if_unecessary():
 
     body, constants = xform.separate_constants(desc)
     sorted_constants, _ = xform.sort_constants(constants)
-    copy_only = xform.copy_only_constants(sorted_constants, known_functions)
-    load_from_store = xform.load_from_store(body, copy_only, known_functions)
+    copy_only = xform.pass_by_value(sorted_constants)
+    load_constants = xform.load_constants(body, copy_only)
 
-    generated = [*load_from_store, *body]
+    generated = [*load_constants, *body]
     reference = reference_source.body[0].body
 
     ok, diff = check_ast_equals(generated, reference)

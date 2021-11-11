@@ -1,9 +1,8 @@
 from .errors import CopyError
 from .errors import NotDAGError
 from .util import make_hashable
-from contextlib import contextmanager
+import contextvars
 import networkx as nx
-import threading
 
 
 def sink_nodes(dag):
@@ -48,8 +47,46 @@ class CallNode:
     kwargs : mapping of str to arguments
         the keyword arguments of this call
     """
+    class _deepcopy_context:
+        """
+        `deepcopy` has different effects on callnode depending on the context
+        it is run in.
 
-    _thread_allows_copy = threading.local()
+        When setting the behavior of deepcopy for CallNodes, set
+        `CallNode._deepcopy_context.value` to a generator function within a
+        local context. The generator function should yield exactly one value.
+        Any code following the yield statement is executed when we leave the
+        node.
+
+        - Default
+            The default behavior when copying a call node is to raise a
+            CopyError. This is because passing arguments to non xun functions
+            from within a xun definitions statement is done by copying. Passing
+            a call node to a non xun function is not possible, so we raise an
+            error.
+        - Loading
+            The mechanics of replacing call nodes inside xun functions with
+            their results are through deepcopy. The context should then be set
+            to replace any copied call node with a result loaded from the
+            store.
+        - Dependency detection
+            Dependencies between xun function calls inside a xun definition
+            statement are discovered by doing a depth first search through
+            deepcopy.
+
+        See Also
+        --------
+        load_results_by_deepcopy : replaces CallNode instances with results
+        resolve_args_by_deepcopy : replaces CallNode instances with results
+        detect_dependencies_by_deepcopy :
+            depth first search for dependency detection
+        """
+        @staticmethod
+        def _default_deepcopy_context(callnode, memo):
+            raise CopyError(callnode, 'CallNode copied without context')
+
+        value = contextvars.ContextVar(
+            '_deepcopy_context_value', default=_default_deepcopy_context)
 
     def __init__(self, function_name, function_hash, *args, **kwargs):
         self.function_name = function_name
@@ -65,21 +102,22 @@ class CallNode:
         raise TypeError('Cannot iterate xun function results at schedule time')
 
     def __copy__(self):
-        if not hasattr(CallNode._thread_allows_copy, 'accessor'):
-            raise CopyError('Cannot copy value')
-        return CallNode._thread_allows_copy.accessor.load_result(self)
+        raise CopyError('Copying of callnodes is internally used by xun to '
+                        'detect call graphs. A regular copy of a callnode '
+                        'is usually an indication of an error.')
 
-    def __deepcopy__(self, memo=None):
-        if not hasattr(CallNode._thread_allows_copy, 'accessor'):
-            raise CopyError('Cannot copy value')
-        return CallNode._thread_allows_copy.accessor.load_result(self)
-
-    @classmethod
-    @contextmanager
-    def _load_on_copy_context(cls, accessor):
-        CallNode._thread_allows_copy.accessor = accessor
-        yield
-        delattr(CallNode._thread_allows_copy, 'accessor')
+    def __deepcopy__(self, memo):
+        """
+        deepcopy of Callnodes are only allowed when used internally by xun
+        """
+        deepcopy_impl = CallNode._deepcopy_context.value.get()(self, memo)
+        copied = next(deepcopy_impl)
+        try:
+            next(deepcopy_impl)
+        except StopIteration:
+            return copied
+        else:
+            raise CopyError('callnode deepcopy did not exit as expected')
 
     def __eq__(self, other):
         try:

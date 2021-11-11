@@ -1,5 +1,8 @@
+from .errors import FunctionError
+from .errors import XunInterfaceError
 from .function_description import describe
 from .util import overwrite_scope
+import astor
 import functools
 import importlib
 
@@ -20,16 +23,26 @@ class FunctionImage:
 
     Attributes
     ----------
-    tree : ast.Module
+    tree : ast.AST
         The syntax tree of the function
-    name : str
-        FunctionImage name
+    __name__
+    __qualname__
+    __doc__
+    __annotations__
+    __module__
     globals : dict
         The original function's globals filtered so that this object can be
         pickled.
     referenced_modules : dict
         The dict keys are the names used by the function, while the values are
         actual module names.
+    hash : str
+        xun function hash
+    original_source_code : str
+        The source code used to generate this function image
+    interface_hashes : frozenset[str]
+        The set of hashes to xun interfaces this function is allowed to yield
+        results to
     _func : function
         Cached compiled function. _func is not pickled.
 
@@ -69,6 +82,8 @@ class FunctionImage:
                  module_name,
                  globals,
                  referenced_modules,
+                 original_source_code=None,
+                 interface_hashes=frozenset(),
                  hash=None):
         self.tree = tree
         self.__name__ = name
@@ -79,6 +94,8 @@ class FunctionImage:
         self.globals = globals
         self.referenced_modules = referenced_modules
         self.hash = hash
+        self.original_source_code = original_source_code
+        self.interface_hashes = interface_hashes
         self._func = None
 
     @staticmethod
@@ -91,8 +108,8 @@ class FunctionImage:
         ----------
         func : function
             The function to represent as a FunctionImage object
-        callable : bool
-            Whether or not the resulting object should be callable
+        hash : str
+            The xun function hash
 
         Returns
         -------
@@ -112,8 +129,8 @@ class FunctionImage:
         ----------
         desc : xun.functions.FunctionDescription
             FunctionImage description
-        callable : bool
-            Whether or not the resulting object should be callable
+        hash : str
+            The xun function hash
 
         Returns
         -------
@@ -142,7 +159,9 @@ class FunctionImage:
         function
             Python function
         """
-        function_code = compile(self.tree, '<ast>', 'exec')
+        function_code = compile(self.source_code,
+                                '<xun-function-image>',
+                                'exec')
 
         globals = {
             '__builtins__': __builtins__,
@@ -165,6 +184,32 @@ class FunctionImage:
     def name(self):
         return self.__name__
 
+    @property
+    def source_code(self):
+        return astor.to_source(self.tree)
+
+    def Raise(self):
+        return FunctionError(
+            self.__name__,
+            source=self.source_code,
+            original=self.original_source_code
+        )
+
+    def can_write_to(self, callnode):
+        """ Can Write To
+
+        Parameters
+        ----------
+        callnode : xun.functions.CallNode
+
+        Returns
+        -------
+        bool
+            whether this funtion is allowed to write a result to the given
+            callnode
+        """
+        return callnode.function_hash in self.interface_hashes
+
     def __call__(self, *args, **kwargs):
         """
         Compile and run the function represented by this object. The compiled
@@ -172,7 +217,12 @@ class FunctionImage:
         """
         if self._func is None:
             self._func = self.compile()
-        return self._func(*args, **kwargs)
+        try:
+            return self._func(*args, **kwargs)
+        except XunInterfaceError:
+            raise
+        except Exception as e:
+            raise e from self.Raise()
 
     def __getstate__(self):
         """
@@ -188,6 +238,8 @@ class FunctionImage:
             self.__module__,
             self.globals,
             self.referenced_modules,
+            self.original_source_code,
+            self.interface_hashes,
             self.hash,
         )
 
@@ -204,7 +256,9 @@ class FunctionImage:
         self.__module__ = state[5]
         self.globals = state[6]
         self.referenced_modules = state[7]
-        self.hash = state[8]
+        self.original_source_code = state[8]
+        self.interface_hashes = state[9]
+        self.hash = state[10]
         self._func = None
 
     def __repr__(self):

@@ -1,5 +1,5 @@
 from xun.functions.graph import CallNode
-from xun.functions.util import unpack
+from xun.functions.runtime import unpack
 
 
 def test_unpack_python_types():

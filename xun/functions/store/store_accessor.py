@@ -1,7 +1,3 @@
-from .. import CallNode
-from copy import deepcopy
-
-
 class StoreAccessor:
     """ StoreAccessor
 
@@ -37,10 +33,6 @@ class StoreAccessor:
         else:
             return self
 
-    def deepload(self, *args):
-        with CallNode._load_on_copy_context(self):
-            return deepcopy(tuple(args))
-
     def guarded(self):
         inst = GuardedStoreAccessor.__new__(GuardedStoreAccessor)
         inst.__dict__.update(vars(self))
@@ -61,22 +53,6 @@ class StoreAccessor:
     def completed(self, call):
         namespace = self.store / call.function_hash
         return (call.args, call.kwargs) in namespace
-
-    def resolve_call_args(self, call):
-        """
-        Given a call, return its arguments and keyword arguments. If any
-        argument is a CallNode, the CallNode is replaced with a value loaded
-        from the store.
-
-        Parameters
-        ----------
-        call : CallNode
-
-        Returns
-        (list, dict)
-            Pair of resolved arguments and keyword arguments
-        """
-        return self.deepload(call.args, call.kwargs)
 
 
 class GuardedStoreAccessor(StoreAccessor):

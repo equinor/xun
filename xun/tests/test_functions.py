@@ -3,7 +3,6 @@ from .helpers import PickleDriver
 from .helpers import run_in_process
 from .helpers import sample_sin_blueprint
 from xun.functions import CallNode
-from xun.functions import CopyError
 from xun.functions import XunSyntaxError
 from xun.functions import XunInterfaceError
 from xun.functions.store.store_accessor import GuardedStoreAccessor
@@ -174,7 +173,7 @@ def test_failure_on_use_of_unresolved_call():
             b = use(a)
         return b
 
-    with pytest.raises(CopyError):
+    with pytest.raises(TypeError):
         g.blueprint()
 
 
@@ -850,6 +849,31 @@ def test_funcntions_with_dict_arguments():
     assert run_in_process(f.blueprint()) == (1, 2)
 
 
+def test_funcntions_with_forwarded_callnode_arguments():
+    @xun.function()
+    def f(arg):
+        return arg
+
+    @xun.function()
+    def g(arg):
+        with ...:
+            a = f(arg)
+        return a
+
+    @xun.function()
+    def h():
+        return 1
+
+    @xun.function()
+    def entry_point():
+        with ...:
+            v0 = h()
+            v1 = g(v0)
+        return v1
+
+    assert run_in_process(entry_point.blueprint()) == 1
+
+
 def test_unpacking_to_intermediate():
     @xun.function()
     def f(arg):
@@ -895,23 +919,11 @@ def test_unpacking_list_comp():
 
     result = run_in_process(blueprint)
 
+    assert set(xun.functions.graph.source_nodes(blueprint.graph)) == {
+        *(double.callnode(i) for i in range(n)),
+        *(triple.callnode(i) for i in range(n)),
+    }
     assert result == expected
-
-
-def test_unpacking_generator():
-    @xun.function()
-    def double(arg):
-        return arg * 2
-
-    @xun.function()
-    def h():
-        with ...:
-            gen = (double(i) for i in range(3))
-            (a, b, c), d = gen, 3
-        return a + b + c + d
-
-    result = run_in_process(h.blueprint())
-    assert result == 9
 
 
 def test_unpacking_list_comprehension():
@@ -966,7 +978,6 @@ def test_unpacking_dict_comprehension():
     assert result == 6
 
 
-@pytest.mark.xfail
 def test_list_as_arg():
     @xun.function()
     def f(arg):
@@ -984,7 +995,6 @@ def test_list_as_arg():
     assert result == (1, 2, 3)
 
 
-@pytest.mark.xfail
 def test_deep_callnode_arguments():
     @xun.function()
     def f(arg):
@@ -1123,8 +1133,50 @@ def test_yield_result_two_interfaces():
 
 def test_yield_failure_on_missing_interface_definitions():
     @xun.function()
+    def g():
+        pass
+
+    @xun.function()
     def f():
         yield g() is 0
 
     with pytest.raises(XunInterfaceError):
-        f.callable
+        run_in_process(f.blueprint())
+
+
+def test_yield_with_callnode_argument():
+    @xun.function()
+    def f():
+        return 1
+
+    @xun.function()
+    def g(arg):
+        yield interface(arg) is arg
+
+    @g.interface
+    def interface(arg):
+        yield from g(arg)
+
+    @xun.function()
+    def h():
+        return b
+        with ...:
+            a = f()
+            b = interface(a)
+
+    bp = h.blueprint()
+    assert list(xun.functions.graph.source_nodes(bp.graph)) == [f.callnode()]
+    assert run_in_process(bp) == 1
+
+
+def test_yield_to_interface_indirect():
+    @xun.function()
+    def f():
+        interface_reference = interface
+        yield interface_reference() is 0
+
+    @f.interface
+    def interface():
+        yield from f()
+
+    assert run_in_process(interface.blueprint()) == 0

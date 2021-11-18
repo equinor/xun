@@ -111,7 +111,7 @@ def generate_header():
     """
     return [
         ast.Assign(
-            targets=[ast.Name(id='_xun_store_accessor', ctx=ast.Store())],
+            targets=[ast.Name(id='_xun_store', ctx=ast.Store())],
             value=ast.Yield(value=None),
             type_comment=None,
         ),
@@ -500,7 +500,7 @@ def load_from_store(body: List[ast.AST],
     ]
 
     store_accessor_deepload = ast.Attribute(
-        value=ast.Name(id='_xun_store_accessor', ctx=ast.Load()),
+        value=ast.Name(id='_xun_store', ctx=ast.Load()),
         attr='deepload',
         ctx=ast.Load(),
     )

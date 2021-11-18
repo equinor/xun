@@ -1,4 +1,3 @@
-from .helpers import FakeRedis
 from .helpers import PickleDriver
 from .helpers import run_in_process
 from .helpers import sample_sin_blueprint
@@ -6,7 +5,6 @@ from xun.functions import CallNode
 from xun.functions import CopyError
 from xun.functions import XunSyntaxError
 from xun.functions import XunInterfaceError
-from xun.functions.store.store_accessor import GuardedStoreAccessor
 import networkx as nx
 import pytest
 import xun
@@ -143,18 +141,6 @@ def test_blueprint_graph():
 def test_blueprint():
     blueprint, expected = sample_sin_blueprint()
     result = run_in_process(blueprint)
-
-    assert result == expected
-
-
-def test_blueprint_is_picklable():
-    blueprint, expected = sample_sin_blueprint()
-
-    with FakeRedis() as redis:
-        result = blueprint.run(
-            driver=PickleDriver(),
-            store=redis,
-        )
 
     assert result == expected
 

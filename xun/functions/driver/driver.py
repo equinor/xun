@@ -14,29 +14,28 @@ class Driver(ABC):
     concurrency.
     """
     @abstractmethod
-    def _exec(self, graph, entry_call, function_images, store_accessor):
+    def _exec(self, graph, entry_call, function_images, store):
         pass
 
-    def exec(self, graph, entry_call, function_images, store_accessor):
-        guarded_store_accessor = store_accessor.guarded()
-        self._exec(graph, entry_call, function_images, guarded_store_accessor)
-        return store_accessor.client.load_result(entry_call)
+    def exec(self, graph, entry_call, function_images, store):
+        self._exec(graph, entry_call, function_images, store)
+        return store.load(entry_call)
 
-    def __call__(self, graph, entry_call, function_images, store_accessor):
-        return self.exec(graph, entry_call, function_images, store_accessor)
+    def __call__(self, graph, entry_call, function_images, store):
+        return self.exec(graph, entry_call, function_images, store)
 
     @staticmethod
-    def compute_and_store(callnode, func, store_accessor):
-        args, kwargs = store_accessor.resolve_call_args(callnode)
+    def compute_and_store(callnode, func, store):
+        args, kwargs = store.resolve_call_args(callnode)
         results = func(*args, **kwargs)
         results.send(None)
-        results.send(store_accessor)
+        results.send(store)
         while True:
             try:
                 result_call, result = next(results)
                 logger.debug(f'Storing result for {result_call}')
-                store_accessor.store_result(result_call, result)
+                store.store(result_call, result)
             except StopIteration as result:
                 logger.debug(f'Storing result for {callnode}')
-                store_accessor.store_result(callnode, result.value)
+                store.store(callnode, result.value)
                 return result.value

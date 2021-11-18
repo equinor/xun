@@ -67,12 +67,12 @@ class CallNode:
     def __copy__(self):
         if not hasattr(CallNode._thread_allows_copy, 'accessor'):
             raise CopyError('Cannot copy value')
-        return CallNode._thread_allows_copy.accessor.load_result(self)
+        return CallNode._thread_allows_copy.accessor.load(self)
 
     def __deepcopy__(self, memo=None):
         if not hasattr(CallNode._thread_allows_copy, 'accessor'):
             raise CopyError('Cannot copy value')
-        return CallNode._thread_allows_copy.accessor.load_result(self)
+        return CallNode._thread_allows_copy.accessor.load(self)
 
     @classmethod
     @contextmanager

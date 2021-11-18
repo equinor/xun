@@ -1,4 +1,6 @@
+from .. import CallNode
 from abc import ABC, abstractmethod
+from copy import deepcopy
 
 
 class Store(ABC):
@@ -13,7 +15,6 @@ class Store(ABC):
     def load(self, key):
         pass
 
-    @abstractmethod
     def tags(self, key):
         pass
 
@@ -23,6 +24,26 @@ class Store(ABC):
 
     def guarded(self):
         return GuardedStoreAccessor(self)
+
+    def deepload(self, *args):
+        with CallNode._load_on_copy_context(self):
+            return deepcopy(tuple(args))
+
+    def resolve_call_args(self, call):
+        """
+        Given a call, return its arguments and keyword arguments. If any
+        argument is a CallNode, the CallNode is replaced with a value loaded
+        from the store.
+
+        Parameters
+        ----------
+        call : CallNode
+
+        Returns
+        (list, dict)
+            Pair of resolved arguments and keyword arguments
+        """
+        return self.deepload(call.args, call.kwargs)
 
 
 class GuardedStoreAccessor(Store):

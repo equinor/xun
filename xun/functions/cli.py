@@ -119,7 +119,6 @@ def draw_dot(plt, G, root):
     ax.set_title(root)
     ax.axis("off")
 
-
     graphviz_args = '-Groot="{}"'.format(repr(root))
     pos = nx.drawing.nx_agraph.graphviz_layout(
         G, prog='dot', root=None, args=graphviz_args
@@ -192,6 +191,7 @@ def interpret_call(call_string, module):
     ----------
     call_string : str
         The call string in python syntax
+    module
 
     Returns
     -------

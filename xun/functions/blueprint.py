@@ -118,7 +118,7 @@ def build_function_call_graph(functions, call):
 
     Parameters
     ----------
-    function : Function
+    functions : Function
         The `Function` this call graph is based on
     call : CallNode
         The call node
@@ -153,7 +153,7 @@ def build_call_graph(functions, call):
 
     Parameters
     ----------
-    function : Function
+    functions : Function
         The `Function` this call graph is based on
     call : CallNode
         The program entry point that the graph will be built from

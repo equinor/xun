@@ -11,6 +11,7 @@ some of those objects contain values you would like to replace.
 from .errors import CopyError
 from .function import SymbolicFunction
 from .graph import CallNode
+from .util import make_hashable
 from copy import deepcopy
 from itertools import count
 from itertools import islice
@@ -33,7 +34,11 @@ def pass_by_value(func, *args, **kwargs):
         try:
             args = deepcopy(args)
             kwargs = deepcopy(kwargs)
-            return deepcopy(func(*args, **kwargs))
+            result = func(*args, **kwargs)
+
+            # Make the return type hashable, so that calls to functions like
+            # `dict.items` return picklable types.
+            return deepcopy(make_hashable(result))
         except CopyError as e:
             copy_error = e
         sym_name = copy_error.function_name

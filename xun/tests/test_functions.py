@@ -1045,6 +1045,17 @@ def test_iterate_over_dictionary_items_in_definitions_statement():
     assert run_in_process(f.blueprint()) == {'a': 1, 'b': 2, 'c': 3}
 
 
+def test_iterate_over_argument_dictionary_items_in_definitions_statement():
+    @xun.function()
+    def f(d):
+        return b
+        with ...:
+            b = {k: v for k, v in d.items()}
+
+    bp = f.blueprint({'a': 1, 'b': 2, 'c': 3})
+    assert run_in_process(bp) == {'a': 1, 'b': 2, 'c': 3}
+
+
 def test_set():
     @xun.function()
     def f(arg):

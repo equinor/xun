@@ -1034,6 +1034,17 @@ def test_fails_when_iterating_over_callnode():
         run_in_process(h.blueprint())
 
 
+def test_iterate_over_dictionary_items_in_definitions_statement():
+    @xun.function()
+    def f():
+        return b
+        with ...:
+            a = {'a': 1, 'b': 2, 'c': 3}
+            b = {k: v for k, v in a.items()}
+
+    assert run_in_process(f.blueprint()) == {'a': 1, 'b': 2, 'c': 3}
+
+
 def test_set():
     @xun.function()
     def f(arg):

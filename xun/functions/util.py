@@ -599,9 +599,9 @@ def make_hashable(a):
         return bytes(a)
     elif isinstance(a, collections.abc.Mapping):
         return frozenmap({k: make_hashable(v) for k, v in a.items()})
-    elif isinstance(a, collections.abc.Set):
-        return frozenset(make_hashable(v) for v in a)
-    elif isinstance(a, collections.abc.Sequence):
+    elif isinstance(a, (collections.abc.Set, collections.abc.Sequence)):
+        # Convert sets to sequences so that order is retained for sets like
+        # `dict_items`
         return tuple(make_hashable(v) for v in a)
     elif isinstance(a, (collections.abc.Hashable)):
         return a

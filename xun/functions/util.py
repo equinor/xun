@@ -10,6 +10,7 @@ import inspect
 import networkx as nx
 import textwrap
 import types
+import typing
 
 
 #
@@ -603,7 +604,14 @@ def make_hashable(a):
         # Convert sets to sequences so that order is retained for sets like
         # `dict_items`
         return tuple(make_hashable(v) for v in a)
-    elif isinstance(a, (collections.abc.Hashable)):
+    try:
+        # Callnodes satisfy Iterable, but cannot be iterated over. We therefore
+        # have to just try and recover if we fail.
+        if isinstance(a, typing.Iterable):
+            return tuple(make_hashable(v) for v in a)
+    except TypeError:
+        pass
+    if isinstance(a, (typing.Hashable, collections.abc.Hashable)):
         return a
     else:
         raise TypeError(f'unhashable type {a.__class__}')

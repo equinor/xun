@@ -147,6 +147,16 @@ class AbstractFunction(ABC):
         """
         return Blueprint(self, *args, **kwargs)
 
+    def run_locally(self, *args, **kwargs):
+        """
+        TODO
+        """
+        from .driver import Sequential
+        from .store import Memory
+        driver = Sequential()
+        store = Memory()
+        return self.blueprint(*args, **kwargs).run(driver=driver, store=store)
+
     @property
     @abstractmethod
     def graph_builder(self):

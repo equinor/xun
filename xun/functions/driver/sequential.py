@@ -18,9 +18,6 @@ class Sequential(Driver):
         schedule = list(nx.topological_sort(graph))
 
         for node in schedule:
-            if not isinstance(node, CallNode):
-                continue
-
             func = function_images[node.function_name]
 
             # Do not rerun finished jobs. For example if a workflow has been

@@ -158,6 +158,14 @@ def test_blueprint_is_picklable():
     assert result == expected
 
 
+def test_run_function_locally():
+    @xun.function()
+    def f(a, b):
+        return a + b
+
+    assert f.run_locally(2, 3) == 5
+
+
 def test_failure_on_use_of_unresolved_call():
     def use(value):
         return value + 1

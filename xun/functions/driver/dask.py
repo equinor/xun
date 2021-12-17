@@ -2,6 +2,8 @@ from .. import graph as graph_helpers
 from ..errors import ComputeError
 from .driver import Driver
 import asyncio
+import contextvars
+from copy import deepcopy
 import functools
 import logging
 import networkx as nx
@@ -67,6 +69,14 @@ class DaskSchedule:
         raise ComputeError('One or more jobs failed')
 
     async def run(self, graph):
+        def deepcp_impl(current_callnode, memo):
+            yield current_callnode
+
+        ctx = contextvars.copy_context()
+        ctx.run(graph_helpers.CallNode._deepcopy_context.value.set,
+                deepcp_impl)
+        graph = ctx.run(deepcopy, graph)
+
         atomic_graph = GraphLock(graph)
         queue = asyncio.Queue()
 

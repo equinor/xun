@@ -15,29 +15,34 @@ class Driver(ABC):
     concurrency.
     """
     @abstractmethod
-    def _exec(self, graph, entry_call, function_images, store_accessor):
+    def _exec(self, graph, entry_call, function_images, store):
         pass
 
-    def exec(self, graph, entry_call, function_images, store_accessor):
-        guarded_store_accessor = store_accessor.guarded()
-        self._exec(graph, entry_call, function_images, guarded_store_accessor)
-        return store_accessor.client.load_result(entry_call)
+    def exec(self, graph, entry_call, function_images, store):
+        guarded_store = store.guarded()
+        self._exec(graph, entry_call, function_images, guarded_store)
+        return store.load_callnode(entry_call)
 
-    def __call__(self, graph, entry_call, function_images, store_accessor):
-        return self.exec(graph, entry_call, function_images, store_accessor)
+    def __call__(self, graph, entry_call, function_images, store):
+        return self.exec(graph, entry_call, function_images, store)
 
     @staticmethod
-    def compute_and_store(callnode, func, store_accessor):
+    def value_computed(callnode, store):
+        return callnode in store
+
+    @staticmethod
+    def compute_and_store(callnode, func, store):
+        cached_store = store.cached()
         results = func(*callnode.args, **callnode.kwargs)
         results.send(None)
-        results.send(store_accessor)
+        results.send(cached_store)
         while True:
             try:
                 result_call, result = next(results)
                 if func.can_write_to(result_call):
                     logger.debug(f'Storing result for {result_call} '
                                  f'(interface of {callnode})')
-                    store_accessor.store_result(result_call, result)
+                    store.store(result_call, result)
                 else:
                     msg = (f'Call {callnode} attempted to write an interface '
                            f'[{result_call.function_name}'
@@ -47,7 +52,7 @@ class Driver(ABC):
                     raise XunInterfaceError(msg)
             except StopIteration as result:
                 logger.debug(f'Storing result for {callnode}')
-                store_accessor.store_result(callnode, result.value)
+                store.store(callnode, result.value)
                 return result.value
             except Exception as e:
                 raise e from func.Raise()

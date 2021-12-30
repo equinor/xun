@@ -1,7 +1,10 @@
+from .. import serialization
 from .errors import CopyError
 from .errors import NotDAGError
 from .util import make_hashable
+import base64
 import contextvars
+import hashlib
 import networkx as nx
 
 
@@ -148,6 +151,15 @@ class CallNode:
             ))
         subscript = ''.join(f'[{s}]' for s in self.subscript)
         return f'CallNode({", ".join(args)}){subscript}'
+
+    def sha256(self, encode=True):
+        serialized = serialization.dumps(self).encode()
+        sha256 = hashlib.sha256()
+        sha256.update(serialized)
+        if encode:
+            return base64.urlsafe_b64encode(sha256.digest()).decode()
+        else:
+            return sha256.digest()
 
     def _replace(self, **kwargs):
         """

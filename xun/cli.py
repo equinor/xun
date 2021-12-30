@@ -41,7 +41,6 @@ subparsers = parser.add_subparsers()
 #
 # Xun functions
 #
-
 parser_fgraph = subparsers.add_parser('graph')
 parser_fgraph.set_defaults(func=functions.cli.xun_graph)
 parser_fgraph.add_argument('module')
@@ -53,6 +52,18 @@ parser_fgraph_action.add_argument('--list-layout',
 parser_fgraph_action.add_argument('--dot-layout', action='store_true')
 parser_fgraph_action.add_argument('--dot', action='store_true')
 
+
+#
+# XunFS
+#
+try:
+    import fs.cli from .
+    parser_mount = subparsers.add_parser('mount')
+    parser_mount.set_defaults(func=fs.cli.main)
+    parser_mount.add_argument('--store', ...)
+    parser_mount.add_argument('fuse_args', nargs=argparse.REMAINDER)
+except ImportError:
+    pass
 
 #
 # create new project from cookiecutter template

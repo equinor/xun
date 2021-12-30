@@ -1,2 +1,8 @@
 from . import queries
-from .filesystem import mount
+
+
+try:
+    from . import cli
+    from .filesystem import mount
+except ImportError:
+    pass

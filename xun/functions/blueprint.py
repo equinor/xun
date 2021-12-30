@@ -28,7 +28,7 @@ class Blueprint:
         self.functions = discover_functions(func)
         self.graph = build_call_graph(self.functions, self.call)
 
-    def run(self, driver=None, store=None, client_store=None):
+    def run(self, driver=None, store=None):
         """run
 
         Executes this blueprint given a driver and store
@@ -73,11 +73,7 @@ class Blueprint:
             for name, func in self.functions.items()
         }
 
-        from .store import StoreAccessor
-        store_accessor = StoreAccessor(store, client_store)
-
-        return driver.exec(self.graph, self.call, function_images,
-                           store_accessor)
+        return driver.exec(self.graph, self.call, function_images, store)
 
 
 def discover_functions(root_function):

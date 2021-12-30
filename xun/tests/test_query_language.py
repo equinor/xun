@@ -26,23 +26,35 @@ alphanums_ = text(
 ).map(str.strip).filter(bool)
 
 
-operators = one_of(just('='), just('>'), just('>='), just('<'), just('<='))
+operators = one_of(
+    just('<'),
+    just('<='),
+    just('='),
+    just('>='),
+    just('>'),
+)
 identifiers = builds(lambda a, an_: a + an_, alphas, alphanums_)
-quoted_strings = builds(repr, text())
 tags = one_of(
-    builds(xst.Tag, identifiers, operators, quoted_strings),
+    builds(xst.Tag, identifiers, operators, text()),
     builds(xst.Tag, identifiers, none(), none()),
 )
 query_arguments = builds(xst.Arguments, lists(tags))
 exprs = identifiers
-leaves = builds(xst.Hierarchy, just(...), just([]))
-trees = leaves | recursive(
-    builds(xst.Hierarchy, exprs, lists(leaves, min_size=1, max_size=1)),
-    lambda children: builds(xst.Hierarchy, exprs, lists(children, min_size=1)),
-    max_leaves=5,
+leaf = just(...)
+trees = leaf | lists(
+    recursive(
+        builds(xst.Hierarchy, exprs, leaf),
+        lambda children: builds(
+            xst.Hierarchy,
+            exprs,
+            lists(children, min_size=1),
+        ),
+        max_leaves=3,
+    ),
+    min_size=1,
+    max_size=3,
 )
 queries = builds(xst.Query, query_arguments, trees)
-
 
 ###############################################################################
 # Tests
@@ -50,6 +62,38 @@ queries = builds(xst.Query, query_arguments, trees)
 
 
 def test_query_language_basic():
+    query = '(a b) => a { ... } b { ... }'
+    assert parse(query) == xst.Query(
+        xst.Arguments([
+            xst.Tag(name='a', operator=None, value=None),
+            xst.Tag(name='b', operator=None, value=None),
+        ]),
+        [
+            xst.Hierarchy('a', ...),
+            xst.Hierarchy('b', ...),
+        ],
+    )
+
+
+def test_query_language_nested():
+    query = '(a b c) => a { ... } b { c { ... } d { ... } }'
+    assert parse(query) == xst.Query(
+        xst.Arguments([
+            xst.Tag(name='a', operator=None, value=None),
+            xst.Tag(name='b', operator=None, value=None),
+            xst.Tag(name='c', operator=None, value=None),
+        ]),
+        [
+            xst.Hierarchy('a', ...),
+            xst.Hierarchy('b', [
+                xst.Hierarchy('c', ...),
+                xst.Hierarchy('d', ...),
+            ]),
+        ],
+    )
+
+
+def test_query_language():
     query = """
     (a aa bb<"0" cc<="0" dd>"00" ee>="00" ff="00") =>
         a {
@@ -62,38 +106,38 @@ def test_query_language_basic():
                 }
             }
         }
+        b {
+            ...
+        }
     """
-    result = parse(query)
 
-    reference = xst.Query(
+    assert parse(query) == xst.Query(
         xst.Arguments([
             xst.Tag(name='a', operator=None, value=None),
             xst.Tag(name='aa', operator=None, value=None),
-            xst.Tag(name='bb', operator='<', value='"0"'),
-            xst.Tag(name='cc', operator='<=', value='"0"'),
-            xst.Tag(name='dd', operator='>', value='"00"'),
-            xst.Tag(name='ee', operator='>=', value='"00"'),
-            xst.Tag(name='ff', operator='=', value='"00"'),
+            xst.Tag(name='bb', operator='<', value='0'),
+            xst.Tag(name='cc', operator='<=', value='0'),
+            xst.Tag(name='dd', operator='>', value='00'),
+            xst.Tag(name='ee', operator='>=', value='00'),
+            xst.Tag(name='ff', operator='=', value='00'),
         ]),
-        xst.Hierarchy(
-            'a',
-            [
-                xst.Hierarchy('bb', [
-                    xst.Hierarchy(..., [])
-                ]),
+        [
+            xst.Hierarchy('a', [
+                xst.Hierarchy('bb', ...),
                 xst.Hierarchy('cc', [
-                    xst.Hierarchy('dd', [
-                        xst.Hierarchy(..., [])
-                    ]),
+                    xst.Hierarchy('dd', ...),
                 ]),
-            ],
-        ),
+            ]),
+            xst.Hierarchy('b', ...),
+        ],
     )
-
-    assert result == reference
 
 
 @given(queries)
 def test_query_language_hypothesis(query):
     query_string = unparse(query)
-    assert query == parse(query_string)
+    try:
+        assert query == parse(query_string)
+    except:
+        print(query_string)
+        raise

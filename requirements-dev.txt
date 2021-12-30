@@ -1,7 +1,6 @@
 astor
 astunparse
 dask[distributed]
-fakeredis
 hypothesis
 mock-ssh-server
 pyshd

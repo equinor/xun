@@ -78,15 +78,6 @@ def test_serialization_pathlib():
     assert loaded == path
 
 
-def test_namespacedkey_serialization():
-    key = xun.functions.store.NamespacedKey(('animals',), 'a')
-    yml = xun.serialization.dumps([key, key])
-    loaded = xun.serialization.loads(yml)
-    assert loaded[0] == key
-    assert loaded[1] == key
-    assert loaded[0] is loaded[1]
-
-
 def test_callnode_serialization():
     cn = xun.functions.CallNode('function_name',
                                 'hash',

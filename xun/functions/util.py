@@ -18,7 +18,7 @@ import typing
 #
 
 
-def overwrite_scope(func, globals, defaults=None, module=None):
+def overwrite_scope(func, globals, defaults=None, closure=None, module=None):
     """
     Returns a new function, with the same code as the original, but with the
     given scope. FunctionType is poorly documented, but these are all the
@@ -29,7 +29,7 @@ def overwrite_scope(func, globals, defaults=None, module=None):
         globals,
         name=func.__name__,
         argdefs=defaults if defaults is not None else func.__defaults__,
-        closure=func.__closure__,
+        closure=closure if closure is not None else func.__closure__,
     )
     if module is not None:
         g.__module__ = module

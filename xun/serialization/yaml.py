@@ -21,7 +21,6 @@ _xun_functors = (
     python_types.TupleFunctor,
 
     xun_types.CallNodeFunctor,
-    xun_types.NamespacedKeyFunctor,
 )
 mapping_type = (dict, )
 sequence_types = (tuple, list)

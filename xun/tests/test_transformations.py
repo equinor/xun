@@ -125,7 +125,7 @@ def test_load_constants_transformation():
 
     @xun.function_ast
     def reference_source():
-        _xun_store_accessor = yield
+        _xun_store = yield
         yield
         def _xun_load_constants():
             from xun.functions.runtime import load_results_by_deepcopy as _xun_load_results_by_deepcopy
@@ -134,7 +134,7 @@ def test_load_constants_transformation():
             a = _xun_pass_by_value(f)
             b = _xun_pass_by_value(h, a)
             c = _xun_pass_by_value(g, b)
-            return _xun_load_results_by_deepcopy(_xun_store_accessor, a, c)
+            return _xun_load_results_by_deepcopy(_xun_store, a, c)
         a, c = _xun_load_constants()
         value = a + c
         return value
@@ -183,7 +183,7 @@ def test_structured_unpacking_transformation():
 
     @xun.function_ast
     def reference_source():
-        _xun_store_accessor = yield
+        _xun_store = yield
         yield
         def _xun_load_constants():
             from xun.functions.runtime import load_results_by_deepcopy as _xun_load_results_by_deepcopy
@@ -194,7 +194,7 @@ def test_structured_unpacking_transformation():
             )
             something = _xun_pass_by_value(h, x, y, z)
             return _xun_load_results_by_deepcopy(
-                _xun_store_accessor, a, b, c, d, something, x, y, z, α, β
+                _xun_store, a, b, c, d, something, x, y, z, α, β
             )
         a, b, c, d, something, x, y, z, α, β = _xun_load_constants()
         return a * b * x * y * z * 𝛂 * β * c * d + something

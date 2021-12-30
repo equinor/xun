@@ -1,6 +1,6 @@
 from ..errors import CopyError
 from .store import Store
-from .store import StoreDriver
+from .store import TagDB
 
 
 class Memory(Store):
@@ -10,22 +10,45 @@ class Memory(Store):
     be copied or pickled as they are not meant to leave the host process. This
     may make them incompatible with multiprocessing drivers.
     """
+
+    class MemoryTagDB(TagDB):
+        """
+        Memory Stores don't persist state, so these methods can be ignored
+        """
+
+        def refresh(self):
+            pass
+
+        def checkpoint(self):
+            pass
+
+        def dump(self, name):
+            pass
+
     def __init__(self):
-        self._driver = type('MemoryDriver', (dict, StoreDriver), {})()
+        self._store = {}
+        self._tagdb = self.MemoryTagDB(self)
 
-    @property
-    def driver(self):
-        return self._driver
+    def __contains__(self, callnode):
+        return callnode in self._store
 
-    def __truediv__(self, other):
-        """
-        Store.__truediv__ relies on copying, which is disallowed for memory
-        stores.
-        """
-        new_instance = Memory.__new__(Memory)
-        new_instance._driver = self._driver
-        new_instance._namespace = (*self._namespace, other)
-        return new_instance
+    def _load_value(self, callnode):
+        value = self._store[callnode]
+        return value
+
+    def store(self, callnode, value, **tags):
+        self._store[callnode] = value
+        self._tagdb.update(callnode, tags)
+
+    def remove(self, callnode):
+        del self._store[callnode]
+        self._tagdb.remove(callnode)
+
+    def _load_tags(self, callnode):
+        return self._tagdb.tags(callnode)
+
+    def filter(self, *tag_conditions):
+        return self._tagdb.query(*tag_conditions)
 
     def __copy__(self):
         raise CopyError('Cannot copy in-memory store')

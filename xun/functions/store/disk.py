@@ -179,7 +179,8 @@ class DiskTagDB(TagDB):
                 diff_con_results + diff_mem_results,
                 key=lambda el: (el[3], el[1])
             )
-            new_tags = sorted(diff_con_tags + diff_mem_tags,
+            new_tags = sorted(
+                diff_con_tags + diff_mem_tags,
                 key=lambda el: (el[4], el[1])
             )
 

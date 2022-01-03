@@ -435,7 +435,8 @@ class TagDB:
                     ON _xun_tags_table(result_id)
                     WHERE name = {self.sql_literal(tag)} AND NOT deleted
                 ''')
-                self.mem.execute(f'''
+                self.mem.execute(  #nosec
+                f'''
                     CREATE VIEW IF NOT EXISTS [{tag}](result_id, [{tag}]) AS
                     SELECT
                         result_id, value

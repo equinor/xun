@@ -5,6 +5,7 @@ import pickle
 def main(args):
     from .filesystem import fuse, Fuse, XunFS
     query = ' '.join(args.query)
+    print(args)
     server = XunFS(args.store,
                    args.query,
                    usage="XunFS\n" + Fuse.fusage,

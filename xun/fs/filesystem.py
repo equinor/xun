@@ -71,11 +71,13 @@ class XunFS(Fuse):
         def __init__(self, path, mode=0):
             self.path = path
             self.mode = mode
-            self.mode_mask = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
 
         def open(self, flags):
-            if self.mode and not (self.flags & self.mode_mask) == self.mode:
-                return -errno.EACCES
+            # accmode = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
+            # print(oct(flags), oct(self.mode_mask), oct(self.mode))
+            # if self.mode and not (flags & self.mode_mask) == self.mode:
+            #     return -errno.EACCES
+            pass
 
         def read(self, size, offset):
             return -errno.EACCES
@@ -91,19 +93,26 @@ class XunFS(Fuse):
 
     class Refresh(File):
         def __init__(self, path):
-            super().__init__(path, os.O_RDONLY)
+            super().__init__(path, stat.S_IRUSR | stat.S_IXUSR)
             self.contents = dedent('''\
                 #!/bin/bash
                 echo refresh > `dirname $0`/control
             ''')
 
         def read(self, size, offset):
-            length = len(self.contents)
-            return self.contents[offset:offset + size]
+            # length = len(self.contents)
+            return self.contents[offset:offset + size].encode()
+
+        def getattr(self):
+            st = Stat()
+            st.st_mode = stat.S_IFREG | self.mode
+            st.st_size = len(self.contents)
+            st.st_nlink = 1
+            return st
 
     class Control(File):
         def __init__(self, path, fs):
-            super().__init__(path, os.O_WRONLY)
+            super().__init__(path, stat.S_IWUSR)
             self.fs = fs
             self.commands = {
                 'refresh', lambda *_: fs.refresh(),
@@ -132,7 +141,7 @@ class XunFS(Fuse):
         try:
             return self._graph
         except AttributeError:
-            self.refresh()
+            self._graph = self.refresh()
             return self._graph
 
     def refresh(self):
@@ -143,19 +152,26 @@ class XunFS(Fuse):
 
         graph = self.add_path_edges('/control', graph)
         graph = self.add_path_edges('/refresh', graph)
-        # graph = self.add_path_edges('/store', graph)
+        graph = self.add_path_edges('/store', graph)
 
-        # structure = self.store.query(self.query)
+        print('yo')
+        print(self.store)
+        print(self.query)
+        try:
+            structure = self.store.query(self.query)
+        except Exception as e:
+            print('s', e)
+        print('structure', structure)
         # graph = self.add_structure_to_graph(structure, graph)
 
-        self._graph = graph
+        return graph
 
     def getattr(self, path):
         print('getattr', path)
         if self.isdir(path):
             print('\tisdir', path)
             st = Stat()
-            st.st_mode = stat.S_IFDIR | 0o700
+            st.st_mode = stat.S_IFDIR | 0o500
             st.st_nlink = 1
             return st
         else:
@@ -163,7 +179,10 @@ class XunFS(Fuse):
             return self.file(path).getattr()
 
     def open(self, path, flags):
-        return -errno.EACCES
+        try:
+            return self.graph.nodes[path]['file'].open(flags)
+        except KeyError:
+            return -errno.ENOENT
 
     def read(self, path, size, offset):
         graph = self.graph
@@ -175,10 +194,13 @@ class XunFS(Fuse):
         graph = self.graph
         print(graph.edges())
         for node in graph.successors(path):
-            yield fuse.Direntry(node)
+            yield fuse.Direntry(os.path.basename(node))
 
     def readlink(self, path):
         raise NotImplementedError
+
+    def write(self, path, buf, offset):
+        self.file(path).write(buf, offset)
 
     def rmdir(self, path):
         ...

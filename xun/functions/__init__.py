@@ -9,6 +9,7 @@ from .errors import XunSyntaxError
 from .errors import XunInterfaceError
 from .function import Function
 from .function import function
+from .function import worker_resource
 from .function_description import FunctionDescription
 from .function_description import describe
 from .function_image import FunctionImage

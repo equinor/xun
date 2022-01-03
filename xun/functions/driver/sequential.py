@@ -21,7 +21,7 @@ class Sequential(Driver):
             if not isinstance(node, CallNode):
                 continue
 
-            func = function_images[node.function_name]
+            func = function_images[node.function_name]['callable']
 
             # Do not rerun finished jobs. For example if a workflow has been
             # stopped and resumed.

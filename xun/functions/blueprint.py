@@ -66,7 +66,10 @@ class Blueprint:
                 pickle.loads(pickle.dumps(store))
 
         function_images = {
-            name: func.callable
+            name: {
+                    'callable': func.callable,
+                    'worker_resources': func.worker_resources
+            }
             for name, func in self.functions.items()
         }
 

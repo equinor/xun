@@ -57,12 +57,17 @@ parser_fgraph_action.add_argument('--dot', action='store_true')
 # XunFS
 #
 try:
-    import fs.cli from .
-    parser_mount = subparsers.add_parser('mount')
-    parser_mount.set_defaults(func=fs.cli.main)
-    parser_mount.add_argument('--store', ...)
-    parser_mount.add_argument('fuse_args', nargs=argparse.REMAINDER)
-except ImportError:
+    from .fs import cli as fs
+    parser_mnt = subparsers.add_parser('mount')
+    parser_mnt.set_defaults(func=fs.main)
+    parser_mnt_store = parser_mnt.add_mutually_exclusive_group(required=True)
+    parser_mnt_store.add_argument('--store', nargs='+', action=fs.StoreAction)
+    parser_mnt_store.add_argument('--store-pickle', type=fs.store_pickle)
+    parser_mnt_query = parser_mnt.add_mutually_exclusive_group(required=True)
+    parser_mnt_query.add_argument('--query', nargs='+', action=fs.QueryAction)
+    parser_mnt_query.add_argument('--query-file', type=fs.query_file)
+    parser_mnt.add_argument('fuse_args', nargs=argparse.REMAINDER)
+except NotImplementedError:
     pass
 
 #

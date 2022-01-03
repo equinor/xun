@@ -430,22 +430,41 @@ class TagDB:
                     'tag': tag,
                     'tag_value': tag_value,
                 })
-                self.mem.execute(f'''
-                    CREATE INDEX IF NOT EXISTS [_xun_tag_index_{tag}]
-                    ON _xun_tags_table(result_id)
-                    WHERE name = {self.sql_literal(tag)} AND NOT deleted
-                ''')
-                self.mem.execute(  #nosec
-                f'''
-                    CREATE VIEW IF NOT EXISTS [{tag}](result_id, [{tag}]) AS
-                    SELECT
-                        result_id, value
-                    FROM
-                        _xun_tags
-                    WHERE
-                        name = {self.sql_literal(tag)}
-                ''')
+                self.create_views(tag)
         self.checkpoint()
+
+    def create_views(self, *tags):
+        if not tags:
+            tags = [
+                tag for tag, in
+                self.mem.execute('SELECT DISTINCT name FROM _xun_tags')
+            ]
+
+        for tag in tags:
+            self.mem.execute(f'''
+                CREATE INDEX IF NOT EXISTS [_xun_tag_index_{tag}]
+                ON _xun_tags_table(result_id)
+                WHERE name = {self.sql_literal(tag)} AND NOT deleted
+            ''')
+            self.mem.execute(  #nosec
+            f'''
+                CREATE VIEW IF NOT EXISTS [{tag}](result_id, [{tag}]) AS
+                SELECT
+                    result_id, value
+                FROM
+                    _xun_tags
+                WHERE
+                    name = {self.sql_literal(tag)}
+            ''')
+
+    def unique_tags(self):
+        self.refresh()
+        result_id = callnode.sha256(encode=False)
+        result = self.mem.execute('''
+            SELECT name, value FROM _xun_tags
+            WHERE result_id = :result_id
+        ''', {'result_id': result_id})
+        return dict(result)
 
     def remove(self, callnode):
         result_id = callnode.sha256(encode=False)

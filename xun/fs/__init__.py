@@ -1,8 +1,8 @@
 from . import queries
 
-
 try:
-    from . import cli
     from .filesystem import mount
-except ImportError:
+except NotImplementedError:
     pass
+else:
+    from . import cli

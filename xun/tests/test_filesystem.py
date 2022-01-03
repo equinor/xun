@@ -4,14 +4,10 @@ import xun
 
 store = xun.functions.store.Disk('xun/tests/test_data/xun-fs-store')
 query = """
-(username='guilty_spark'
- start_time
- entry_point
- function
- @container='fg-xun-storage-test-0') =>
+(start_time>="2030-01-02" entry_point function_name) =>
     date(start_time) {
         entry_point {
-            function {
+            function_name {
                 ...
             }
         }

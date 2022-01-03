@@ -13,11 +13,14 @@ Paths = namedtuple('Paths', 'key val')
 
 
 class Disk(Store):
-    def __init__(self, dir):
+    def __init__(self, dir, create_dirs=True):
         self.dir = Path(dir)
-        (self.dir / 'keys').mkdir(parents=True, exist_ok=True)
-        (self.dir / 'values').mkdir(parents=True, exist_ok=True)
-        self._tagdb = DiskTagDB(self)
+        if create_dirs:
+            (self.dir / 'keys').mkdir(parents=True, exist_ok=True)
+            (self.dir / 'values').mkdir(parents=True, exist_ok=True)
+        elif not self.dir.exists():
+            raise ValueError(f'Store Directory {str(self.dir)} does not exist')
+        self._tagdb = DiskTagDB(self, create_dirs)
 
     def paths(self, key, root=None):
         """ Key Paths
@@ -105,10 +108,11 @@ class Disk(Store):
 
 
 class DiskTagDB(TagDB):
-    def __init__(self, store):
+    def __init__(self, store, create_dirs=True):
         super().__init__(store)
         self.dir = store.dir / 'db'
-        self.dir.mkdir(parents=True, exist_ok=True)
+        if create_dirs:
+            self.dir.mkdir(parents=True, exist_ok=True)
 
     def refresh(self):
         reconciled = False
@@ -198,6 +202,8 @@ class DiskTagDB(TagDB):
                 VALUES
                     (?, ?, ?, ?, ?)
             ''', new_tags)
+
+            self.create_views()
 
     def dump(self, name):
         if self.mem.in_transaction:

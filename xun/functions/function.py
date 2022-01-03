@@ -11,6 +11,7 @@ from yapf.yapflib.style import CreatePEP8Style
 from yapf.yapflib.yapf_api import FormatCode
 import astor
 import base64
+import copy
 import hashlib
 import shutil
 
@@ -245,6 +246,7 @@ class Function(AbstractFunction):
         self._dependencies = dependencies
         self.interfaces = {}
         self.max_parallel = max_parallel
+        self.worker_resources = {}
         self._hash = self.sha256()
         self._graph_builder = None
         self._callable = None
@@ -407,6 +409,28 @@ def function(max_parallel=None):
     return decorator
 
 
+def worker_resource(res_type, number):
+    """ Worker resource function decorator
+
+    Function decorator used to specify resources that should be allocated
+
+    Examples
+    --------
+
+    >>> @xun.worker_resource('MEMORY', 10e2)
+    ... @xun.function()
+    ... def ftest():
+    ...     return 'test'
+    ...
+
+    """
+    def decorator(func):
+        func_prime = copy.deepcopy(func)
+        func_prime.worker_resources[res_type] = number
+        return func_prime
+    return decorator
+
+
 class Interface(AbstractFunction):
     """Interface
 
@@ -415,6 +439,7 @@ class Interface(AbstractFunction):
     def __init__(self, target, desc):
         self.target = target
         self.desc = desc
+        self.worker_resources = {}
         self._dependencies = {
             self.name: self,
             target.name: target,

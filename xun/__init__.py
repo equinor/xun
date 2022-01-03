@@ -23,5 +23,6 @@ from .functions import function
 from .functions import function_ast
 from .functions import function_source
 from .functions import make_shared
+from .functions import worker_resource
 from .init import init_notebook
 from .memoized import memoized

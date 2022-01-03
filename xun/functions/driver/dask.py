@@ -104,10 +104,12 @@ class DaskSchedule:
             else:
                 logger.info(f'Submitting {node}')
 
-                func = compute_proxy(self.store,
-                                     self.function_images[node.function_name])
-
-                future = self.client.submit(func, node)
+                func_img = self.function_images[node.function_name]
+                func = compute_proxy(self.store, func_img['callable'])
+                kwargs = {}
+                for res_name, value in (func_img['worker_resources'].items()):
+                    kwargs.setdefault('resources', {})[res_name] = value
+                future = self.client.submit(func, node, **kwargs)
                 self.futures[node] = future
                 await self.client.gather(future, asynchronous=True)
         except Exception as e:

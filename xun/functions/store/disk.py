@@ -5,6 +5,7 @@ from collections import namedtuple
 from pathlib import Path
 import base64
 import contextlib
+import shutil
 import sqlite3
 import tempfile
 
@@ -150,13 +151,17 @@ class DiskTagDB(TagDB):
                 self.reconcile(con, read_from=None, write_to='_xun_main')
                 reconciled = True
 
-        if reconciled:
-            self.checkpoint()
+            self.create_views()
+            if not reconciled:
+                return
+            checkpoint_name = self.checkpoint()
 
-        # Now that our changes have been reconciled and dumped. Delete any
-        # databases ours is comprising.
-        for db in databases:
-            db.unlink()
+        if self.dump(checkpoint_name):
+            # Now that our changes have been reconciled and dumped. Delete any
+            # databases ours is comprising.
+            for db in databases:
+                print('unlinking', db)
+                db.unlink()
 
     def reconcile(self, con, read_from=None, write_to=None):
         if read_from is None and write_to is None:
@@ -203,14 +208,15 @@ class DiskTagDB(TagDB):
                     (?, ?, ?, ?, ?)
             ''', new_tags)
 
-            self.create_views()
-
     def dump(self, name):
         if self.mem.in_transaction:
             raise RuntimeError('Database Busy')
+        if (self.dir / name).exists():
+            return False
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
             tmp = tmpdir / 'sql'
             with contextlib.closing(sqlite3.connect(tmp)) as bck:
                 self.mem.backup(bck)
-            tmp.replace(self.dir / name)
+            shutil.copy(tmp, self.dir / name)
+            return True

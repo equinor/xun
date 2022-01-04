@@ -306,7 +306,7 @@ class TagDB:
                 _xun_results_table
             GROUP BY
                 result_id,
-                callnode
+                callnode -- ? --
             HAVING
                 NOT deleted
             ORDER BY journal_id;
@@ -394,9 +394,11 @@ class TagDB:
             for c in conditions
             if c.op is not None
         )
+        if where:
+            where = 'WHERE ' + where
         result = self.mem.execute(
             'SELECT _xun_results.callnode '
-            f'from _xun_results {joins} WHERE {where}',
+            f'from _xun_results {joins} {where}',
             {c.tag: c.value for c in conditions}
         )
         return [serialization.loads(r) for r, *_ in result if r is not None]
@@ -431,31 +433,33 @@ class TagDB:
                     'tag_value': tag_value,
                 })
                 self.create_views(tag)
-        self.checkpoint()
+        checkpoint_name = self.checkpoint()
+        self.dump(checkpoint_name)
 
     def create_views(self, *tags):
-        if not tags:
-            tags = [
-                tag for tag, in
-                self.mem.execute('SELECT DISTINCT name FROM _xun_tags')
-            ]
+        with self.savepoint():
+            if not tags:
+                tags = [
+                    tag for tag, in
+                    self.mem.execute('SELECT DISTINCT name FROM _xun_tags')
+                ]
 
-        for tag in tags:
-            self.mem.execute(f'''
-                CREATE INDEX IF NOT EXISTS [_xun_tag_index_{tag}]
-                ON _xun_tags_table(result_id)
-                WHERE name = {self.sql_literal(tag)} AND NOT deleted
-            ''')
-            self.mem.execute(  #nosec
-            f'''
-                CREATE VIEW IF NOT EXISTS [{tag}](result_id, [{tag}]) AS
-                SELECT
-                    result_id, value
-                FROM
-                    _xun_tags
-                WHERE
-                    name = {self.sql_literal(tag)}
-            ''')
+            for tag in tags:
+                self.mem.execute(f'''
+                    CREATE INDEX IF NOT EXISTS [_xun_tag_index_{tag}]
+                    ON _xun_tags_table(result_id)
+                    WHERE name = {self.sql_literal(tag)} AND NOT deleted
+                ''')
+                self.mem.execute(  #nosec
+                f'''
+                    CREATE VIEW IF NOT EXISTS [{tag}](result_id, [{tag}]) AS
+                    SELECT
+                        result_id, value
+                    FROM
+                        _xun_tags
+                    WHERE
+                        name = {self.sql_literal(tag)}
+                ''')
 
     def unique_tags(self):
         self.refresh()
@@ -493,7 +497,7 @@ class TagDB:
                 VALUES (?, ?, ?)
             ''', (sha256, max_result_id, max_tag_id))
         checkpoint_name = base64.urlsafe_b64encode(sha256).decode()
-        self.dump(checkpoint_name)
+        return checkpoint_name
 
     def has_checkpoint(self, checkpoint):
         result = list(self.mem.execute(
@@ -588,7 +592,7 @@ class TagDB:
     def sql_literal(self, value):
         return self.mem.execute('SELECT QUOTE(?)', (value,)).fetchone()[0]
 
-    def sha256(self, *rows):
+    def sha256(self, checkpoint, *rows):
         def coerce(obj):
             if isinstance(obj, bytes):  # BLOB type
                 return obj
@@ -603,7 +607,7 @@ class TagDB:
             else:
                 raise ValueError(f'cound not coerce obj {obj}')
 
-        sha256 = hashlib.sha256()
+        sha256 = hashlib.sha256(checkpoint)
         for row in rows:
             for el in row:
                 sha256.update(coerce(el))

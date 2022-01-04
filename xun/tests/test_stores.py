@@ -199,6 +199,44 @@ def test_store_select_shape(cls):
 @pytest.mark.parametrize('cls', stores)
 def test_store_query(cls):
     with create_instance(cls) as (store, callnodes):
+        result = store.query('() => ...')
+        assert result == {
+            callnodes.f_0,
+            callnodes.f_1,
+            callnodes.f_2,
+            callnodes.f_3,
+            callnodes.f_4,
+            callnodes.main_0,
+            callnodes.main_1,
+        }
+
+
+@pytest.mark.parametrize('cls', stores)
+def test_store_query_argument(cls):
+    with create_instance(cls) as (store, callnodes):
+        result = store.query('(start_time) => start_time { ... }')
+        assert result == {
+            '2030-01-03T13:37': {
+                callnodes.f_4,
+            },
+            '2030-01-01T13:37:00+00:00': {
+                callnodes.f_3,
+            },
+            '2030-01-02T13:37:00+00:00': {
+                callnodes.f_0,
+                callnodes.f_1,
+                callnodes.main_0,
+            },
+            '2030-01-03T13:37:00+00:00': {
+                callnodes.f_2,
+                callnodes.main_1,
+            },
+        }
+
+
+@pytest.mark.parametrize('cls', stores)
+def test_store_query_advanced(cls):
+    with create_instance(cls) as (store, callnodes):
         result = store.query("""
         (start_time>="2030-01-02" entry_point function_name) =>
             start_time {
@@ -310,6 +348,10 @@ def test_store_must_be_picklable(cls):
         assert unpickled[xun.functions.CallNode('f', '', 3)] == 3
         unpickled.store(xun.functions.CallNode('g', '', 3), 4)
         assert store[xun.functions.CallNode('g', '', 3)] == 4
+
+        q0 = store.select(store.tags.start_time > '2030-01-02')
+        q1 = unpickled.select(unpickled.tags.start_time > '2030-01-02')
+        assert q0 == q1
 
         for callnode in vars(callnodes).values():
             assert callnode in unpickled

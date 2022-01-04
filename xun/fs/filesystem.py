@@ -154,15 +154,9 @@ class XunFS(Fuse):
         graph = self.add_path_edges('/refresh', graph)
         graph = self.add_path_edges('/store', graph)
 
-        print('yo')
-        print(self.store)
-        print(self.query)
-        try:
-            structure = self.store.query(self.query)
-        except Exception as e:
-            print('s', e)
-        print('structure', structure)
-        # graph = self.add_structure_to_graph(structure, graph)
+        structure = self.store.query(self.query)
+        print(structure)
+        graph = self.add_structure_to_graph(structure, graph)
 
         return graph
 

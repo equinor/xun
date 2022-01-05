@@ -6,7 +6,6 @@ import pickle
 def main(args):
     from .filesystem import fuse, Fuse, XunFS
     query = ' '.join(args.query)
-    print(args)
     server = XunFS(args.store,
                    args.query,
                    usage="XunFS\n" + Fuse.fusage,
@@ -44,4 +43,4 @@ def store_pickle(s):
 
 def query_file(filename):
     with open(filename, 'r') as f:
-        return [f.read()]
+        return f.read()

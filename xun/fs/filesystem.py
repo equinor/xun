@@ -7,15 +7,9 @@ import networkx as nx
 import os
 import stat
 import subprocess
+import time
 
 
-# fuse-py import magic
-# ref: https://github.com/libfuse/python-fuse/blob/master/example/hello.py
-# pull in some spaghetti to make this stuff work without fuse-py being installed
-# try:
-#     import _find_fuse_parts
-# except ImportError:
-#     pass
 try:
     import fuse
     from fuse import Fuse
@@ -27,27 +21,27 @@ except ImportError:
 
 
 @contextlib.contextmanager
-def mount(store, query, mountpoint):
+def mount(store, query, mountpoint, capture_output=True, timeout=5):
     import pickle
+    import base64
     cmd = [
         'xun',
         'mount',
-        '--store-pickle', pickle.dumps(store).hex(),
+        '--store-pickle', base64.urlsafe_b64encode(pickle.dumps(store)),
         '--query', query,
         '--',
         str(mountpoint)
     ]
     try:
-        proc = subprocess.Popen(
-            cmd,
-            # stdout=subprocess.PIPE,
-            # stderr=subprocess.PIPE,
-        )
-        try:
-            proc.wait(1)
-        except subprocess.TimeoutExpired:
-            pass
-        else:
+        kwargs = {} if not capture_output else {
+            'stdout': subprocess.PIPE,
+            'stderr': subprocess.PIPE,
+        }
+        proc = subprocess.Popen(cmd, **kwargs)
+        wait_for_ctrl(str(mountpoint), timeout=timeout)
+        yield Path(mountpoint)
+    except TimeoutError:
+        if capture_output:
             out, err = proc.communicate()
             msg = dedent(f'''\
                 xun mount stdout:
@@ -57,13 +51,30 @@ def mount(store, query, mountpoint):
                 {err.decode()}
             ''')
             raise RuntimeError(f'failed to mount\n{msg}')
-        yield Path(mountpoint)
+        else:
+            raise RuntimeError('failed to mount')
     finally:
         proc.terminate()
         try:
             proc.wait(5)
         except subprocess.TimeoutExpired:
             proc.kill()
+            proc.wait()
+
+
+def wait_for_ctrl(path, timeout):
+    interval = 0.1
+    remaining = timeout
+    ctrl_path = os.path.join(path, 'control')
+    while True:
+        time.sleep(interval)
+        remaining -= interval
+
+        if os.path.exists(ctrl_path):
+            return
+
+        if remaining <= 0:
+            raise TimeoutError
 
 
 class XunFS(Fuse):
@@ -146,22 +157,21 @@ class XunFS(Fuse):
         graph = self.add_path_edges('/refresh', graph)
         graph = self.add_path_edges('/store', graph)
 
+        print('self.query', self.query)
         structure = self.store.query(self.query)
+        print('structure', structure)
         graph = self.add_structure_to_graph(structure, graph)
 
         return graph
 
     def getattr(self, path):
-        print('getattr', path)
-        if self.isdir(path):
-            print('\tisdir', path)
+        if self.is_file(path):
+            return self.file(path).getattr()
+        else:
             st = Stat()
             st.st_mode = stat.S_IFDIR | 0o500
             st.st_nlink = 1
             return st
-        else:
-            print('\tnotdir', path)
-            return self.file(path).getattr()
 
     def open(self, path, flags):
         try:
@@ -193,9 +203,8 @@ class XunFS(Fuse):
     def unlink(self, path):
         ...
 
-    def isdir(self, path):
-        graph = self.graph
-        return path in graph and 'file' not in graph.nodes[path]
+    def is_file(self, path):
+        return path in self.graph and 'file' in self.graph.nodes[path]
 
     def file(self, path):
         return self.graph.nodes[path]['file']

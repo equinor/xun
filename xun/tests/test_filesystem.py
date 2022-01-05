@@ -1,10 +1,11 @@
 from base64 import urlsafe_b64encode
+from xun.fs.filesystem import wait_for_ctrl
+import contextlib
 import os
 import pickle
 import pytest
 import subprocess
 import tempfile
-import time
 import xun
 
 
@@ -42,19 +43,32 @@ def tree(path):
     return [(f, os.stat(os.path.join(path, f)).st_mode) for f in files]
 
 
-def wait_for_ctrl(path, timeout):
-    interval = 0.1
-    remaining = timeout
-    ctrl_path = os.path.join(path, 'control')
-    while True:
-        time.sleep(interval)
-        remaining -= interval
+@contextlib.contextmanager
+def simple_store():
+    @xun.function()
+    def f(*args, **kwargs):
+        return args, kwargs
 
-        if os.path.exists(ctrl_path):
-            return
+    store_contents = {
+        f.callnode('a'): ('hello', {'tag': 'tag'}),
+        f.callnode('b'): ('world', {'tag': 'tag'}),
+        f.callnode('c'): ('goodbye', {'tag': 'tag'}),
+    }
 
-        if remaining <= 0:
-            raise TimeoutError
+    with contextlib.ExitStack() as stack:
+        tmp = stack.enter_context(tempfile.TemporaryDirectory())
+
+        store = xun.functions.store.Disk(os.path.join(tmp, 'store'))
+        for callnode, (value, tags) in store_contents.items():
+            store.store(callnode, value, **tags)
+
+        mnt_pnt = os.path.join(tmp, 'mnt')
+        mnt_store = os.path.join(mnt_pnt, 'store')
+        os.mkdir(mnt_pnt)
+        stack.enter_context(xun.fs.mount(store, '() => ...', mnt_pnt))
+
+        callnodes = sorted(callnode.sha256() for callnode in store_contents)
+        yield mnt_pnt, store, callnodes, f
 
 
 def test_filesystem():
@@ -94,11 +108,26 @@ def test_filesystem_cli(cmd):
                 proc.kill()
 
 
+def test_filesystem_control_refresh():
+    with simple_store() as (mnt_pnt, _, callnodes, f):
+        def ls():
+            return sorted(os.listdir(os.path.join(mnt_pnt, 'store')))
+        assert ls() == callnodes
+
+        new = f.callnode('d')
+        store.store(new, 'hello', tag='tag')
+        assert ls() == callnodes
+
+        subprocess.check_call(os.path.join(mnt_pnt, 'refresh'))
+        assert ls() == sorted(callnodes + [new.sha256()])
+
+
 def test_delete_mounted_deletes_store():
-    with tempfile.TemporaryDirectory() as tmp, xun.fs.mount(store, query,
-                                                            tmp) as mnt:
+    with simple_store() as (mnt_pnt, store, callnodes, f):
+        a = callnodes[0]
+
         assert a in store
-        file = mnt / a.hash()
+        file = Path(mnt_pnt) / 'store' / a.sha256()
         file.unlink()
         assert a not in store
 

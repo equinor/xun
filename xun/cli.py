@@ -61,13 +61,19 @@ try:
     parser_mnt = subparsers.add_parser('mount')
     parser_mnt.set_defaults(func=fs.main)
     parser_mnt_store = parser_mnt.add_mutually_exclusive_group(required=True)
-    parser_mnt_store.add_argument('--store', nargs='+', action=fs.StoreAction)
+    parser_mnt_store.add_argument('-s', '--store',
+                                  nargs='+',
+                                  action=fs.StoreAction)
     parser_mnt_store.add_argument('--store-pickle',
                                   type=fs.store_pickle,
                                   dest='store')
     parser_mnt_query = parser_mnt.add_mutually_exclusive_group(required=True)
-    parser_mnt_query.add_argument('--query', nargs='+', action=fs.QueryAction)
-    parser_mnt_query.add_argument('--query-file', type=fs.query_file)
+    parser_mnt_query.add_argument('-q', '--query',
+                                  nargs='+',
+                                  action=fs.QueryAction)
+    parser_mnt_query.add_argument('--query-file',
+                                  type=fs.query_file,
+                                  dest='query')
     parser_mnt.add_argument('fuse_args', nargs=argparse.REMAINDER)
 except NotImplementedError:
     pass

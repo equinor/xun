@@ -1,4 +1,5 @@
 import argparse
+import base64
 import pickle
 
 
@@ -38,9 +39,9 @@ class QueryAction(argparse.Action):
 
 
 def store_pickle(s):
-    return pickle.loads(bytes.fromhex(s))
+    return pickle.loads(base64.urlsafe_b64decode(s.encode()))
 
 
 def query_file(filename):
     with open(filename, 'r') as f:
-        return f.read()
+        return [f.read()]

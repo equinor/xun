@@ -68,8 +68,7 @@ def mount(store, query, mountpoint):
 
 class XunFS(Fuse):
     class File:
-        def __init__(self, path, mode=0):
-            self.path = path
+        def __init__(self, mode=0):
             self.mode = mode
 
         def open(self, flags):
@@ -92,8 +91,8 @@ class XunFS(Fuse):
             return st
 
     class Refresh(File):
-        def __init__(self, path):
-            super().__init__(path, stat.S_IRUSR | stat.S_IXUSR)
+        def __init__(self):
+            super().__init__(stat.S_IRUSR | stat.S_IXUSR)
             self.contents = dedent('''\
                 #!/bin/bash
                 echo refresh > `dirname $0`/control
@@ -111,8 +110,8 @@ class XunFS(Fuse):
             return st
 
     class Control(File):
-        def __init__(self, path, fs):
-            super().__init__(path, stat.S_IWUSR)
+        def __init__(self, fs):
+            super().__init__(stat.S_IWUSR)
             self.fs = fs
             self.commands = {
                 'refresh', lambda *_: fs.refresh(),
@@ -135,27 +134,19 @@ class XunFS(Fuse):
         super().__init__(*args, **kwargs)
         self.store = store
         self.query = query
-
-    @property
-    def graph(self):
-        try:
-            return self._graph
-        except AttributeError:
-            self._graph = self.refresh()
-            return self._graph
+        self.graph = self.refresh()
 
     def refresh(self):
         graph = nx.DiGraph()
 
-        graph.add_node('/control', file=self.Control('/control', self))
-        graph.add_node('/refresh', file=self.Refresh('/refresh'))
+        graph.add_node('/control', file=self.Control(self))
+        graph.add_node('/refresh', file=self.Refresh())
 
         graph = self.add_path_edges('/control', graph)
         graph = self.add_path_edges('/refresh', graph)
         graph = self.add_path_edges('/store', graph)
 
         structure = self.store.query(self.query)
-        print(structure)
         graph = self.add_structure_to_graph(structure, graph)
 
         return graph
@@ -221,12 +212,23 @@ class XunFS(Fuse):
         return graph
 
     @staticmethod
-    def add_structure_to_graph(structure, graph, prefix='/store'):
-        graph = graph.copy()
+    def add_structure_to_graph(structure, graph, prefix='/store', copy=True):
+        if copy:
+            graph = graph.copy()
 
         if isinstance(structure, dict):
             for name, children in structure.items():
-                ...
+                name = os.path.join(prefix, name)
+                graph.add_edge(prefix, name)
+                graph = XunFS.add_structure_to_graph(children,
+                                                     graph,
+                                                     prefix=name,
+                                                     copy=False)
+        else:
+            for callnode in structure:
+                name = os.path.join(prefix, callnode.sha256())
+                graph.add_node(name, file=XunFS.File(0o600))
+                graph.add_edge(prefix, name)
 
         return graph
 

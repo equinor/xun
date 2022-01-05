@@ -1,4 +1,5 @@
 from . import cli
+from io import BytesIO
 from pathlib import Path
 from textwrap import dedent
 import contextlib
@@ -92,6 +93,9 @@ class XunFS(Fuse):
         def read(self, size, offset):
             return -errno.EACCES
 
+        def truncate(self, size):
+            return -errno.EACCES
+
         def write(self, buf, offset):
             return -errno.EACCES
 
@@ -125,15 +129,19 @@ class XunFS(Fuse):
             super().__init__(stat.S_IWUSR)
             self.fs = fs
             self.commands = {
-                'refresh', lambda *_: fs.refresh(),
+                b'refresh': lambda *_: fs.refresh(),
             }
+
+        def truncate(self, size):
+            pass
 
         def write(self, buf, offset):
             io = BytesIO(buf)
             actions = []
             lines = io.readlines()
+
             for ln in lines:
-                ln = ln.strip
+                ln = ln.strip()
                 if ln in self.commands:
                     actions.append(ln)
                 else:
@@ -141,11 +149,13 @@ class XunFS(Fuse):
             for action in actions:
                 self.commands[action]()
 
+            return len(buf)
+
     def __init__(self, store, query, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.store = store
         self.query = query
-        self.graph = self.refresh()
+        self.refresh()
 
     def refresh(self):
         graph = nx.DiGraph()
@@ -162,7 +172,7 @@ class XunFS(Fuse):
         print('structure', structure)
         graph = self.add_structure_to_graph(structure, graph)
 
-        return graph
+        self.graph = graph
 
     def getattr(self, path):
         if self.is_file(path):
@@ -187,21 +197,28 @@ class XunFS(Fuse):
 
     def readdir(self, path, offset):
         graph = self.graph
-        print(graph.edges())
         for node in graph.successors(path):
             yield fuse.Direntry(os.path.basename(node))
 
     def readlink(self, path):
-        raise NotImplementedError
-
-    def write(self, path, buf, offset):
-        self.file(path).write(buf, offset)
+        raise RuntimeError
 
     def rmdir(self, path):
-        ...
+        raise RuntimeError
+
+    def truncate(self, path, size):
+        if self.is_file(path):
+            return self.file(path).truncate(size)
+        return -errno.EINVAL
 
     def unlink(self, path):
-        ...
+        raise RuntimeError
+
+    def write(self, path, buf, offset):
+        print(path, buf, offset)
+        if self.is_file(path):
+            return self.file(path).write(buf, offset)
+        return -errno.EINVAL
 
     def is_file(self, path):
         return path in self.graph and 'file' in self.graph.nodes[path]
@@ -229,10 +246,12 @@ class XunFS(Fuse):
             for name, children in structure.items():
                 name = os.path.join(prefix, name)
                 graph.add_edge(prefix, name)
-                graph = XunFS.add_structure_to_graph(children,
-                                                     graph,
-                                                     prefix=name,
-                                                     copy=False)
+                graph = XunFS.add_structure_to_graph(
+                    children,
+                     graph,
+                     prefix=name,
+                     copy=False,
+                 )
         else:
             for callnode in structure:
                 name = os.path.join(prefix, callnode.sha256())

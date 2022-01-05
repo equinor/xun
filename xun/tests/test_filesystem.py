@@ -65,7 +65,9 @@ def simple_store():
         mnt_pnt = os.path.join(tmp, 'mnt')
         mnt_store = os.path.join(mnt_pnt, 'store')
         os.mkdir(mnt_pnt)
-        stack.enter_context(xun.fs.mount(store, '() => ...', mnt_pnt))
+        stack.enter_context(
+            xun.fs.mount(store, '() => ...', mnt_pnt, capture_output=False)
+        )
 
         callnodes = sorted(callnode.sha256() for callnode in store_contents)
         yield mnt_pnt, store, callnodes, f
@@ -118,7 +120,8 @@ def test_filesystem_control_refresh():
         store.store(new, 'hello', tag='tag')
         assert ls() == callnodes
 
-        subprocess.check_call(os.path.join(mnt_pnt, 'refresh'))
+        refresh = os.path.abspath(os.path.join(mnt_pnt, 'refresh'))
+        subprocess.check_call(refresh)
         assert ls() == sorted(callnodes + [new.sha256()])
 
 

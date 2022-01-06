@@ -164,6 +164,7 @@ class DiskTagDB(TagDB):
                 db.unlink()
 
     def reconcile(self, con, read_from=None, write_to=None):
+        print('RECONCILING')
         if read_from is None and write_to is None:
             raise ValueError('Cannot read and write to main database')
 

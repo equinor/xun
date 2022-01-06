@@ -44,7 +44,7 @@ def tree(path):
 
 
 @contextlib.contextmanager
-def simple_store():
+def simple_store_mnt():
     @xun.function()
     def f(*args, **kwargs):
         return args, kwargs
@@ -69,7 +69,7 @@ def simple_store():
             xun.fs.mount(store, '() => ...', mnt_pnt, capture_output=False)
         )
 
-        callnodes = sorted(callnode.sha256() for callnode in store_contents)
+        callnodes = [callnode for callnode in store_contents]
         yield mnt_pnt, store, callnodes, f
 
 
@@ -94,7 +94,6 @@ def test_filesystem():
 def test_filesystem_cli(cmd):
     with tempfile.TemporaryDirectory() as tmp:
         cmd += ['--', tmp]
-        print(cmd)
         proc = subprocess.Popen(cmd)
         timeout = 5
         try:
@@ -111,27 +110,27 @@ def test_filesystem_cli(cmd):
 
 
 def test_filesystem_control_refresh():
-    with simple_store() as (mnt_pnt, _, callnodes, f):
+    with simple_store_mnt() as (mnt_pnt, store, callnodes, f):
+        hashes = sorted(callnode.sha256() for callnode in callnodes)
         def ls():
             return sorted(os.listdir(os.path.join(mnt_pnt, 'store')))
-        assert ls() == callnodes
+        assert ls() == hashes
 
         new = f.callnode('d')
         store.store(new, 'hello', tag='tag')
-        assert ls() == callnodes
+        assert ls() == hashes
 
         refresh = os.path.abspath(os.path.join(mnt_pnt, 'refresh'))
         subprocess.check_call(refresh)
-        assert ls() == sorted(callnodes + [new.sha256()])
+        assert ls() == sorted(hashes + [new.sha256()])
 
 
 def test_delete_mounted_deletes_store():
-    with simple_store() as (mnt_pnt, store, callnodes, f):
+    with simple_store_mnt() as (mnt_pnt, store, callnodes, f):
         a = callnodes[0]
 
         assert a in store
-        file = Path(mnt_pnt) / 'store' / a.sha256()
-        file.unlink()
+        os.unlink(os.path.join(mnt_pnt, 'store', a.sha256()))
         assert a not in store
 
 

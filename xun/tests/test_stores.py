@@ -297,6 +297,14 @@ def test_store_remove(cls):
 
 
 @pytest.mark.parametrize('cls', stores)
+def test_store_missing_tags_raise(cls):
+    with create_instance(cls) as (store, callnodes):
+        del store[callnodes.f_0]
+        with pytest.raises(KeyError):
+            store.tags[callnodes.f_0]
+
+
+@pytest.mark.parametrize('cls', stores)
 def test_store_rewrite_tags(cls):
     with create_instance(cls) as (store, callnodes):
         new_tags = {'hello': 'world'}

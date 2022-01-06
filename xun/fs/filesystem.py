@@ -127,7 +127,6 @@ class XunFS(Fuse):
     class Control(File):
         def __init__(self, fs):
             super().__init__(stat.S_IWUSR)
-            self.fs = fs
             self.commands = {
                 b'refresh': lambda *_: fs.refresh(),
             }
@@ -158,6 +157,7 @@ class XunFS(Fuse):
         self.refresh()
 
     def refresh(self):
+        print('REFRESHING')
         graph = nx.DiGraph()
 
         graph.add_node('/control', file=self.Control(self))
@@ -212,7 +212,17 @@ class XunFS(Fuse):
         return -errno.EINVAL
 
     def unlink(self, path):
-        raise RuntimeError
+        if not self.is_file(path):
+            return -errno.EINVAL
+        self.graph.remove_node(path)
+        try:
+            sha256 = os.path.basename(path)
+            callnode = self.store.unhash(
+                sha256, encoding='utf-8 urlsafe_b64encode'
+            )
+        except Exception:
+            self.refresh()
+            raise
 
     def write(self, path, buf, offset):
         print(path, buf, offset)

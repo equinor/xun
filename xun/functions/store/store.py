@@ -404,9 +404,12 @@ class TagDB:
         return [serialization.loads(r) for r, *_ in result if r is not None]
 
     def update(self, callnode, tags):
+        print(f'writing {callnode}::{callnode.sha256()} {tags}')
         prev_tags = self.tags(callnode)
+        print(prev_tags)
         if prev_tags == tags:
             # Don't need a savepoint if we're not altering anything
+            print(f'nothing {callnode}::{callnode.sha256()}')
             return
 
         with self.savepoint():

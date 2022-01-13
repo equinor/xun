@@ -18,7 +18,6 @@ commands:
             ~/miniconda3/bin/conda create -y -n py<< parameters.python-version >> python=<< parameters.python-version >>
             ln -s ~/miniconda3/envs/py<< parameters.python-version >>/bin/python ~/python3
             ~/python3 -m venv py_venv
-
   bootstrap-win:
     parameters:
       python-version:
@@ -31,7 +30,6 @@ commands:
             conda init powershell
             conda create -y -n py-<< parameters.python-version >> python=<< parameters.python-version >>
             conda activate py-<< parameters.python-version >>
-
   python-win-test:
     parameters:
       python-version:
@@ -45,13 +43,11 @@ commands:
             python -m pip install cmake scikit-build pybind11
             python -m pip install -r requirements-dev.txt
             python -m pip install -r requirements.txt
-
       - run:
           name: Test python
           command: |
             conda activate py-<< parameters.python-version >>
             python setup.py test --verbose
-
   install-python-deps:
     steps:
       - run:
@@ -65,7 +61,6 @@ commands:
             python3 -m pip install -r requirements.txt
             python3 -m pip install -r requirements-dev.txt
             # python3 -m pip install coverage codacy-coverage
-
   python-build-test:
     steps:
       - run:
@@ -75,7 +70,6 @@ commands:
               . py_venv/bin/activate
             fi
             python3 setup.py test --verbose
-
   flake8-req-check:
     steps:
       - run:
@@ -83,21 +77,18 @@ commands:
           command: |
             flake8 --select=F4 --per-file-ignores="__init__.py:F401" .
             flake8 --select=F --per-file-ignores="__init__.py:F401" xun/functions
-
   flake8-opt-check:
     steps:
       - run:
           name: Check formatting rules (PEP8)
           command: |
             git diff origin/master | flake8 --diff --per-file-ignores="__init__.py:F401" --exclude="setup.py"
-
   bandit-check:
     steps:
       - run:
           name: Bandit security check
           command: |
             bandit -c bandit.yml -r xun
-
   codacy-check:
     steps:
       - run:
@@ -108,22 +99,18 @@ commands:
               coverage xml;
               python-codacy-coverage -r coverage.xml;
             fi
-
   create-sdist:
     steps:
       - run:
           name: Create source package
           command: |
             python3 setup.py sdist
-
   create-wheel:
     steps:
       - run:
           name: Create wheel
           command: |
-            python3 -m pip install cibuildwheel==1.6.0
-            python3 -m cibuildwheel --output-dir dist
-
+            python3 -m setup bdist_wheel
   upload-pypi:
     steps:
       - run:
@@ -131,6 +118,15 @@ commands:
           command: |
             python3 -m pip install twine
             python3 -m twine upload -u __token__ --skip-existing dist/*
+
+  upload-testpypi:
+    steps:
+      - run:
+          name: Upload to test.pypi user
+          command: |
+            python3 -m pip install --upgrade pip
+            python3 -m pip install twine
+            python3 -m twine upload -u __token__ --verbose --repository-url https://test.pypi.org/legacy/ --skip-existing dist/*
 
 jobs:
 
@@ -206,24 +202,45 @@ jobs:
 
   sdist-deploy:
     docker:
-      - image: "circleci/python:3.7"
+      - image: "circleci/python:3.9"
     steps:
       - checkout
       - install-python-deps
       - create-sdist
       - upload-pypi
 
+  sdist-test-deploy:
+    docker:
+      - image: "circleci/python:3.9"
+    steps:
+      - checkout
+      - install-python-deps
+      - create-sdist
+      - upload-testpypi
+
   wheels-manylinux-deploy:
     docker:
-      - image: "circleci/python:3.7"
+      - image: "circleci/python:3.9"
     environment:
       - CIBW_BUILD: "cp37-manylinux_x86_64 cp38-manylinux_x86_64 cp39-manylinux_x86_64"
-      - CIBW_BEFORE_BUILD: "pip install cmake setuptools-scm -r requirements.txt && pip install -r requirements-dev.txt"
+      - CIBW_BEFORE_BUILD: "python3 -m pip install --upgrade pip && pip install cmake setuptools-scm -r requirements.txt && pip install -r requirements-dev.txt"
     steps:
       - checkout
       - setup_remote_docker
       - create-wheel
       - upload-pypi
+
+  wheels-manylinux-test-deploy:
+    docker:
+      - image: "circleci/python:3.9"
+    environment:
+      - CIBW_BUILD: "cp37-manylinux_x86_64 cp38-manylinux_x86_64 cp39-manylinux_x86_64"
+      - CIBW_BEFORE_BUILD: "python3 -m pip install --upgrade pip && pip install cmake setuptools-scm -r requirements.txt && pip install -r requirements-dev.txt"
+    steps:
+      - checkout
+      - setup_remote_docker
+      - create-wheel
+      - upload-testpypi
 
   wheels-macos-deploy:
     macos:
@@ -291,6 +308,25 @@ workflows:
           filters:
             tags:
               only: /[0-9]+(\.[0-9]+)*/
+            branches:
+              ignore: /.*/
+
+  linux-test-deploy:
+    jobs:
+      - sdist-test-deploy:
+          name: Create and test deploy sdist
+          filters:
+            tags:
+              only: /[0-9]+(\.[0-9]+)*(-beta)/
+            branches:
+              ignore: /.*/
+      - wheels-manylinux-test-deploy:
+          name: Create and deploy linux test wheels
+          requires:
+            - Create and test deploy sdist
+          filters:
+            tags:
+              only: /[0-9]+(\.[0-9]+)*(-beta)/
             branches:
               ignore: /.*/
 

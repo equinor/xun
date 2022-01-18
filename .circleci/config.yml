@@ -18,6 +18,7 @@ commands:
             ~/miniconda3/bin/conda create -y -n py<< parameters.python-version >> python=<< parameters.python-version >>
             ln -s ~/miniconda3/envs/py<< parameters.python-version >>/bin/python ~/python3
             ~/python3 -m venv py_venv
+
   bootstrap-win:
     parameters:
       python-version:
@@ -30,6 +31,7 @@ commands:
             conda init powershell
             conda create -y -n py-<< parameters.python-version >> python=<< parameters.python-version >>
             conda activate py-<< parameters.python-version >>
+
   python-win-test:
     parameters:
       python-version:
@@ -48,6 +50,7 @@ commands:
           command: |
             conda activate py-<< parameters.python-version >>
             python setup.py test --verbose
+
   install-python-deps:
     steps:
       - run:
@@ -61,6 +64,7 @@ commands:
             python3 -m pip install -r requirements.txt
             python3 -m pip install -r requirements-dev.txt
             # python3 -m pip install coverage codacy-coverage
+
   python-build-test:
     steps:
       - run:
@@ -70,6 +74,7 @@ commands:
               . py_venv/bin/activate
             fi
             python3 setup.py test --verbose
+
   flake8-req-check:
     steps:
       - run:
@@ -77,18 +82,21 @@ commands:
           command: |
             flake8 --select=F4 --per-file-ignores="__init__.py:F401" .
             flake8 --select=F --per-file-ignores="__init__.py:F401" xun/functions
+
   flake8-opt-check:
     steps:
       - run:
           name: Check formatting rules (PEP8)
           command: |
             git diff origin/master | flake8 --diff --per-file-ignores="__init__.py:F401" --exclude="setup.py"
+
   bandit-check:
     steps:
       - run:
           name: Bandit security check
           command: |
             bandit -c bandit.yml -r xun
+
   codacy-check:
     steps:
       - run:
@@ -99,18 +107,21 @@ commands:
               coverage xml;
               python-codacy-coverage -r coverage.xml;
             fi
+
   create-sdist:
     steps:
       - run:
           name: Create source package
           command: |
             python3 setup.py sdist
+
   create-wheel:
     steps:
       - run:
           name: Create wheel
           command: |
             python3 -m setup bdist_wheel
+
   upload-pypi:
     steps:
       - run:
@@ -218,40 +229,24 @@ jobs:
       - create-sdist
       - upload-testpypi
 
-  wheels-manylinux-deploy:
+  wheels-deploy:
     docker:
       - image: "circleci/python:3.9"
-    environment:
-      - CIBW_BUILD: "cp37-manylinux_x86_64 cp38-manylinux_x86_64 cp39-manylinux_x86_64"
-      - CIBW_BEFORE_BUILD: "python3 -m pip install --upgrade pip && pip install cmake setuptools-scm -r requirements.txt && pip install -r requirements-dev.txt"
     steps:
       - checkout
       - setup_remote_docker
       - create-wheel
       - upload-pypi
 
-  wheels-manylinux-test-deploy:
+  wheels-test-deploy:
     docker:
       - image: "circleci/python:3.9"
-    environment:
-      - CIBW_BUILD: "cp37-manylinux_x86_64 cp38-manylinux_x86_64 cp39-manylinux_x86_64"
-      - CIBW_BEFORE_BUILD: "python3 -m pip install --upgrade pip && pip install cmake setuptools-scm -r requirements.txt && pip install -r requirements-dev.txt"
     steps:
       - checkout
       - setup_remote_docker
       - create-wheel
       - upload-testpypi
 
-  wheels-macos-deploy:
-    macos:
-      xcode: 11.0.0
-    environment:
-      - CIBW_BUILD: "cp37-macosx_x86_64 cp38-macosx_x86_64  cp39-macosx_x86_64"
-      - CIBW_BEFORE_BUILD: "pip3 install cmake setuptools-scm -r requirements.txt && pip3 install -r requirements-dev.txt"
-    steps:
-      - checkout
-      - create-wheel
-      - upload-pypi
 
 workflows:
   version: 2
@@ -292,53 +287,44 @@ workflows:
           name: Win Python 3.9
           python-version: "3.9"
 
-  linux-deploy:
+  deploy:
     jobs:
       - sdist-deploy:
           name: Create and deploy sdist
           filters:
             tags:
-              only: /[0-9]+(\.[0-9]+)*/
+              only: /v?[0-9]+(\.[0-9]+)*/
             branches:
               ignore: /.*/
-      - wheels-manylinux-deploy:
-          name: Create and deploy linux wheels
+      - wheels-deploy:
+          name: Create and deploy wheels
           requires:
             - Create and deploy sdist
           filters:
             tags:
-              only: /[0-9]+(\.[0-9]+)*/
+              only: /v?[0-9]+(\.[0-9]+)*/
             branches:
               ignore: /.*/
 
-  linux-test-deploy:
+  test-deploy:
     jobs:
       - sdist-test-deploy:
           name: Create and test deploy sdist
           filters:
             tags:
-              only: /[0-9]+(\.[0-9]+)*(-beta)/
+              only: /v?[0-9]+(\.[0-9]+)*(-beta)/
             branches:
               ignore: /.*/
-      - wheels-manylinux-test-deploy:
-          name: Create and deploy linux test wheels
+      - wheels-test-deploy:
+          name: Create and deploy test wheels
           requires:
             - Create and test deploy sdist
           filters:
             tags:
-              only: /[0-9]+(\.[0-9]+)*(-beta)/
+              only: /v?[0-9]+(\.[0-9]+)*(-beta)/
             branches:
               ignore: /.*/
 
-  macos-deploy:
-    jobs:
-      - wheels-macos-deploy:
-          name: Create and deploy macos wheels
-          filters:
-            tags:
-              only: /[0-9]+(\.[0-9]+)*/
-            branches:
-              ignore: /.*/
 
   code-check:
     jobs:

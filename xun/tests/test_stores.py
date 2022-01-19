@@ -37,10 +37,20 @@ def TmpDisk():
         yield xun.functions.store.Disk(tmpdirname)
 
 
+@contextmanager
+def Layered():
+    with create_instance(TmpDisk) as store:
+        yield xun.functions.store.Layered(
+            xun.functions.store.Memory(),
+            store,
+        )
+
+
 # Stores to test
 stores = [
     Memory,
     TmpDisk,
+    Layered,
 ]
 
 
@@ -386,3 +396,17 @@ def test_memory_store_not_picklable():
         copy.deepcopy(store)
     with pytest.raises(CopyError):
         pickle.dumps(store)
+
+
+def test_layered_store_writes_to_top_layer():
+    with create_instance(TmpDisk) as (store, callnodes):
+        mem = xun.functions.store.Memory()
+        layered = xun.functions.store.Layered(
+            mem,
+            store,
+        )
+        callnode = xun.functions.CallNode('f', '', 3)
+        layered.store(callnode, 3)
+        assert callnode in layered
+        assert callnode in mem
+        assert callnode not in store

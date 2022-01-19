@@ -49,7 +49,7 @@ def pass_by_value(func, *args, **kwargs):
         raise TypeError(msg)
 
 
-def load_results_by_deepcopy(store_accessor, *objects):
+def load_results_by_deepcopy(store, *objects):
     """
     In a local context, set the behavior of deepcopy of CallNode objects to
     load their corresponding results from the store. Return a copy of the given
@@ -62,14 +62,14 @@ def load_results_by_deepcopy(store_accessor, *objects):
         value governing behavior of deepcopy of CallNode instances.
     """
     def deepcopy_impl(callnode, memo):
-        yield store_accessor.load_result(callnode)
+        yield store.load_callnode(callnode)
 
     ctx = contextvars.copy_context()
     ctx.run(CallNode._deepcopy_context.value.set, deepcopy_impl)
     return ctx.run(deepcopy, tuple(objects))
 
 
-def resolve_args_by_deepcopy(store_accessor, **arguments):
+def resolve_args_by_deepcopy(store, **arguments):
     """
     Does the same as `load_results_by_deepcopy`, but in addition provides a
     namespace with the original values (callnodes included). This is used in
@@ -83,7 +83,7 @@ def resolve_args_by_deepcopy(store_accessor, **arguments):
         value governing behavior of deepcopy of CallNode instances.
     """
     def deepcopy_impl(callnode, memo):
-        yield store_accessor.load_result(callnode)
+        yield store.load_callnode(callnode)
 
     ctx = contextvars.copy_context()
     ctx.run(CallNode._deepcopy_context.value.set, deepcopy_impl)

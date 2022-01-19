@@ -1,135 +1,99 @@
 from ... import serialization
 from .store import Store
-from .store import StoreDriver
+from collections import namedtuple
 from pathlib import Path
-import base64
-import hashlib
+import contextlib
 import tempfile
 
 
-def key_hash_str(key):
-    serialized = serialization.dumps(key).encode()
-    sha256 = hashlib.sha256()
-    sha256.update(serialized)
-    truncated = sha256.digest()
-    return base64.urlsafe_b64encode(truncated).decode()
+Paths = namedtuple('Paths', 'key val')
 
 
 class Disk(Store):
-    def __init__(self, dir):
+    def __init__(self, dir, create_dirs=True):
         self.dir = Path(dir)
+        if create_dirs:
+            (self.dir / 'keys').mkdir(parents=True, exist_ok=True)
+            (self.dir / 'values').mkdir(parents=True, exist_ok=True)
+        elif not self.dir.exists():
+            raise ValueError(f'Store Directory {str(self.dir)} does not exist')
 
-    @property
-    def driver(self):
-        try:
-            return self._driver
-        except AttributeError:
-            self._driver = DiskDriver(self.dir)
-            return self._driver
+    def paths(self, key, root=None):
+        """ Key Paths
 
-    def __getstate__(self):
-        return super().__getstate__(), self.dir
+        Parameters
+        ----------
+        key : CallNode
+            The CallNode used as key
+        root : Path
+            The path the key paths use as root, default is self.dir
 
-    def __setstate__(self, state):
-        super().__setstate__(state[0])
-        self.dir = state[1]
-
-
-class DiskDriver(StoreDriver):
-    def __init__(self, dir):
-        self.dir = dir
-        self.index = {}
-
-        (self.dir / 'keys').mkdir(parents=True, exist_ok=True)
-        (self.dir / 'values').mkdir(parents=True, exist_ok=True)
-
-    def refresh_index(self):
-        files = [
-            p for p in (self.dir / 'keys').iterdir() if p.is_file()
-        ]
-        for path in files:
-            if path.name not in self.index:
-                with open(str(path.resolve()), 'r') as f:
-                    try:
-                        key = serialization.load(f)
-                    except EOFError:
-                        # This can occur if the index file is currently
-                        # being written to somewhere else on the network.
-                        # We consider these as not being part of the index.
-                        continue
-
-                self.index[path.name] = key
-
-                if __debug__:
-                    assert key_hash_str(key) == path.name
-                    self.key_invariant(key)
-
-        removed = set(self.index.keys()) - set(p.name for p in files)
-        for b64 in removed:
-            key = self.index[b64]
-            del self.index[b64]
-            self.key_invariant(key)
+        Returns
+        -------
+        (Path, Path, Path)
+            The path of the key, tag, and value files respectively
+        """
+        if root is None:
+            root = self.dir
+        return Paths(key=root / 'keys' / key.sha256(),
+                     val=root / 'values' / key.sha256())
 
     def key_invariant(self, key):
-        b64 = key_hash_str(key)
+        paths = self.paths(key)
         if self.__contains__(key):
-            assert not(b64 in self.index) or self.index[b64] == key
-            assert (self.dir / 'keys' / b64).is_file()
-            assert (self.dir / 'values' / b64).is_file()
+            assert paths.key.is_file()
+            assert paths.val.is_file()
         else:
-            assert b64 not in self.index
-            assert not (self.dir / 'keys' / b64).is_file()
-            assert not (self.dir / 'values' / b64).is_file()
+            assert not paths.key.is_file()
+            assert not paths.val.is_file()
 
     def __contains__(self, key):
-        b64 = key_hash_str(key)
-        return (self.dir / 'keys' / b64).is_file()
+        return self.paths(key).key.is_file()
 
-    def __delitem__(self, key):
+    def _load_value(self, key):
         if __debug__:
             self.key_invariant(key)
+
         if not self.__contains__(key):
             raise KeyError('KeyError: {}'.format(str(key)))
 
-        b64 = key_hash_str(key)
-        (self.dir / 'keys' / b64).unlink()
-        (self.dir / 'values' / b64).unlink()
-        if b64 in self.index:
-            del self.index[b64]
-
-    def __getitem__(self, key):
-        if __debug__:
-            self.key_invariant(key)
-        if not self.__contains__(key):
-            raise KeyError('KeyError: {}'.format(str(key)))
-
-        b64 = key_hash_str(key)
-        with open(str(self.dir / 'values' / b64), 'r') as f:
+        with self.paths(key).val.open() as f:
             return serialization.load(f)
 
-    def __iter__(self):
-        self.refresh_index()
-        return iter(self.index.values())
+    def _load_tags(self, key):
+        raise NotImplementedError
 
-    def __len__(self):
-        self.refresh_index()
-        return len(self.index)
+    def filter(self, *conditions):
+        raise NotImplementedError
 
-    def __setitem__(self, key, value):
-        b64 = key_hash_str(key)
-
+    def store(self, key, value, **tags):
         with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
             tmpdir = Path(tmpdir)
-            key_tmpfile = (tmpdir / b64).with_suffix('.key')
-            val_tmpfile = (tmpdir / b64).with_suffix('.value')
-            with key_tmpfile.open('w') as kf, val_tmpfile.open('w') as vf:
-                serialization.dump(key, kf)
-                serialization.dump(value, vf)
-            # If succeeded, move files
-            key_tmpfile.replace(self.dir / 'keys' / b64)
-            val_tmpfile.replace(self.dir / 'values' / b64)
 
-        self.index[b64] = key
+            temp_paths = self.paths(key, root=tmpdir)
+            real_paths = self.paths(key)
+
+            with contextlib.ExitStack() as exit_stack:
+                temp_paths.key.parent.mkdir(parents=True, exist_ok=True)
+                temp_paths.val.parent.mkdir(parents=True, exist_ok=True)
+                key_file = exit_stack.enter_context(temp_paths.key.open('w'))
+                val_file = exit_stack.enter_context(temp_paths.val.open('w'))
+                serialization.dump(key, key_file)
+                serialization.dump(value, val_file)
+            # If succeeded, move files
+            temp_paths.key.replace(real_paths.key)
+            temp_paths.val.replace(real_paths.val)
 
         if __debug__:
             self.key_invariant(key)
+
+    def remove(self, key):
+        paths = self.paths(key)
+        paths.key.unlink()
+        paths.val.unlink()
+
+    def __getstate__(self):
+        return self.dir
+
+    def __setstate__(self, state):
+        self.dir = state

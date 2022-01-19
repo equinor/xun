@@ -1,13 +1,21 @@
-from .helpers import FakeRedis
-from collections.abc import MutableMapping
 from contextlib import contextmanager
-from unittest import mock
+from hypothesis import given
+from hypothesis import settings
+from hypothesis import Phase
+from hypothesis.strategies import builds
+from hypothesis.strategies import dictionaries
+from hypothesis.strategies import lists
+from hypothesis.strategies import sampled_from
+from hypothesis.strategies import text
+from hypothesis.strategies import tuples
+from string import ascii_lowercase
+from types import SimpleNamespace
 from xun.functions import CopyError
-from xun.functions.store import NamespacedKey
+import base64
 import contextlib
 import copy
-import mockssh
-import paramiko
+import operator
+import os
 import pickle
 import pytest
 import tempfile
@@ -29,252 +37,344 @@ def TmpDisk():
         yield xun.functions.store.Disk(tmpdirname)
 
 
-@contextmanager
-def TmpSFTP():
-    users = {'ssh-user': 'xun/tests/test_data/ssh/id_rsa'}
-    with contextlib.ExitStack() as stack:
-        tmpdirname = stack.enter_context(tempfile.TemporaryDirectory())
-        server = stack.enter_context(mockssh.Server(users))
-        client = stack.enter_context(server.client('ssh-user'))
-
-        ssh_mock = stack.enter_context(
-            mock.patch('xun.functions.store.sftp.SFTPDriver.ssh',
-                       new_callable=mock.PropertyMock))
-        ssh_mock.return_value = client
-
-        store = xun.functions.store.SFTP(
-            '127.0.0.1',
-            tmpdirname,
-            username='ssh-user',
-            missing_host_key_policy=paramiko.MissingHostKeyPolicy())
-        yield store
-
-
-def with_namespace(cls, namespace):
-    @contextmanager
-    def ctx():
-        with cls() as store:
-            # Values in the original namespace should not be visible in the
-            # namespace
-            store.update(some_garbage=-1)
-
-            yield store / namespace
-    ctx.__name__ = 'Namespaced_{}_{}'.format(cls.__name__, namespace)
-    ctx.parent = cls
-    return ctx
-
-
+# Stores to test
 stores = [
     Memory,
-    FakeRedis,
     TmpDisk,
-    TmpSFTP,
-    with_namespace(Memory, 'test_namespace'),
-    with_namespace(FakeRedis, 'test_namespace'),
-    with_namespace(TmpDisk, 'test_namespace'),
-    with_namespace(TmpSFTP, 'test_namespace'),
 ]
 
-# ^ Stores to test
+
+def b64hash():
+    return base64.urlsafe_b64encode(os.urandom(32))
 
 
+values = sampled_from([0, 1, 1.1, 0.0, 'Hello World', b'hello world'])
+names = text(
+    alphabet=ascii_lowercase + '_',
+    min_size=1,
+    max_size=5)
+args = lists(values, max_size=3)
+kwargs = dictionaries(values, values, max_size=3)
+callnodes = builds(
+    lambda name, args, kwargs: xun.functions.CallNode(
+        name, b64hash(), args, kwargs),
+    names,
+    args,
+    kwargs,
+)
+tags = dictionaries(names, text(), max_size=3)
+values_and_tags = tuples(values, tags)
+store_contents = dictionaries(
+    callnodes,
+    values_and_tags,
+    min_size=1,
+    max_size=10
+)
+
+
+@contextlib.contextmanager
 def create_instance(cls):
-    data = {'a': 0, 'b': 1, 'c': 2}
-    inst = cls()
-    for key, value in data.items():
-        inst[key] = value
-    return inst
+    f_hash = 'xg30cGXs0nKN8gdbzYFWMKidNySbgYZtg5dRV2bj58w='
+    main_hash = 'ADdFftG12ZwLBHmkPHE9XxBzXrOgE2JSia-ES-Bp7ZM='
+    f_0 = xun.functions.CallNode('f', f_hash, 0)
+    f_1 = xun.functions.CallNode('f', f_hash, 1)
+    f_2 = xun.functions.CallNode('f', f_hash, 2)
+    f_3 = xun.functions.CallNode('f', f_hash, 3)
+    f_4 = xun.functions.CallNode('f', f_hash, 4)
+    main_0 = xun.functions.CallNode('main', main_hash, 0)
+    main_1 = xun.functions.CallNode('main', main_hash, 1)
+    callnodes = SimpleNamespace(f_0=f_0, f_1=f_1, f_2=f_2, f_3=f_3, f_4=f_4,
+                                main_0=main_0, main_1=main_1)
 
+    def tags(function_name, entry_point, day):
+        return {
+            'start_time': f'2030-01-{day}T13:37:00+00:00',
+            'entry_point': entry_point,
+            'function_name': function_name,
+        }
 
-class DoesNotSatisfyStore(xun.functions.store.Store):
-    pass
+    with cls() as inst:
+        # Won't be seletect
+        inst.store(f_3, 3, **tags('f', 'main', '01'))
+        inst.store(f_4, 4, start_time='2030-01-03T13:37', function_name='f')
 
+        # Will be selected
+        inst.store(f_0, 0, **tags('f', 'main', '02'))
+        inst.store(f_1, 1, **tags('f', 'main', '02'))
+        inst.store(main_0, 1, **tags('main', 'main', '02'))
 
-def test_store_decorator_requires_MutableMapping():
-    with pytest.raises(TypeError):
-        DoesNotSatisfyStore()
+        inst.store(f_2, 1, **tags('f', 'main', '03'))
+        inst.store(main_1, 1, **tags('main', 'main', '03'))
+        yield inst, callnodes
 
 
 @pytest.mark.parametrize('cls', stores)
-def test_store_is_collection(cls):
+@settings(phases=[Phase.generate, Phase.target, Phase.explain],
+          deadline=500,
+          max_examples=20)
+@given(contents=store_contents)
+def test_store_implementation(cls, contents):
     with cls() as store:
-        store.update(a=0, b=1, c=2)
-
-        assert isinstance(store, MutableMapping)
-        assert store['a'] == 0
-        assert store['b'] == 1
-        assert store['c'] == 2
-
-        assert set(store.keys()) >= {'a', 'b', 'c'}
+        for key, (value, _) in contents.items():
+            store.store(key, value)
+        for key, (value, _) in contents.items():
+            assert key in store
+            assert store[key] == value
 
 
+@pytest.mark.xfail(reason='Tagged stores not implemented')
 @pytest.mark.parametrize('cls', stores)
-def test_store_driver_is_collection(cls):
+@settings(phases=[Phase.generate, Phase.target, Phase.explain],
+          deadline=500,
+          max_examples=20)
+@given(contents=store_contents)
+def test_store_tags(cls, contents):
     with cls() as store:
-        driver = store.driver
-        driver.update(a=0, b=1, c=2)
-
-        assert isinstance(driver, MutableMapping)
-        assert driver['a'] == 0
-        assert driver['b'] == 1
-        assert driver['c'] == 2
-
-        assert set(driver.keys()) >= {'a', 'b', 'c'}
+        for key, (value, tags) in contents.items():
+            store.store(key, value, **tags)
+        for key, (value, tags) in contents.items():
+            assert key in store
+            assert store[key] == value
+            assert store.tags[key] == tags
 
 
+@pytest.mark.xfail(reason='Tagged stores not implemented')
+@pytest.mark.parametrize('cls', stores)
+@pytest.mark.parametrize('op', [operator.eq,
+                                operator.gt,
+                                operator.ge,
+                                operator.lt,
+                                operator.le])
+def test_store_select_operator(cls, op):
+    with create_instance(cls) as (store, callnodes):
+        value = '2030-01-02T13:37:00+00:00'
+        expected = {
+            cn for cn in callnodes.__dict__.values()
+            if op(store.tags[cn]['start_time'], value)
+        }
+
+        condition = op(store.tags.start_time, value)
+        result = store.select(condition)
+        assert result == expected
+
+
+@pytest.mark.xfail(reason='Tagged stores not implemented')
+@pytest.mark.parametrize('cls', stores)
+def test_store_select_shape(cls):
+    with create_instance(cls) as (store, callnodes):
+        result = store.select(
+            store.tags.start_time > '2030-01-02',
+            store.tags.entry_point,
+            store.tags.function_name,
+            shape={
+                store.tags.start_time: {
+                    store.tags.entry_point: {
+                        store.tags.function_name: ...,
+                    },
+                },
+                store.tags.entry_point: ...,
+            }
+        )
+
+        assert result == {
+            '2030-01-02T13:37:00+00:00': {
+                'main': {
+                    'f': {callnodes.f_0, callnodes.f_1},
+                    'main': {callnodes.main_0},
+                },
+            },
+            '2030-01-03T13:37:00+00:00': {
+                'main': {
+                    'f': {callnodes.f_2},
+                    'main': {callnodes.main_1},
+                },
+            },
+            'main': {
+                callnodes.f_0,
+                callnodes.f_1,
+                callnodes.f_2,
+                callnodes.main_0,
+                callnodes.main_1,
+            },
+        }
+
+
+@pytest.mark.xfail(reason='Tagged stores not implemented')
+@pytest.mark.parametrize('cls', stores)
+def test_store_query(cls):
+    with create_instance(cls) as (store, callnodes):
+        result = store.query('() => ...')
+        assert result == {
+            callnodes.f_0,
+            callnodes.f_1,
+            callnodes.f_2,
+            callnodes.f_3,
+            callnodes.f_4,
+            callnodes.main_0,
+            callnodes.main_1,
+        }
+
+
+@pytest.mark.xfail(reason='Tagged stores not implemented')
+@pytest.mark.parametrize('cls', stores)
+def test_store_query_argument(cls):
+    with create_instance(cls) as (store, callnodes):
+        result = store.query('(start_time) => start_time { ... }')
+        assert result == {
+            '2030-01-03T13:37': {
+                callnodes.f_4,
+            },
+            '2030-01-01T13:37:00+00:00': {
+                callnodes.f_3,
+            },
+            '2030-01-02T13:37:00+00:00': {
+                callnodes.f_0,
+                callnodes.f_1,
+                callnodes.main_0,
+            },
+            '2030-01-03T13:37:00+00:00': {
+                callnodes.f_2,
+                callnodes.main_1,
+            },
+        }
+
+
+@pytest.mark.xfail(reason='Tagged stores not implemented')
+@pytest.mark.parametrize('cls', stores)
+def test_store_query_advanced(cls):
+    with create_instance(cls) as (store, callnodes):
+        result = store.query("""
+        (start_time>="2030-01-02" entry_point function_name) =>
+            start_time {
+                entry_point {
+                    function_name {
+                        ...
+                    }
+                }
+            }
+            entry_point {
+                ...
+            }
+        """)
+
+        assert result == {
+            '2030-01-02T13:37:00+00:00': {
+                'main': {
+                    'f': {callnodes.f_0, callnodes.f_1},
+                    'main': {callnodes.main_0},
+                },
+            },
+            '2030-01-03T13:37:00+00:00': {
+                'main': {
+                    'f': {callnodes.f_2},
+                    'main': {callnodes.main_1},
+                },
+            },
+            'main': {
+                callnodes.f_0,
+                callnodes.f_1,
+                callnodes.f_2,
+                callnodes.main_0,
+                callnodes.main_1,
+            },
+        }
+
+
+@pytest.mark.xfail(reason='Tagged stores not implemented')
+@pytest.mark.parametrize('cls', stores)
+def test_store_remove(cls):
+    with create_instance(cls) as (store, callnodes):
+        store.remove(callnodes.f_2)
+        assert callnodes.f_2 not in store
+
+        # Test indented internal tag database
+        result_id = callnodes.f_2.sha256(encode=False)
+        results = list(store._tagdb.mem.execute('''
+            SELECT deleted FROM _xun_results_table
+            WHERE result_id = ?
+            ORDER BY journal_id
+        ''', (result_id,)))
+        assert results == [(0,), (1,)]
+        tags = list(store._tagdb.mem.execute('''
+            SELECT deleted FROM _xun_tags_table
+            WHERE result_id = ?
+            ORDER BY journal_id
+        ''', (result_id,)))
+        assert tags == [(0,), (0,), (0,), (1,), (1,), (1,)]
+
+
+@pytest.mark.xfail(reason='Tagged stores not implemented')
+@pytest.mark.parametrize('cls', stores)
+def test_store_missing_tags_raise(cls):
+    with create_instance(cls) as (store, callnodes):
+        del store[callnodes.f_0]
+        with pytest.raises(KeyError):
+            store.tags[callnodes.f_0]
+
+
+@pytest.mark.xfail(reason='Tagged stores not implemented')
+@pytest.mark.parametrize('cls', stores)
+def test_store_rewrite_tags(cls):
+    with create_instance(cls) as (store, callnodes):
+        new_tags = {'hello': 'world'}
+        store.store(callnodes.f_1, 1, **new_tags)
+        assert store.tags[callnodes.f_1] == new_tags
+
+
+@pytest.mark.xfail(reason='Tagged stores not implemented')
+@pytest.mark.parametrize('cls', stores)
+def test_tags_are_not_duplicated_on_double_write(cls):
+    with create_instance(cls) as (store, callnodes):
+        result_id = callnodes.f_0.sha256(encode=False)
+        results = list(store._tagdb.mem.execute('''
+            SELECT * FROM _xun_results_table
+            WHERE result_id = ?
+            ORDER BY journal_id
+        ''', (result_id,)))
+        tags = list(store._tagdb.mem.execute('''
+            SELECT * FROM _xun_tags_table
+            WHERE result_id = ?
+            ORDER BY journal_id
+        ''', (result_id,)))
+
+        store.store(callnodes.f_0, 1, **store.tags[callnodes.f_0])
+
+        results_after = list(store._tagdb.mem.execute('''
+            SELECT * FROM _xun_results_table
+            WHERE result_id = ?
+            ORDER BY journal_id
+        ''', (result_id,)))
+        tags_after = list(store._tagdb.mem.execute('''
+            SELECT * FROM _xun_tags_table
+            WHERE result_id = ?
+            ORDER BY journal_id
+        ''', (result_id,)))
+
+        assert results == results_after
+        assert tags == tags_after
+
+
+@pytest.mark.xfail(reason='Tagged stores not implemented')
 @pytest.mark.parametrize('cls', stores)
 def test_store_must_be_picklable(cls):
-    if cls is Memory or (hasattr(cls, 'parent') and cls.parent is Memory):
+    if cls is Memory:
         pytest.skip('Cannot transport in-memory store')
-    with cls() as store:
-        store.update(a=0, b=1, c=2)
-
+    with create_instance(cls) as (store, callnodes):
         pickled = pickle.dumps(store)
         unpickled = pickle.loads(pickled)
 
-        assert isinstance(unpickled, MutableMapping)
-        assert 'a' in unpickled and 'b' in unpickled and 'c' in unpickled
-        assert unpickled['a'] == 0
-        assert unpickled['b'] == 1
-        assert unpickled['c'] == 2
+        store.store(xun.functions.CallNode('f', '', 3), 3)
+        assert unpickled[xun.functions.CallNode('f', '', 3)] == 3
+        unpickled.store(xun.functions.CallNode('g', '', 3), 4)
+        assert store[xun.functions.CallNode('g', '', 3)] == 4
 
-        store['d'] = 3
-        assert unpickled['d'] == 3
+        q0 = store.select(store.tags.start_time > '2030-01-02')
+        q1 = unpickled.select(unpickled.tags.start_time > '2030-01-02')
+        assert q0 == q1
 
-        unpickled['e'] = 4
-        assert store['e'] == 4
-
-
-@pytest.mark.parametrize('cls', stores)
-def test_store_namespaces(cls):
-    with cls() as store:
-        animals = store / 'animals'
-
-        # Test namespaced namespaces
-        cats = store / 'animals' / 'cats'
-
-        store['a'] = 1
-        store['b'] = 2
-
-        animals['a'] = 3
-        animals['c'] = 4
-
-        cats['a'] = 5
-        cats['d'] = 6
-
-        assert sorted(animals) == ['a', 'c']
-        assert sorted(cats) == ['a', 'd']
-
-        assert store['a'] == 1
-        assert store['b'] == 2
-        assert animals['a'] == 3
-        assert animals['c'] == 4
-        assert cats['a'] == 5
-        assert cats['d'] == 6
-
-        assert store[NamespacedKey(('animals',), 'a')] == 3
-        assert store[NamespacedKey(('animals',), 'c')] == 4
-        assert store[NamespacedKey(('animals', 'cats'), 'a')] == 5
-        assert store[NamespacedKey(('animals', 'cats'), 'd')] == 6
-
-        assert animals / 'cats' == cats
-
-        cats.clear()
-        assert sorted(animals) == ['a', 'c']
-
-
-@pytest.mark.parametrize('cls', stores)
-def test_store_floordiv_getitem(cls):
-    with cls() as store:
-        store.update(a=0, b=1, c=2)
-
-        assert store // 'a' == 0
-        assert store // 'b' == 1
-        assert store // 'c' == 2
-
-
-@pytest.mark.parametrize('cls', stores)
-def test_store_mutable_mapping(cls):
-    with cls() as store:
-        store.update(a=0, b=1, c=2)
-
-        # __contains__
-        assert 'a' in store and 'b' in store and 'c' in store
-        assert 'd' not in store
-
-        # __delitem__
-        del store['a']
-        assert 'a' not in store
-        with pytest.raises(KeyError):
-            store['a']
-        with pytest.raises(KeyError):
-            del store['a']
-
-        # __eq__
-        with cls() as other:
-            other.update(b=1, c=2)
-            assert store == other
-
-        # __getitem__
-        assert store['b'] == 1
-        assert store['c'] == 2
-
-        # __iter__
-        assert sorted(k for k in iter(store)) == ['b', 'c']
-
-        # __len__
-        assert len(store) == 2
-
-        # __ne__
-        with cls() as other:
-            assert store != other
-
-        # __setitem__
-        store['a'] = 3
-        store['b'] = 4
-        store['c'] = 5
-        store['d'] = 6
-        assert store['a'] == 3
-        assert store['b'] == 4
-        assert store['c'] == 5
-        assert store['d'] == 6
-
-        # get
-        assert store.get('a') == 3
-        assert store.get('e', default='default') == 'default'
-        assert store.get('e') is None
-
-        # items
-        assert (
-            sorted(store.items()) ==
-            [('a', 3), ('b', 4), ('c', 5), ('d', 6)]
-        )
-
-        # keys
-        assert sorted(store.keys()) == ['a', 'b', 'c', 'd']
-
-        # pop
-        assert store.pop('a') == 3
-        assert store.pop('e', default='default') == 'default'
-        assert 'a' not in store
-        assert 'e' not in store
-
-        # popitem
-        items = set(store.items())
-        popped = store.popitem()
-        assert popped in items
-        assert popped[0] not in store
-
-        # setdefault
-        value = store.setdefault(popped[0], default=popped[1])
-        assert value == popped[1]
-        assert store[popped[0]] == popped[1]
-        assert store.setdefault('b', default=None) == 4
-
-        # clear
-        store.clear()
-        assert len(store) == 0
-        assert dict(store.items()) == {}
+        for callnode in vars(callnodes).values():
+            assert callnode in unpickled
+            assert store.tags[callnode] == unpickled.tags[callnode]
 
 
 def test_memory_store_not_picklable():
@@ -286,13 +386,3 @@ def test_memory_store_not_picklable():
         copy.deepcopy(store)
     with pytest.raises(CopyError):
         pickle.dumps(store)
-
-
-def test_sftp_driver_is_complatible_with_disk_driver():
-    with TmpSFTP() as sftp:
-        sftp.update(a=0, b=1, c=2)
-
-        disk = xun.functions.store.Disk(sftp.root)
-        assert disk // 'a' == 0
-        assert disk // 'b' == 1
-        assert disk // 'c' == 2

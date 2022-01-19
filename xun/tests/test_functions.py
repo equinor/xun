@@ -1,11 +1,11 @@
-from .helpers import FakeRedis
 from .helpers import PickleDriver
+from .helpers import PicklableMemoryStore
 from .helpers import run_in_process
 from .helpers import sample_sin_blueprint
 from xun.functions import CallNode
 from xun.functions import XunSyntaxError
 from xun.functions import XunInterfaceError
-from xun.functions.store.store_accessor import GuardedStoreAccessor
+from xun.functions.store.store import GuardedStore
 import networkx as nx
 import pytest
 import xun
@@ -149,10 +149,10 @@ def test_blueprint():
 def test_blueprint_is_picklable():
     blueprint, expected = sample_sin_blueprint()
 
-    with FakeRedis() as redis:
+    with PicklableMemoryStore() as store:
         result = blueprint.run(
             driver=PickleDriver(),
-            store=redis,
+            store=store,
         )
 
     assert result == expected
@@ -498,7 +498,6 @@ def test_functions_hashes():
 def test_function_version_completeness():
     driver = xun.functions.driver.Sequential()
     store = xun.functions.store.Memory()
-    accessor = xun.functions.store.StoreAccessor(store)
 
     @xun.function()
     def f():
@@ -512,13 +511,13 @@ def test_function_version_completeness():
     f0 = f
     w0 = workflow
 
-    assert not accessor.completed(f0.callnode())
-    assert not accessor.completed(w0.callnode())
+    assert not driver.value_computed(f0.callnode(), store)
+    assert not driver.value_computed(w0.callnode(), store)
 
     r0 = w0.blueprint().run(driver=driver, store=store)
 
-    assert accessor.completed(f0.callnode())
-    assert accessor.completed(w0.callnode())
+    assert driver.value_computed(f0.callnode(), store)
+    assert driver.value_computed(w0.callnode(), store)
     assert r0 == 0
 
     # Redefintion
@@ -531,17 +530,17 @@ def test_function_version_completeness():
 
     w1 = xun.functions.Function(workflow.desc, {'f': f1}, None)
 
-    assert accessor.completed(f0.callnode())
-    assert accessor.completed(w0.callnode())
-    assert not accessor.completed(f1.callnode())
-    assert not accessor.completed(w1.callnode())
+    assert driver.value_computed(f0.callnode(), store)
+    assert driver.value_computed(w0.callnode(), store)
+    assert not driver.value_computed(f1.callnode(), store)
+    assert not driver.value_computed(w1.callnode(), store)
 
     r1 = w1.blueprint().run(driver=driver, store=store)
 
-    assert accessor.completed(f0.callnode())
-    assert accessor.completed(w0.callnode())
-    assert accessor.completed(f1.callnode())
-    assert accessor.completed(w1.callnode())
+    assert driver.value_computed(f0.callnode(), store)
+    assert driver.value_computed(w0.callnode(), store)
+    assert driver.value_computed(f1.callnode(), store)
+    assert driver.value_computed(w1.callnode(), store)
     assert r1 == 1
 
     # Rerun w0 to overwrite the latest result, this ensures that we test that
@@ -1114,7 +1113,7 @@ def test_yield_failure_on_multiple_write():
     def g(arg):
         yield from f()
 
-    with pytest.raises(GuardedStoreAccessor.StoreError):
+    with pytest.raises(GuardedStore.StoreError):
         run_in_process(f.blueprint())
 
 

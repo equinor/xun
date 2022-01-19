@@ -22,7 +22,7 @@ class Driver(ABC):
               graph,
               entry_call,
               function_images,
-              store_accessor,
+              store,
               global_resources):
         pass
 
@@ -30,9 +30,9 @@ class Driver(ABC):
              graph,
              entry_call,
              function_images,
-             store_accessor,
+             store,
              global_resources):
-        guarded_store_accessor = store_accessor.guarded()
+        guarded_store = store.guarded()
 
         def deepcp_impl(current_callnode, memo):
             yield current_callnode
@@ -45,34 +45,39 @@ class Driver(ABC):
         self._exec(graph,
                    entry_call,
                    function_images,
-                   guarded_store_accessor,
+                   guarded_store,
                    global_resources)
-        return store_accessor.load_result(entry_call)
+        return store.load_callnode(entry_call)
 
     def __call__(self,
                  graph,
                  entry_call,
                  function_images,
-                 store_accessor,
+                 store,
                  global_resources):
         return self.exec(graph,
                          entry_call,
                          function_images,
-                         store_accessor,
+                         store,
                          global_resources)
 
     @staticmethod
-    def compute_and_store(callnode, func, store_accessor):
+    def value_computed(callnode, store):
+        return callnode in store
+
+    @staticmethod
+    def compute_and_store(callnode, func, store):
+        cached_store = store.cached()
         results = func(*callnode.args, **callnode.kwargs)
         results.send(None)
-        results.send(store_accessor)
+        results.send(cached_store)
         while True:
             try:
                 result_call, result = next(results)
                 if func.can_write_to(result_call):
                     logger.debug(f'Storing result for {result_call} '
                                  f'(interface of {callnode})')
-                    store_accessor.store_result(result_call, result)
+                    store.store(result_call, result)
                 else:
                     msg = (f'Call {callnode} attempted to write an interface '
                            f'[{result_call.function_name}'
@@ -82,7 +87,7 @@ class Driver(ABC):
                     raise XunInterfaceError(msg)
             except StopIteration as result:
                 logger.debug(f'Storing result for {callnode}')
-                store_accessor.store_result(callnode, result.value)
+                store.store(callnode, result.value)
                 return result.value
             except Exception as e:
                 raise e from func.Raise()

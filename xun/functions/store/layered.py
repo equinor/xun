@@ -59,6 +59,14 @@ class Layered(Store):
                 return layer._load_tags(callnode)
         raise KeyError(repr(callnode))
 
+    def from_sha256(self, sha256):
+        for layer in self._layers:
+            try:
+                return layer.from_sha256(sha256)
+            except KeyError:
+                pass
+        raise KeyError(f'KeyError: {str(sha256)}')
+
     def filter(self, *tag_conditions):
         results = set()
         for layer in reversed(self._layers):

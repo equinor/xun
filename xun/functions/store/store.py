@@ -92,6 +92,10 @@ class Store(ABC):
             self._store(proxy_callnode, value._referencing)
         self._store(key, value, **tags)
 
+    @abstractmethod
+    def from_sha256(self, sha256):
+        pass
+
     def load_callnode(self, callnode):
         result = self._load_value(callnode._replace(subscript=()))
         for subscript in callnode.subscript:
@@ -133,6 +137,9 @@ class GuardedStore(Store):
     def _load_tags(self, key):
         return self._wrapped_store._load_tags(key)
 
+    def from_sha256(self, sha256):
+        return self._wrapped_store.from_sha256(key)
+
     def filter(self, *conditions):
         return self._wrapped_store.filter(*conditions)
 
@@ -167,6 +174,9 @@ class CachedStore(Store):
 
     def _load_tags(self, key):
         return self._wrapped_store._load_tags(key)
+
+    def from_sha256(self, sha256):
+        return self._wrapped_store.from_sha256(key)
 
     def filter(self, *conditions):
         return self._wrapped_store.filter(*conditions)

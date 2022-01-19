@@ -408,8 +408,12 @@ def function(**tags):
     ... def get_b():
     ...     return 'b'
     ...
-    >>> @xun.function
-    ... def workflow(prefix):
+    >>> @xun.function(custom_tag_name='''
+    ...     Format string supplied with function arguments, in this case
+    ...     'prefix' and 'another_argument', which would be {0} and {1}
+    ...     respectively'''
+    ... )
+    ... def workflow(prefix, another_argument):
     ...     return prefix + a + b
     ...     with ...:
     ...         a = get_a()

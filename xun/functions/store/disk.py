@@ -60,13 +60,20 @@ class Disk(Store):
             self.key_invariant(key)
 
         if not self.__contains__(key):
-            raise KeyError('KeyError: {}'.format(str(key)))
+            raise KeyError(f'KeyError: {str(key)}')
 
         with self.paths(key).val.open() as f:
             return serialization.load(f)
 
     def _load_tags(self, key):
         return self._tagdb.tags(key)
+
+    def from_sha256(self, sha256):
+        path = self.dir / 'keys' / sha256
+        if not path.is_file():
+            raise KeyError(f'KeyError: {str(sha256)}')
+        with path.open() as f:
+            return serialization.load(f)
 
     def filter(self, *conditions):
         return self._tagdb.query(*conditions)

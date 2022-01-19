@@ -36,6 +36,12 @@ class Memory(Store):
         value = self._store[callnode]
         return value
 
+    def from_sha256(self, sha256):
+        for key in self._store.keys():
+            if key.sha256() == sha256:
+                return key
+        raise KeyError(f'KeyError: {str(sha256)}')
+
     def store(self, callnode, value, **tags):
         self._store[callnode] = value
         self._tagdb.update(callnode, tags)

@@ -1,12 +1,5 @@
-from ... import serialization
 from ...fs.queries import parse
 from abc import ABC, abstractmethod
-from uuid import uuid4
-import base64
-import contextlib
-import hashlib
-import sqlite3
-import struct
 
 
 def restructure(data, shape):

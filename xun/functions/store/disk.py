@@ -2,10 +2,7 @@ from ... import serialization
 from .store import Store
 from collections import namedtuple
 from pathlib import Path
-import base64
 import contextlib
-import shutil
-import sqlite3
 import tempfile
 
 

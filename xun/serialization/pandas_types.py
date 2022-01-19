@@ -13,7 +13,7 @@ class FrameFunctor(metaclass=IsoFunctor):
             return series
 
         def __invert__(cls):
-            return SeriesFunctor
+            return FrameFunctor
 
     def __call__(cls, series):
         buffer = StringIO()

@@ -146,6 +146,27 @@ def test_numpy_serialization():
     assert (loaded == numpy_array).all()
 
 
+@pytest.mark.parametrize('functor', [
+    xun.serialization.numpy_types.NumpyFunctor,
+
+    xun.serialization.pandas_types.FrameFunctor,
+    xun.serialization.pandas_types.SeriesFunctor,
+
+    xun.serialization.python_types.FrozenmapFunctor,
+    xun.serialization.python_types.FrozensetFunctor,
+    xun.serialization.python_types.PathFunctor,
+    xun.serialization.python_types.SetFunctor,
+    xun.serialization.python_types.TupleFunctor,
+
+    xun.serialization.xun_types.CallNodeFunctor,
+    xun.serialization.xun_types.NamespacedKeyFunctor,
+    xun.serialization.xun_types.SymbolicFunctionFunctor,
+])
+def test_inverse_of_inverse_is_identity(functor):
+    assert ~functor is not functor
+    assert ~~functor is functor
+
+
 @pytest.mark.xfail
 def test_xun_serialization():
     """

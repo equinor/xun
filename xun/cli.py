@@ -15,6 +15,7 @@ Why does this file exist, and why not put this in __main__?
   Also see (1) from http://click.pocoo.org/5/setuptools/#setuptools-integration
 """
 from pathlib import Path
+from textwrap import dedent
 import argparse
 import sys
 
@@ -52,6 +53,38 @@ parser_fgraph_action.add_argument('--list-layout',
 parser_fgraph_action.add_argument('--dot-layout', action='store_true')
 parser_fgraph_action.add_argument('--dot', action='store_true')
 
+
+#
+# XunFS
+#
+try:
+    from .fs import cli as fs
+    parser_mnt = subparsers.add_parser('mount', description=dedent('''\
+        arguments after a bare -- are forwarded to fuse as is. The fuse
+        argument for mountpoint is required.
+
+        Example
+        -------
+            xun mount -s disk /path/to/store -q '() => ...' -- /mnt/pnt
+    '''), formatter_class=argparse.RawTextHelpFormatter)
+    parser_mnt.set_defaults(func=fs.main)
+    parser_mnt_store = parser_mnt.add_mutually_exclusive_group(required=True)
+    parser_mnt_store.add_argument('-s', '--store',
+                                  nargs='+',
+                                  action=fs.StoreAction)
+    parser_mnt_store.add_argument('--store-pickle',
+                                  type=fs.store_pickle,
+                                  dest='store')
+    parser_mnt_query = parser_mnt.add_mutually_exclusive_group(required=True)
+    parser_mnt_query.add_argument('-q', '--query',
+                                  nargs='+',
+                                  action=fs.QueryAction)
+    parser_mnt_query.add_argument('--query-file',
+                                  type=fs.query_file,
+                                  dest='query')
+    parser_mnt.add_argument('fuse_args', nargs=argparse.REMAINDER)
+except NotImplementedError:
+    pass
 
 #
 # create new project from cookiecutter template

@@ -1,0 +1,7 @@
+!xun/CallNodeFunctor::c28854635ca5ee81f476af73eb2f5c95849a1ea296ecca3b1b46f0e361791bf2
+args: !xun/TupleFunctor::933f8cbf11d0f0c9280093bbb352867eeba6513f9ef3cf39e4fb30777e5e9cfd
+- 2
+function_hash: xg30cGXs0nKN8gdbzYFWMKidNySbgYZtg5dRV2bj58w=
+function_name: f
+kwargs: !xun/FrozenmapFunctor::2b24855c32a6786935cf2afc005db4e5e6338470f775982e5adb7106df901cb8 {}
+subscript: !xun/TupleFunctor::933f8cbf11d0f0c9280093bbb352867eeba6513f9ef3cf39e4fb30777e5e9cfd []

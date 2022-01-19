@@ -12,7 +12,12 @@ class Sequential(Driver):
     Does a topological sort of the graph, and runs the jobs sequentially
     """
 
-    def _exec(self, graph, entry_call, function_images, store_accessor):
+    def _exec(self,
+              graph,
+              entry_call,
+              function_images,
+              store_accessor,
+              global_resources):
         assert nx.is_directed_acyclic_graph(graph)
 
         schedule = list(nx.topological_sort(graph))

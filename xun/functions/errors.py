@@ -42,6 +42,14 @@ class FunctionError(Exception):
         super().__init__(msg)
 
 
+class InsufficientResourceError(Exception):
+    pass
+
+
+class ResourceConflictError(Exception):
+    pass
+
+
 class NotDAGError(Exception):
     pass
 

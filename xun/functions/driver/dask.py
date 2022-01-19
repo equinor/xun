@@ -2,8 +2,7 @@ from .. import graph as graph_helpers
 from ..errors import ComputeError
 from .driver import Driver
 import asyncio
-import contextvars
-from copy import deepcopy
+import contextlib
 import functools
 import logging
 import networkx as nx
@@ -20,9 +19,17 @@ class Dask(Driver):
     def __init__(self, client):
         self.client = client
 
-    def _exec(self, graph, entry_call, function_images, store_accessor):
+    def _exec(self,
+              graph,
+              entry_call,
+              function_images,
+              store_accessor,
+              global_resources):
         assert nx.is_directed_acyclic_graph(graph)
-        scheduler = DaskSchedule(self.client, function_images, store_accessor)
+        scheduler = DaskSchedule(self.client,
+                                 function_images,
+                                 store_accessor,
+                                 global_resources)
         return scheduler(entry_call, graph)
 
 
@@ -47,12 +54,17 @@ class DaskSchedule:
     def __init__(self,
                  client,
                  function_images,
-                 store_accessor):
+                 store_accessor,
+                 global_resources):
         self.client = client
         self.function_images = function_images
         self.store_accessor = store_accessor
         self.errored = False
         self.futures = {}
+        self.semaphores = {
+            resource_name: asyncio.BoundedSemaphore(available)
+            for resource_name, available in global_resources.items()
+        }
 
     def __call__(self, entry_call, graph):
         try:
@@ -69,14 +81,6 @@ class DaskSchedule:
         raise ComputeError('One or more jobs failed')
 
     async def run(self, graph):
-        def deepcp_impl(current_callnode, memo):
-            yield current_callnode
-
-        ctx = contextvars.copy_context()
-        ctx.run(graph_helpers.CallNode._deepcopy_context.value.set,
-                deepcp_impl)
-        graph = ctx.run(deepcopy, graph)
-
         atomic_graph = GraphLock(graph)
         queue = asyncio.Queue()
 
@@ -102,16 +106,27 @@ class DaskSchedule:
             if self.store_accessor.completed(node):
                 logger.info(f'{node} already completed')
             else:
-                logger.info(f'Submitting {node}')
+                async with contextlib.AsyncExitStack() as stack:
+                    func_img = self.function_images[node.function_name]
 
-                func_img = self.function_images[node.function_name]
-                func = compute_proxy(self.store_accessor, func_img['callable'])
-                kwargs = {}
-                for res_name, value in (func_img['worker_resources'].items()):
-                    kwargs.setdefault('resources', {})[res_name] = value
-                future = self.client.submit(func, node, **kwargs)
-                self.futures[node] = future
-                await self.client.gather(future, asynchronous=True)
+                    semaphores = [
+                        stack.enter_async_context(self.semaphores[res])
+                        for res, req in func_img['global_resources'].items()
+                        for _ in range(req)
+                    ]
+                    if semaphores:
+                        logger.info(f'Acquiring resources for {node}')
+                        await asyncio.gather(*semaphores)
+
+                    logger.info(f'Submitting {node}')
+                    func = compute_proxy(self.store_accessor,
+                                         func_img['callable'])
+                    kwargs = {}
+                    for res, value in (func_img['worker_resources'].items()):
+                        kwargs.setdefault('resources', {})[res] = value
+                    future = self.client.submit(func, node, **kwargs)
+                    self.futures[node] = future
+                    await self.client.gather(future, asynchronous=True)
         except Exception as e:
             self.errored = True
             logger.error(f'{node} failed with {str(e)}')

@@ -28,7 +28,12 @@ class PickleDriver(xun.functions.driver.Sequential):
     """
     Test driver ensuring that anything touched by the driver can be pickled
     """
-    def exec(self, graph, entry_call, function_images, store_accessor):
+    def exec(self,
+             graph,
+             entry_call,
+             function_images,
+             store_accessor,
+             global_resources):
         import pickle
 
         P = {
@@ -43,6 +48,7 @@ class PickleDriver(xun.functions.driver.Sequential):
             entry_call=pickle.loads(P['entry_call']),
             function_images=pickle.loads(P['function_images']),
             store_accessor=pickle.loads(P['store_accessor']),
+            global_resources=global_resources,
         )
 
 
@@ -123,10 +129,11 @@ class FakeRedis(xun.functions.store.Redis):
         return exc_type is None
 
 
-def run_in_process(blueprint):
+def run_in_process(blueprint, **kwargs):
     return blueprint.run(
         driver=xun.functions.driver.Sequential(),
-        store=xun.functions.store.Memory()
+        store=xun.functions.store.Memory(),
+        **kwargs,
     )
 
 

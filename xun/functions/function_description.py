@@ -4,6 +4,7 @@ from .util import function_ast
 from .util import function_source
 from .util import strip_decorators
 from collections import namedtuple
+from itertools import dropwhile
 import inspect
 
 
@@ -61,6 +62,10 @@ def describe(func):
         raise ValueError('can only describe a single function')
 
     # Decorators can change the function in ways we don't control, unsupported.
+    src = ''.join(dropwhile(
+        lambda ln: ln.startswith('@xun'),
+        src.splitlines(keepends=True),
+    ))
     tree = strip_decorators(tree)
 
     # Find externally referenced names so that we only have to keep globals and

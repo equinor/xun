@@ -4,8 +4,8 @@ from dask.distributed import Client, LocalCluster
 from contextlib import closing
 from concurrent.futures import Future
 from unittest.mock import patch
-
 import dask
+import pytest
 import xun
 
 
@@ -132,3 +132,18 @@ def test_dask_driver_adheres_to_worker_resources():
         'MEMORY': 70e6,
         'GPU': 2,
     }
+
+
+@pytest.mark.parametrize('driver', [
+    xun.functions.driver.Dask(Client(processes=False, n_workers=1)),
+    xun.functions.driver.Sequential(),
+])
+def test_dask_global_resources(driver):
+    @xun.global_resource('A', 1, default_available=2)
+    @xun.global_resource('B', 2, default_available=2)
+    @xun.function()
+    def ftest():
+        return 'test'
+
+    with PicklableMemoryStore() as store:
+        assert ftest.blueprint().run(driver=driver, store=store) == 'test'

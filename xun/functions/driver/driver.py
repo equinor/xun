@@ -1,6 +1,9 @@
 from ..errors import XunInterfaceError
+from ..graph import CallNode
 from abc import ABC
 from abc import abstractmethod
+from copy import deepcopy
+import contextvars
 import logging
 
 
@@ -15,16 +18,48 @@ class Driver(ABC):
     concurrency.
     """
     @abstractmethod
-    def _exec(self, graph, entry_call, function_images, store_accessor):
+    def _exec(self,
+              graph,
+              entry_call,
+              function_images,
+              store_accessor,
+              global_resources):
         pass
 
-    def exec(self, graph, entry_call, function_images, store_accessor):
+    def exec(self,
+             graph,
+             entry_call,
+             function_images,
+             store_accessor,
+             global_resources):
         guarded_store_accessor = store_accessor.guarded()
-        self._exec(graph, entry_call, function_images, guarded_store_accessor)
-        return store_accessor.client.load_result(entry_call)
 
-    def __call__(self, graph, entry_call, function_images, store_accessor):
-        return self.exec(graph, entry_call, function_images, store_accessor)
+        def deepcp_impl(current_callnode, memo):
+            yield current_callnode
+
+        ctx = contextvars.copy_context()
+        ctx.run(CallNode._deepcopy_context.value.set,
+                deepcp_impl)
+        graph = ctx.run(deepcopy, graph)
+
+        self._exec(graph,
+                   entry_call,
+                   function_images,
+                   guarded_store_accessor,
+                   global_resources)
+        return store_accessor.load_result(entry_call)
+
+    def __call__(self,
+                 graph,
+                 entry_call,
+                 function_images,
+                 store_accessor,
+                 global_resources):
+        return self.exec(graph,
+                         entry_call,
+                         function_images,
+                         store_accessor,
+                         global_resources)
 
     @staticmethod
     def compute_and_store(callnode, func, store_accessor):

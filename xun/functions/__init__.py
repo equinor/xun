@@ -10,6 +10,7 @@ from .errors import ResourceConflictError
 from .errors import XunInterfaceError
 from .errors import XunSyntaxError
 from .function import Function
+from .function import SymbolicFunction
 from .function import function
 from .function import global_resource
 from .function import worker_resource

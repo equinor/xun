@@ -1202,3 +1202,29 @@ def test_yield_to_interface_indirect():
         yield from f()
 
     assert run_in_process(interface.blueprint()) == 0
+
+
+def test_higher_order_functions():
+    @xun.function()
+    def even(n):
+        return n * 2
+
+    @xun.function()
+    def odd(n):
+        return n * 2 - 1
+
+    @xun.function()
+    def f(g, h, n):
+        return result
+        with ...:
+            result = h(g(n))
+
+    @xun.function()
+    def a(n):
+        return result
+        with ...:
+            # Xun functions has to be passed inside other xun functions so that
+            # the name is discovered for dependency detection
+            result = f(odd, even, 5)
+
+    assert run_in_process(a.blueprint(5)) == 18

@@ -30,6 +30,15 @@ class SymbolicFunction:
     def __call__(self, *args, **kwargs):
         return self.callnode(*args, **kwargs)
 
+    def __repr__(self):
+        return f'SymbolicFunction({repr(self.name)}, {repr(self.hash)})'
+
+    def __hash__(self):
+        return hash(self.hash)
+
+    def __eq__(self, other):
+        return self.name == other.name and self.hash == other.hash
+
     def callnode(self, *args, **kwargs):
         from xun.functions import CallNode
         return CallNode(self.name, self.hash, *args, **kwargs)

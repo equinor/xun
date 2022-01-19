@@ -100,6 +100,14 @@ def test_callnode_serialization():
     assert loaded == cn
 
 
+def test_symbolic_function_serialization():
+    cn = xun.functions.SymbolicFunction('function_name',
+                                        'hash')
+    yml = xun.serialization.dumps(cn)
+    loaded = xun.serialization.loads(yml)
+    assert loaded == cn
+
+
 def test_pandas_series_serialization():
     series = pd.Series(np.random.randn(10))
     yml = xun.serialization.dumps(series)

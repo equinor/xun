@@ -611,6 +611,15 @@ def make_hashable(a):
             return tuple(make_hashable(v) for v in a)
     except TypeError:
         pass
+
+    # AbstractFunction are hashable, but does not make sense to forward with
+    # xun. SymbolicFunctions are used to detect dependencies later on, so we
+    # can just swap them out here.
+    from .function import AbstractFunction, SymbolicFunction
+    if isinstance(a, AbstractFunction):
+        return SymbolicFunction(a.name, a.hash)
+
+    # Finally we can catch all other hashables and forward them
     if isinstance(a, (typing.Hashable, collections.abc.Hashable)):
         return a
     else:

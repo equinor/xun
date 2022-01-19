@@ -41,7 +41,6 @@ subparsers = parser.add_subparsers()
 #
 # Xun functions
 #
-
 parser_fgraph = subparsers.add_parser('graph')
 parser_fgraph.set_defaults(func=functions.cli.xun_graph)
 parser_fgraph.add_argument('module')

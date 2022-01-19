@@ -120,8 +120,7 @@ class AbstractFunction(ABC):
         for dependency in self.dependencies.values():
             if dependency is not self:
                 sha256.update(dependency.hash.encode())
-        truncated = sha256.digest()[:12]
-        return base64.urlsafe_b64encode(truncated).decode()
+        return base64.urlsafe_b64encode(sha256.digest()).decode()
 
     def callnode(self, *args, **kwargs):
         """Call Node

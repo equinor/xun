@@ -128,7 +128,7 @@ def generate_header():
     """
     return [
         ast.Assign(
-            targets=[ast.Name(id='_xun_store_accessor', ctx=ast.Store())],
+            targets=[ast.Name(id='_xun_store', ctx=ast.Store())],
             value=ast.Yield(value=None),
             type_comment=None,
         ),
@@ -384,7 +384,7 @@ def load_args(body: List[ast.AST], function_arg_names):
             func=ast.Name(id='_xun_resolve_args_by_deepcopy', ctx=ast.Load()),
             args=[
                 ast.Name(
-                    id='_xun_store_accessor',
+                    id='_xun_store',
                     ctx=ast.Load()
                 ),
             ],
@@ -534,7 +534,7 @@ def load_constants(body: List[ast.AST], unpacked_assignments: List[ast.AST]):
         ),
         args=[
             ast.Name(
-                id='_xun_store_accessor',
+                id='_xun_store',
                 ctx=ast.Load()
             ),
             *[

@@ -16,7 +16,7 @@ class Sequential(Driver):
               graph,
               entry_call,
               function_images,
-              store_accessor,
+              store,
               global_resources):
         assert nx.is_directed_acyclic_graph(graph)
 
@@ -30,13 +30,13 @@ class Sequential(Driver):
 
             # Do not rerun finished jobs. For example if a workflow has been
             # stopped and resumed.
-            if store_accessor.completed(node):
+            if self.value_computed(node, store):
                 logger.info('{} already completed'.format(node))
                 continue
 
             logger.info('Running {}'.format(node))
             try:
-                self.compute_and_store(node, func, store_accessor)
+                self.compute_and_store(node, func, store)
             except Exception as e:
                 logger.error(
                     '{} failed with {}'.format(node, str(e))
@@ -44,4 +44,4 @@ class Sequential(Driver):
                 raise
             logger.info('{} succeeded'.format(node))
 
-        return store_accessor.load_result(entry_call)
+        return store.load_callnode(entry_call)

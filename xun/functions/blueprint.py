@@ -108,13 +108,10 @@ class Blueprint:
             for name, func in self.functions.items()
         }
 
-        from .store import StoreAccessor
-        store_accessor = StoreAccessor(store)
-
         return driver.exec(self.graph,
                            self.call,
-                           function_images,
-                           store_accessor,
+                           function_images,  
+                           store,
                            new_global_resources)
 
 

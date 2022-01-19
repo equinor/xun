@@ -23,21 +23,21 @@ class Dask(Driver):
               graph,
               entry_call,
               function_images,
-              store_accessor,
+              store,
               global_resources):
         assert nx.is_directed_acyclic_graph(graph)
         scheduler = DaskSchedule(self.client,
                                  function_images,
-                                 store_accessor,
+                                 store,
                                  global_resources)
         return scheduler(entry_call, graph)
 
 
-def compute_proxy(store_accessor, func):
+def compute_proxy(store, func):
     """Dask 'handles' functools.partial so that we can't use it. Create a new
        function instead."""
     def λ(node):
-        Driver.compute_and_store(node, func, store_accessor)
+        Driver.compute_and_store(node, func, store)
         return node
     functools.update_wrapper(λ, func)
     return λ
@@ -54,11 +54,11 @@ class DaskSchedule:
     def __init__(self,
                  client,
                  function_images,
-                 store_accessor,
+                 store,
                  global_resources):
         self.client = client
         self.function_images = function_images
-        self.store_accessor = store_accessor
+        self.store = store
         self.errored = False
         self.futures = {}
         self.semaphores = {
@@ -77,7 +77,7 @@ class DaskSchedule:
                 future.cancel(force=True)
             raise
         if not self.errored:
-            return self.store_accessor.load_result(entry_call)
+            return self.store.load_callnode(entry_call)
         raise ComputeError('One or more jobs failed')
 
     async def run(self, graph):
@@ -103,7 +103,7 @@ class DaskSchedule:
 
     async def visit(self, node, atomic_graph, queue):
         try:
-            if self.store_accessor.completed(node):
+            if Driver.value_computed(node, self.store):
                 logger.info(f'{node} already completed')
             else:
                 async with contextlib.AsyncExitStack() as stack:
@@ -119,8 +119,7 @@ class DaskSchedule:
                         await asyncio.gather(*semaphores)
 
                     logger.info(f'Submitting {node}')
-                    func = compute_proxy(self.store_accessor,
-                                         func_img['callable'])
+                    func = compute_proxy(self.store, func_img['callable'])
                     kwargs = {}
                     for res, value in (func_img['worker_resources'].items()):
                         kwargs.setdefault('resources', {})[res] = value

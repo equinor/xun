@@ -5,7 +5,6 @@ from xun.functions.compatibility import ast
 import astor
 import astunparse
 import difflib
-import fakeredis
 import sys
 import xun
 
@@ -32,7 +31,7 @@ class PickleDriver(xun.functions.driver.Sequential):
              graph,
              entry_call,
              function_images,
-             store_accessor,
+             store,
              global_resources):
         import pickle
 
@@ -40,92 +39,44 @@ class PickleDriver(xun.functions.driver.Sequential):
             'graph': pickle.dumps(graph),
             'entry_call': pickle.dumps(entry_call),
             'function_images': pickle.dumps(function_images),
-            'store_accessor': pickle.dumps(store_accessor),
+            'store': pickle.dumps(store),
         }
 
         return super().exec(
             graph=pickle.loads(P['graph']),
             entry_call=pickle.loads(P['entry_call']),
             function_images=pickle.loads(P['function_images']),
-            store_accessor=pickle.loads(P['store_accessor']),
+            store=pickle.loads(P['store']),
             global_resources=global_resources,
         )
 
 
-class PicklableMemoryStore(xun.functions.store.Store):
+class PicklableMemoryStore(xun.functions.store.Memory):
     """ PicklableMemoryStore
     Works under the assumption that the object is never replicated outside of
     the creating process.
     """
 
-    class Driver(dict, xun.functions.store.StoreDriver):
-        pass
-
-    _drivers = {}
+    _cached_stores = {}
 
     def __init__(self):
+        super().__init__()
         self.id = id(self)
-
-    @property
-    def driver(self):
-        if self.id not in PicklableMemoryStore._drivers:
-            raise ValueError('No context for this store')
-        return PicklableMemoryStore._drivers[self.id]
 
     def __getstate__(self):
         return self.id
 
     def __setstate__(self, state):
         self.id = state
+        self._store = PicklableMemoryStore._cached_stores[self.id]._store
+        self._tagdb = PicklableMemoryStore._cached_stores[self.id]._tagdb
 
     def __enter__(self):
-        PicklableMemoryStore._drivers.setdefault(
-            self.id,
-            PicklableMemoryStore.Driver(),
-        )
+        PicklableMemoryStore._cached_stores.setdefault(self.id, self)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        del PicklableMemoryStore._drivers[self.id]
-        return exc_type is None
-
-
-class FakeRedis(xun.functions.store.Redis):
-    _servers = {}
-
-    class Driver(xun.functions.store.redis.RedisDriver):
-        def __init__(self, server):
-            self.redis = fakeredis.FakeStrictRedis(server=server)
-
-    def __init__(self):
-        super().__init__()
-
-        # The ID is used to identify the server that this instance and any
-        # copies of it should connect to
-        self._id = id(self)
-
-    @property
-    def driver(self):
-        try:
-            return self._driver
-        except AttributeError:
-            server = FakeRedis._servers[self._id]
-            self._driver = FakeRedis.Driver(server)
-            return self._driver
-
-    def __getstate__(self):
-        return super().__getstate__(), self._id
-
-    def __setstate__(self, state):
-        super().__setstate__(state[0])
-        self._id = state[1]
-
-    def __enter__(self):
-        FakeRedis._servers.setdefault(self._id, fakeredis.FakeServer())
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        del FakeRedis._servers[self._id]
+        del PicklableMemoryStore._cached_stores[self.id]
         return exc_type is None
 
 

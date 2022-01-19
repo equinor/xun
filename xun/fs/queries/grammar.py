@@ -11,6 +11,7 @@ from pyparsing import alphas
 from pyparsing import oneOf
 from pyparsing import quotedString
 from types import SimpleNamespace
+import ast
 
 
 ###############################################################################
@@ -29,6 +30,16 @@ syntax_tree = SimpleNamespace(
 # Parser functions
 #
 
+def parse_operator(tokens):
+    op_str, = tokens
+    return op_str
+
+
+def parse_value(token):
+    value, = token
+    return ast.literal_eval(value)
+
+
 def parse_tag(tag):
     if len(tag) == 3:
         name, operator, value = tag
@@ -41,25 +52,26 @@ def parse_tag(tag):
 
 
 def parse_hierarchy(hierarchy):
-    expr, *children = hierarchy
-    expr = ... if expr == '...' else expr
+    for h in hierarchy:
+        expr, children = h
 
-    if expr == ... and len(children) > 0:
-        raise ValueError('file node (...) cannot have expr nodes')
-    if expr != ... and len(children) == 0:
-        msg = f'directory node ({expr}) must have at least one child'
-        raise ValueError(msg)
+        if children != ...:
+            children = list(children)
 
-    return syntax_tree.Hierarchy(expr, list(children))
+        yield syntax_tree.Hierarchy(expr, children)
 
 
 def parse_arguments(arguments):
-    return syntax_tree.Arguments(list(arguments[0]))
+    return syntax_tree.Arguments(list(arguments))
 
 
 def parse_query(query):
-    arguments, tree = query
-    return syntax_tree.Query(arguments, tree)
+    arguments, hierarchy = query
+
+    if hierarchy != ...:
+        hierarchy = list(hierarchy)
+
+    return syntax_tree.Query(arguments, hierarchy)
 
 
 ###############################################################################
@@ -72,25 +84,29 @@ lparen, rparen = Suppress('('), Suppress(')')
 lbrace, rbrace = Suppress('{'), Suppress('}')
 
 
-operator = oneOf('= > >= < <=')
 identifier = Word(alphas + '_', alphanums + '_')
-tag_specifier = identifier + operator + quotedString
+operator = oneOf('= > >= < <=')
+operator.setParseAction(parse_operator)
+value = quotedString.setParseAction(parse_value)
+tag_specifier = identifier + operator + value
 tag = tag_specifier | identifier
 tag = tag.setParseAction(parse_tag)
 
 
-leaf = Literal('...')
-leaf.setParseAction(parse_hierarchy)
 expr = identifier
+leaf = Literal('...')
+leaf.setParseAction(lambda _: ...)
 hierarchy = Forward()
-hierarchy <<= leaf
-hierarchy <<= expr + lbrace + OneOrMore(hierarchy | leaf) + rbrace
-hierarchy = hierarchy.setParseAction(parse_hierarchy)
+hierarchy <<= leaf | Group(
+    OneOrMore(
+        Group(expr + lbrace + hierarchy + rbrace)
+    ).setParseAction(parse_hierarchy),
+)
 
 
-arguments = lparen + Group(ZeroOrMore(tag)) + rparen
+arguments = lparen + ZeroOrMore(tag) + rparen
 arguments.setParseAction(parse_arguments)
 
 
-query_string = arguments + arrow + (hierarchy | leaf)
+query_string = arguments + arrow + hierarchy
 query_string.setParseAction(parse_query)

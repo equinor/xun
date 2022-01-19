@@ -1,6 +1,5 @@
 from ..errors import CopyError
 from .store import Store
-from .store import TagDB
 
 
 class Memory(Store):
@@ -11,23 +10,8 @@ class Memory(Store):
     may make them incompatible with multiprocessing drivers.
     """
 
-    class MemoryTagDB(TagDB):
-        """
-        Memory Stores don't persist state, so these methods can be ignored
-        """
-
-        def refresh(self):
-            pass
-
-        def checkpoint(self):
-            pass
-
-        def dump(self, name):
-            pass
-
     def __init__(self):
         self._store = {}
-        self._tagdb = self.MemoryTagDB(self)
 
     def __contains__(self, callnode):
         return callnode in self._store
@@ -38,17 +22,15 @@ class Memory(Store):
 
     def store(self, callnode, value, **tags):
         self._store[callnode] = value
-        self._tagdb.update(callnode, tags)
 
     def remove(self, callnode):
         del self._store[callnode]
-        self._tagdb.remove(callnode)
 
     def _load_tags(self, callnode):
-        return self._tagdb.tags(callnode)
+        raise NotImplementedError
 
     def filter(self, *tag_conditions):
-        return self._tagdb.query(*tag_conditions)
+        raise NotImplementedError
 
     def __copy__(self):
         raise CopyError('Cannot copy in-memory store')

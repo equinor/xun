@@ -110,7 +110,7 @@ class Blueprint:
 
         return driver.exec(self.graph,
                            self.call,
-                           function_images,  
+                           function_images,
                            store,
                            new_global_resources)
 

@@ -1,8 +1,12 @@
 from ... import serialization
 from .store import Store
+from .store import TagDB
 from collections import namedtuple
 from pathlib import Path
+import base64
 import contextlib
+import shutil
+import sqlite3
 import tempfile
 
 
@@ -17,6 +21,7 @@ class Disk(Store):
             (self.dir / 'values').mkdir(parents=True, exist_ok=True)
         elif not self.dir.exists():
             raise ValueError(f'Store Directory {str(self.dir)} does not exist')
+        self._tagdb = DiskTagDB(self, create_dirs)
 
     def paths(self, key, root=None):
         """ Key Paths
@@ -61,12 +66,14 @@ class Disk(Store):
             return serialization.load(f)
 
     def _load_tags(self, key):
-        raise NotImplementedError
+        return self._tagdb.tags(key)
 
     def filter(self, *conditions):
-        raise NotImplementedError
+        return self._tagdb.query(*conditions)
 
     def _store(self, key, value, **tags):
+        self._tagdb.update(key, tags)
+
         with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
             tmpdir = Path(tmpdir)
 
@@ -91,9 +98,126 @@ class Disk(Store):
         paths = self.paths(key)
         paths.key.unlink()
         paths.val.unlink()
+        self._tagdb.remove(key)
 
     def __getstate__(self):
         return self.dir
 
     def __setstate__(self, state):
         self.dir = state
+        self._tagdb = DiskTagDB(self)
+
+
+class DiskTagDB(TagDB):
+    def __init__(self, store, create_dirs=True):
+        super().__init__(store)
+        self.dir = store.dir / 'db'
+        if create_dirs:
+            self.dir.mkdir(parents=True, exist_ok=True)
+
+    def refresh(self):
+        reconciled = False
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(self.savepoint())
+            databases = {}
+            for f in self.dir.iterdir():
+                checkpoint_hash = base64.urlsafe_b64decode(f.name.encode())
+                if f.is_file() and not self.has_checkpoint(checkpoint_hash):
+                    try:
+                        uri = f'file:{str(f)}?mode=ro'
+
+                        # Connecting to the database opens a file handle. In
+                        # the case of the file being deleted, we still have a
+                        # handle to it and can read from it.
+                        con = sqlite3.connect(uri, uri=True)
+
+                        # Attach our memory database to this connection
+                        # imediately as this will fail with a DatabaseError if
+                        # the database we just connected to is not a valid
+                        # database.
+                        con.execute(
+                            f'ATTACH DATABASE \'{self.uri}\' AS _xun_main'
+                        )
+
+                        # Keep connections (and file handles) alive until we
+                        # leave the context
+                        ctx = contextlib.closing(con)
+                        databases[f] = stack.enter_context(ctx)
+                    except sqlite3.OperationalError:
+                        pass  # Database was deleted before we could connect
+                    except sqlite3.DatabaseError:
+                        pass  # File is not a database
+            for con in databases.values():
+                self.reconcile(con, read_from=None, write_to='_xun_main')
+                reconciled = True
+
+            self.create_views()
+            if not reconciled:
+                return
+            checkpoint_name = self.checkpoint()
+
+        if self.dump(checkpoint_name):
+            # Now that our changes have been reconciled and dumped. Delete any
+            # databases ours is comprising.
+            for db in databases:
+                print('unlinking', db)
+                db.unlink()
+
+    def reconcile(self, con, read_from=None, write_to=None):
+        print('RECONCILING')
+        if read_from is None and write_to is None:
+            raise ValueError('Cannot read and write to main database')
+
+        def latest_common_checkpoint():
+            _, checkpoint = con.execute('''
+                SELECT MAX(this.journal_id), this.hash
+                FROM _xun_main._xun_journal AS this
+                INNER JOIN _xun_journal as other
+                ON
+                    this.hash = other.hash AND
+                    this.journal_id = other.journal_id
+            ''').fetchone()
+            return checkpoint
+
+        with self.savepoint():
+            checkpoint = latest_common_checkpoint()
+
+            diff_con_results, diff_con_tags = self.diff(checkpoint, con=con)
+            diff_mem_results, diff_mem_tags = self.diff(checkpoint)
+
+            new_results = sorted(
+                diff_con_results + diff_mem_results,
+                key=lambda el: (el[3], el[1])
+            )
+            new_tags = sorted(
+                diff_con_tags + diff_mem_tags,
+                key=lambda el: (el[4], el[1])
+            )
+
+            self.reset_to_checkpoint(checkpoint)
+
+            self.mem.executemany('''
+                INSERT INTO _xun_results_table
+                    (result_id, callnode, timestamp, deleted)
+                VALUES
+                    (?, ?, ?, ?)
+            ''', new_results)
+            self.mem.executemany('''
+                INSERT INTO _xun_tags_table
+                    (result_id, name, value, timestamp, deleted)
+                VALUES
+                    (?, ?, ?, ?, ?)
+            ''', new_tags)
+
+    def dump(self, name):
+        if self.mem.in_transaction:
+            raise RuntimeError('Database Busy')
+        if (self.dir / name).exists():
+            return False
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            tmp = tmpdir / 'sql'
+            with contextlib.closing(sqlite3.connect(tmp)) as bck:
+                self.mem.backup(bck)
+            shutil.copy(tmp, self.dir / name)
+            return True

@@ -54,10 +54,17 @@ class Layered(Store):
         del self._layers[0][callnode]
 
     def _load_tags(self, callnode):
-        raise NotImplementedError
+        for layer in self._layers:
+            if callnode in layer:
+                return layer._load_tags(callnode)
+        raise KeyError(repr(callnode))
 
     def filter(self, *tag_conditions):
-        raise NotImplementedError
+        results = set()
+        for layer in reversed(self._layers):
+            res = layer.filter(*tag_conditions)
+            results.update(res)
+        return list(results)
 
     def __getstate__(self):
         return self._layers

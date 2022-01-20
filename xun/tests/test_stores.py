@@ -132,7 +132,6 @@ def test_store_implementation(cls, contents):
             assert store[key] == value
 
 
-@pytest.mark.xfail(reason='Tagged stores not implemented')
 @pytest.mark.parametrize('cls', stores)
 @settings(phases=[Phase.generate, Phase.target, Phase.explain],
           deadline=500,
@@ -148,7 +147,6 @@ def test_store_tags(cls, contents):
             assert store.tags[key] == tags
 
 
-@pytest.mark.xfail(reason='Tagged stores not implemented')
 @pytest.mark.parametrize('cls', stores)
 @pytest.mark.parametrize('op', [operator.eq,
                                 operator.gt,
@@ -168,7 +166,6 @@ def test_store_select_operator(cls, op):
         assert result == expected
 
 
-@pytest.mark.xfail(reason='Tagged stores not implemented')
 @pytest.mark.parametrize('cls', stores)
 def test_store_select_shape(cls):
     with create_instance(cls) as (store, callnodes):
@@ -209,7 +206,6 @@ def test_store_select_shape(cls):
         }
 
 
-@pytest.mark.xfail(reason='Tagged stores not implemented')
 @pytest.mark.parametrize('cls', stores)
 def test_store_query(cls):
     with create_instance(cls) as (store, callnodes):
@@ -225,7 +221,6 @@ def test_store_query(cls):
         }
 
 
-@pytest.mark.xfail(reason='Tagged stores not implemented')
 @pytest.mark.parametrize('cls', stores)
 def test_store_query_argument(cls):
     with create_instance(cls) as (store, callnodes):
@@ -249,7 +244,6 @@ def test_store_query_argument(cls):
         }
 
 
-@pytest.mark.xfail(reason='Tagged stores not implemented')
 @pytest.mark.parametrize('cls', stores)
 def test_store_query_advanced(cls):
     with create_instance(cls) as (store, callnodes):
@@ -290,7 +284,6 @@ def test_store_query_advanced(cls):
         }
 
 
-@pytest.mark.xfail(reason='Tagged stores not implemented')
 @pytest.mark.parametrize('cls', stores - {Layered})
 def test_store_remove(cls):
     with create_instance(cls) as (store, callnodes):
@@ -313,7 +306,6 @@ def test_store_remove(cls):
         assert tags == [(0,), (0,), (0,), (1,), (1,), (1,)]
 
 
-@pytest.mark.xfail(reason='Tagged stores not implemented')
 @pytest.mark.parametrize('cls', stores - {Layered})
 def test_store_missing_tags_raise(cls):
     with create_instance(cls) as (store, callnodes):
@@ -322,7 +314,6 @@ def test_store_missing_tags_raise(cls):
             store.tags[callnodes.f_0]
 
 
-@pytest.mark.xfail(reason='Tagged stores not implemented')
 @pytest.mark.parametrize('cls', stores)
 def test_store_rewrite_tags(cls):
     with create_instance(cls) as (store, callnodes):
@@ -331,7 +322,6 @@ def test_store_rewrite_tags(cls):
         assert store.tags[callnodes.f_1] == new_tags
 
 
-@pytest.mark.xfail(reason='Tagged stores not implemented')
 @pytest.mark.parametrize('cls', stores - {Layered})
 def test_tags_are_not_duplicated_on_double_write(cls):
     with create_instance(cls) as (store, callnodes):
@@ -364,7 +354,6 @@ def test_tags_are_not_duplicated_on_double_write(cls):
         assert tags == tags_after
 
 
-@pytest.mark.xfail(reason='Tagged stores not implemented')
 @pytest.mark.parametrize('cls', stores - {Memory, Layered})
 def test_store_must_be_picklable(cls):
     with create_instance(cls) as (store, callnodes):

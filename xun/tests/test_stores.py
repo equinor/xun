@@ -39,7 +39,7 @@ def TmpDisk():
 
 @contextmanager
 def Layered():
-    with create_instance(TmpDisk) as store:
+    with create_instance(TmpDisk) as (store, _):
         yield xun.functions.store.Layered(
             xun.functions.store.Memory(),
             store,
@@ -47,11 +47,11 @@ def Layered():
 
 
 # Stores to test
-stores = [
+stores = {
     Memory,
     TmpDisk,
     Layered,
-]
+}
 
 
 def b64hash():
@@ -291,7 +291,7 @@ def test_store_query_advanced(cls):
 
 
 @pytest.mark.xfail(reason='Tagged stores not implemented')
-@pytest.mark.parametrize('cls', stores)
+@pytest.mark.parametrize('cls', stores - {Layered})
 def test_store_remove(cls):
     with create_instance(cls) as (store, callnodes):
         store.remove(callnodes.f_2)
@@ -314,7 +314,7 @@ def test_store_remove(cls):
 
 
 @pytest.mark.xfail(reason='Tagged stores not implemented')
-@pytest.mark.parametrize('cls', stores)
+@pytest.mark.parametrize('cls', stores - {Layered})
 def test_store_missing_tags_raise(cls):
     with create_instance(cls) as (store, callnodes):
         del store[callnodes.f_0]
@@ -332,7 +332,7 @@ def test_store_rewrite_tags(cls):
 
 
 @pytest.mark.xfail(reason='Tagged stores not implemented')
-@pytest.mark.parametrize('cls', stores)
+@pytest.mark.parametrize('cls', stores - {Layered})
 def test_tags_are_not_duplicated_on_double_write(cls):
     with create_instance(cls) as (store, callnodes):
         result_id = callnodes.f_0.sha256(encode=False)
@@ -365,10 +365,8 @@ def test_tags_are_not_duplicated_on_double_write(cls):
 
 
 @pytest.mark.xfail(reason='Tagged stores not implemented')
-@pytest.mark.parametrize('cls', stores)
+@pytest.mark.parametrize('cls', stores - {Memory, Layered})
 def test_store_must_be_picklable(cls):
-    if cls is Memory:
-        pytest.skip('Cannot transport in-memory store')
     with create_instance(cls) as (store, callnodes):
         pickled = pickle.dumps(store)
         unpickled = pickle.loads(pickled)

@@ -51,6 +51,9 @@ class Store(ABC):
     def __getitem__(self, key):
         return self.load_callnode(key)
 
+    def __delitem__(self, key):
+        return self.remove(key)
+
     @property
     def tags(self):
         return _Tags(self)

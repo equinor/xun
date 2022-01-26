@@ -29,15 +29,17 @@ class Dask(Driver):
         scheduler = DaskSchedule(self.client,
                                  function_images,
                                  store,
-                                 global_resources)
+                                 global_resources,
+                                 entry_call,
+                                 self.timestamp())
         return scheduler(entry_call, graph)
 
 
-def compute_proxy(store, func):
+def compute_proxy(store, func, tags):
     """Dask 'handles' functools.partial so that we can't use it. Create a new
        function instead."""
     def λ(node):
-        Driver.compute_and_store(node, func, store)
+        Driver.compute_and_store(node, func, store, tags)
         return node
     functools.update_wrapper(λ, func)
     return λ
@@ -55,10 +57,14 @@ class DaskSchedule:
                  client,
                  function_images,
                  store,
-                 global_resources):
+                 global_resources,
+                 entry_call,
+                 start_time):
         self.client = client
         self.function_images = function_images
         self.store = store
+        self.entry_call = entry_call
+        self.start_time = start_time
         self.errored = False
         self.futures = {}
         self.semaphores = {
@@ -108,6 +114,7 @@ class DaskSchedule:
             else:
                 async with contextlib.AsyncExitStack() as stack:
                     func_img = self.function_images[node.function_name]
+                    callable = func_img['callable']
 
                     semaphores = [
                         stack.enter_async_context(self.semaphores[res])
@@ -119,7 +126,11 @@ class DaskSchedule:
                         await asyncio.gather(*semaphores)
 
                     logger.info(f'Submitting {node}')
-                    func = compute_proxy(self.store, func_img['callable'])
+                    tags = Driver.create_tags(callable,
+                                              self.entry_call,
+                                              node,
+                                              self.start_time)
+                    func = compute_proxy(self.store, callable, tags)
                     kwargs = {}
                     for res, value in (func_img['worker_resources'].items()):
                         kwargs.setdefault('resources', {})[res] = value

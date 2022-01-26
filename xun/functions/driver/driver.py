@@ -4,7 +4,10 @@ from abc import ABC
 from abc import abstractmethod
 from copy import deepcopy
 import contextvars
+import datetime
+import getpass
 import logging
+import pytz
 
 
 logger = logging.getLogger(__name__)
@@ -66,7 +69,25 @@ class Driver(ABC):
         return callnode in store
 
     @staticmethod
-    def compute_and_store(callnode, func, store):
+    def timestamp():
+        return datetime.datetime.utcnow().astimezone(pytz.utc).isoformat()
+
+    @classmethod
+    def create_tags(cls, func, entry_call, callnode, start_time):
+        return {
+            'created_by': getpass.getuser(),
+            'entry_point': entry_call.function_name,
+            'function_name': func.__name__,
+            'start_time': start_time,
+            'timestamp': cls.timestamp(),
+            **{
+                k: v.format(*callnode.args, *callnode.kwargs.values())
+                for k, v in func.tags.items()
+            }
+        }
+
+    @staticmethod
+    def compute_and_store(callnode, func, store, tags):
         cached_store = store.cached()
         results = func(*callnode.args, **callnode.kwargs)
         results.send(None)
@@ -77,7 +98,7 @@ class Driver(ABC):
                 if func.can_write_to(result_call):
                     logger.debug(f'Storing result for {result_call} '
                                  f'(interface of {callnode})')
-                    store.store(result_call, result)
+                    store.store(result_call, result, **tags)
                 else:
                     msg = (f'Call {callnode} attempted to write an interface '
                            f'[{result_call.function_name}'
@@ -87,7 +108,7 @@ class Driver(ABC):
                     raise XunInterfaceError(msg)
             except StopIteration as result:
                 logger.debug(f'Storing result for {callnode}')
-                store.store(callnode, result.value)
+                store.store(callnode, result.value, **tags)
                 return result.value
             except Exception as e:
                 raise e from func.Raise()

@@ -528,7 +528,7 @@ def test_function_version_completeness():
 
     f1 = f
 
-    w1 = xun.functions.Function(workflow.desc, {'f': f1}, None)
+    w1 = xun.functions.Function(workflow.desc, {'f': f1}, {})
 
     assert driver.value_computed(f0.callnode(), store)
     assert driver.value_computed(w0.callnode(), store)
@@ -654,11 +654,11 @@ def test_rerun_on_changed_indirect_dependency():
 
     dependencies = script.dependencies
     dependencies['g'] = before_edit
-    script.__init__(script.desc, dependencies, script.max_parallel)
+    script.__init__(script.desc, dependencies, script.tags)
     assert '{name}' == script.blueprint().run(driver=driver, store=store)
 
     dependencies['g'] = after_edit
-    script.__init__(script.desc, dependencies, script.max_parallel)
+    script.__init__(script.desc, dependencies, script.tags)
     assert 'World' == script.blueprint().run(driver=driver, store=store)
 
 

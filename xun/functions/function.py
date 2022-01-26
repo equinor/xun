@@ -258,11 +258,11 @@ class Function(AbstractFunction):
     function : Function decorator to create xun functions
     """
 
-    def __init__(self, desc, dependencies, max_parallel):
+    def __init__(self, desc, dependencies, tags):
         self.desc = desc
         self._dependencies = dependencies
         self.interfaces = {}
-        self.max_parallel = max_parallel
+        self.tags  = tags
         self._global_resources = {}
         self._worker_resources = {}
         self._hash = self.sha256()
@@ -304,7 +304,7 @@ class Function(AbstractFunction):
         }
 
     @staticmethod
-    def from_function(func, max_parallel=None):
+    def from_function(func, **tags):
         """From Function
 
         Creates a xun function from a python function
@@ -313,18 +313,14 @@ class Function(AbstractFunction):
         ----------
         func : python function
             The function definition to create the xun function from
-        max_parallel : int
-            The maximum parallel jobs allowed for this function
+        **tags : Dict[str, Callable[*args, **kwargs, str]]
+            Custom tag functions
 
         Returns
         -------
         Function
             The `Function` representation of the given function
         """
-        if max_parallel is not None:
-            msg = 'Limiting parallel execution not yet implemented'
-            raise NotImplementedError(msg)
-
         desc = describe(func)
         dependencies = {
             g.name: g
@@ -332,7 +328,7 @@ class Function(AbstractFunction):
             if isinstance(g, AbstractFunction)
         }
 
-        f = Function(desc, dependencies, max_parallel)
+        f = Function(desc, dependencies, tags)
 
         # Add f to it's dependencies, to allow recursive dependencies
         f.dependencies[f.name] = f
@@ -381,6 +377,7 @@ class Function(AbstractFunction):
                 yields,
                 globals=self.globals,
                 hash=self.hash,
+                tags=self.tags,
                 original_source_code=self.code.source,
                 interface_hashes=frozenset(
                     i.hash for i in self.interfaces.values()
@@ -395,7 +392,7 @@ class Function(AbstractFunction):
         return interface
 
 
-def function(max_parallel=None):
+def function(**tags):
     """xun.function
 
     Function decorator used to create xun functions from python functions
@@ -431,7 +428,7 @@ def function(max_parallel=None):
         xun function created from the decorated function
     """
     def decorator(func):
-        return Function.from_function(func, max_parallel)
+        return Function.from_function(func, **tags)
     return decorator
 
 
@@ -545,5 +542,6 @@ class Interface(AbstractFunction):
             self._callable = xform.assemble(self.desc,
                                             interface,
                                             globals=self.globals,
-                                            hash=self.hash)
+                                            hash=self.hash,
+                                            tags=self.target.tags)
         return self._callable

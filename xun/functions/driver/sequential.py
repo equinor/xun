@@ -21,6 +21,7 @@ class Sequential(Driver):
         assert nx.is_directed_acyclic_graph(graph)
 
         schedule = list(nx.topological_sort(graph))
+        start_time = self.timestamp()
 
         for node in schedule:
             if not isinstance(node, CallNode):
@@ -36,7 +37,8 @@ class Sequential(Driver):
 
             logger.info('Running {}'.format(node))
             try:
-                self.compute_and_store(node, func, store)
+                tags = self.create_tags(func, entry_call, node, start_time)
+                self.compute_and_store(node, func, store, tags)
             except Exception as e:
                 logger.error(
                     '{} failed with {}'.format(node, str(e))

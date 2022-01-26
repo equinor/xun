@@ -7,6 +7,7 @@ import contextlib
 import hashlib
 import sqlite3
 import struct
+import threading
 
 
 def restructure(data, shape):
@@ -266,6 +267,7 @@ class TagDB:
 
     def __init__(self, store):
         self.uri = f'file:{id(store)}?mode=memory&cache=shared'
+        self._lock = threading.RLock()
         self.mem = sqlite3.connect(self.uri,
                                    uri=True,
                                    isolation_level=None,
@@ -409,12 +411,9 @@ class TagDB:
         return [serialization.loads(r) for r, *_ in result if r is not None]
 
     def update(self, callnode, tags):
-        print(f'writing {callnode}::{callnode.sha256()} {tags}')
         prev_tags = self.tags(callnode)
-        print(prev_tags)
         if prev_tags == tags:
             # Don't need a savepoint if we're not altering anything
-            print(f'nothing {callnode}::{callnode.sha256()}')
             return
 
         with self.savepoint():
@@ -624,6 +623,7 @@ class TagDB:
     @contextlib.contextmanager
     def savepoint(self):
         try:
+            self._lock.acquire()
             savepoint_name = str(uuid4())
             self.mem.execute(f'SAVEPOINT [{savepoint_name}]')
             yield
@@ -632,3 +632,4 @@ class TagDB:
             raise
         finally:
             self.mem.execute(f'RELEASE [{savepoint_name}]')
+            self._lock.release()

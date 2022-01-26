@@ -1,11 +1,44 @@
-from .. import filename_from_args
-import argparse
+import xun
 
 
-def test_filename_from_args():
-    args = argparse.Namespace(arg0='arg0', arg1='arg1', arg2='arg2')
+def test_tagged_stores():
+    driver = xun.functions.driver.Sequential()
+    store = xun.functions.store.Memory()
 
-    hash = '80d4245367911a8c99df2a50d4eba579c5d2efb3e4560077eb8845a39c4bfbbe'
-    result = filename_from_args(args)
+    @xun.function(custom_tag='hello {1}!')
+    def f(a, b):
+        pass
 
-    assert result == hash
+    @xun.function()
+    def main():
+        with ...:
+            f(1, 'argument')
+
+    main.blueprint().run(driver=driver, store=store)
+
+    main_tags = store.tags[main.callnode()]
+    f_tags = store.tags[f.callnode(1, 'argument')]
+
+    assert set(main_tags.keys()) == {
+        'created_by',
+        'entry_point',
+        'function_name',
+        'start_time',
+        'timestamp',
+    }
+
+    assert set(f_tags.keys()) == {
+        'created_by',
+        'custom_tag',
+        'entry_point',
+        'function_name',
+        'start_time',
+        'timestamp',
+    }
+
+    assert main_tags['entry_point'] == 'main'
+    assert main_tags['function_name'] == 'main'
+
+    assert f_tags['entry_point'] == 'main'
+    assert f_tags['function_name'] == 'f'
+    assert f_tags['custom_tag'] == 'hello argument!'

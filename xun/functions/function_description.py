@@ -71,6 +71,7 @@ def describe(func):
     # Find externally referenced names so that we only have to keep globals and
     # modules that are actually used.
     external_names = func_external_names(tree.body[0])
+    print(external_names)
 
     external_references = {
         name: value
@@ -97,6 +98,7 @@ def describe(func):
         for name, value in external_references.items()
         if not inspect.ismodule(value)
     }
+    print(external_references)
 
     function_modules = frozenset(
         ModuleAlias(module=value.__name__, asname=name)

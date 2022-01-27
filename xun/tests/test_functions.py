@@ -1227,3 +1227,15 @@ def test_higher_order_functions():
             result = f(odd, even, 5)
 
     assert run_in_process(a.blueprint(5)) == 18
+
+
+def test_functions_are_evaluated_in_their_global_scope():
+    extenral_var = 1
+
+    @xun.function()
+    def f(n=extenral_var):
+        return n
+
+    print(f.globals)
+
+    assert run_in_process(f.blueprint()) == external_var

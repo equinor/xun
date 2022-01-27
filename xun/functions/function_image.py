@@ -171,7 +171,7 @@ class FunctionImage:
                 for m in self.referenced_modules
             },
         }
-        namespace = {**globals}
+        namespace = globals.copy()
         exec(function_code, namespace)  # nosec
         f = namespace[self.name]
         f = overwrite_scope(f, globals, module=self.__module__)

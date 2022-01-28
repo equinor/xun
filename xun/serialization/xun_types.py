@@ -55,12 +55,13 @@ class SymbolicFunctionFunctor(metaclass=IsoFunctor):
 class ReferenceFunctor(metaclass=IsoFunctor):
     class _Inverse(metaclass=IsoFunctor):
         def __call__(cls, value):
-            return Reference.to_callnode(callnode=value)
+            callnode = (~CallNodeFunctor)(value)
+            return Reference.to_callnode(callnode=callnode)
 
         def __invert__(cls):
             return ReferenceFunctor
     def __call__(cls, value):
-        return value.callnode
+        return CallNodeFunctor(value.callnode)
 
     def __invert__(cls):
         return cls._Inverse

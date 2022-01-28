@@ -3,9 +3,9 @@ class Reference:
         self._referencing = data
 
     @classmethod
-    def to_callnode(cls, node):
+    def to_callnode(cls, callnode):
         inst = cls.__new__(cls)
-        inst.callnode = node
+        inst.callnode = callnode
         return inst
 
     @property

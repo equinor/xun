@@ -385,6 +385,25 @@ def test_store_must_be_picklable(cls):
             assert store.tags[callnode] == unpickled.tags[callnode]
 
 
+@pytest.mark.parametrize('cls', stores - {Layered})
+def test_xun_result_references(cls):
+    @xun.function()
+    def return_reference():
+        data = b'hello world!\n'
+        return xun.Reference(data)
+
+    @xun.function()
+    def use_reference():
+        with ...:
+            ref = return_reference()
+        assert ref.value == b'hello world!\n'
+
+    driver = xun.functions.driver.Sequential()
+    with cls() as store:
+        use_reference.blueprint().run(driver=driver, store=store)
+
+
+
 def test_memory_store_not_picklable():
     store = xun.functions.store.Memory()
 

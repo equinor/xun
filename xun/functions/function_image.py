@@ -81,6 +81,7 @@ class FunctionImage:
                  annotations,
                  module_name,
                  globals,
+                 tags,
                  referenced_modules,
                  original_source_code=None,
                  interface_hashes=frozenset(),
@@ -92,6 +93,7 @@ class FunctionImage:
         self.__annotations__ = annotations
         self.__module__ = module_name
         self.globals = globals
+        self.tags = tags
         self.referenced_modules = referenced_modules
         self.hash = hash
         self.original_source_code = original_source_code
@@ -145,6 +147,7 @@ class FunctionImage:
             desc.annotations,
             desc.module,
             desc.globals,
+            None,
             desc.referenced_modules,
             hash=hash,
         )
@@ -237,6 +240,7 @@ class FunctionImage:
             self.__annotations__,
             self.__module__,
             self.globals,
+            self.tags,
             self.referenced_modules,
             self.original_source_code,
             self.interface_hashes,
@@ -255,10 +259,11 @@ class FunctionImage:
         self.__annotations__ = state[4]
         self.__module__ = state[5]
         self.globals = state[6]
-        self.referenced_modules = state[7]
-        self.original_source_code = state[8]
-        self.interface_hashes = state[9]
-        self.hash = state[10]
+        self.tags = state[7]
+        self.referenced_modules = state[8]
+        self.original_source_code = state[9]
+        self.interface_hashes = state[10]
+        self.hash = state[11]
         self._func = None
 
     def __repr__(self):

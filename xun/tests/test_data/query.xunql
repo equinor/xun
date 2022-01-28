@@ -1,0 +1,8 @@
+(start_time>="2030-01-02" entry_point function_name) =>
+    start_time {
+        entry_point {
+            function_name {
+                ...
+            }
+        }
+    }

@@ -397,6 +397,14 @@ def test_xun_result_references(cls):
         with ...:
             ref = return_reference()
         assert ref.value == b'hello world!\n'
+        return ref
+
+    @xun.function()
+    def use_reference_again():
+        with ...:
+            ref = use_reference()
+        assert ref.value == b'hello world!\n'
+        return ref
 
     driver = xun.functions.driver.Sequential()
     with cls() as store:

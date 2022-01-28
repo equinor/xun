@@ -181,3 +181,11 @@ class CallNode:
         inst = CallNode.__new__(CallNode)
         inst.__dict__.update(attribs)
         return inst
+
+    @property
+    def proxy_callnode(self):
+        old_hash = base64.urlsafe_b64decode(self.function_hash.encode())
+        sha256 = hashlib.sha256(old_hash).digest()
+        new_hash = base64.urlsafe_b64encode(sha256).decode()
+        return self._replace(function_name=f'proxy<{self.function_name}>',
+                             function_hash=new_hash)

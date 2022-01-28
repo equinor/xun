@@ -8,3 +8,4 @@ from .yaml import dump
 from .yaml import dumps
 from .yaml import load
 from .yaml import loads
+from .reference import Reference

@@ -22,6 +22,7 @@ _xun_functors = (
 
     xun_types.CallNodeFunctor,
     xun_types.SymbolicFunctionFunctor,
+    xun_types.ReferenceFunctor,
 )
 mapping_type = (dict, )
 sequence_types = (tuple, list)

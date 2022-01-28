@@ -68,7 +68,7 @@ class PicklableMemoryStore(xun.functions.store.Memory):
 
     def __setstate__(self, state):
         self.id = state
-        self._store = PicklableMemoryStore._cached_stores[self.id]._store
+        self._container = PicklableMemoryStore._cached_stores[self.id]._container
 
     def __enter__(self):
         PicklableMemoryStore._cached_stores.setdefault(self.id, self)

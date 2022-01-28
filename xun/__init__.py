@@ -26,6 +26,7 @@ from .functions import function_source
 from .functions import make_shared
 from .init import init_notebook
 from .memoized import memoized
+from .serialization import Reference
 
 
 # User facing API

@@ -11,20 +11,19 @@ class Memory(Store):
     """
 
     def __init__(self):
-        self._store = {}
+        self._container = {}
 
     def __contains__(self, callnode):
-        return callnode in self._store
+        return callnode in self._container
 
     def _load_value(self, callnode):
-        value = self._store[callnode]
+        value = self._container[callnode]
         return value
-
-    def store(self, callnode, value, **tags):
-        self._store[callnode] = value
 
     def remove(self, callnode):
         del self._store[callnode]
+    def _store(self, callnode, value, **tags):
+        self._container[callnode] = value
 
     def _load_tags(self, callnode):
         raise NotImplementedError

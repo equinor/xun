@@ -2,6 +2,7 @@ from ..functions import CallNode
 from ..functions import SymbolicFunction
 from .functor import IsoFunctor
 from .functor import _internal_type
+from .reference import Reference
 
 
 @_internal_type(CallNode)
@@ -45,6 +46,21 @@ class SymbolicFunctionFunctor(metaclass=IsoFunctor):
             'name': value.name,
             'hash': value.hash,
         }
+
+    def __invert__(cls):
+        return cls._Inverse
+
+
+@_internal_type(Reference)
+class ReferenceFunctor(metaclass=IsoFunctor):
+    class _Inverse(metaclass=IsoFunctor):
+        def __call__(cls, value):
+            return Reference.to_callnode(callnode=value)
+
+        def __invert__(cls):
+            return ReferenceFunctor
+    def __call__(cls, value):
+        return value.callnode
 
     def __invert__(cls):
         return cls._Inverse

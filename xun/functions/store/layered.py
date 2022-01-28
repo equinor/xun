@@ -47,7 +47,7 @@ class Layered(Store):
                 return layer[callnode]
         raise KeyError(repr(callnode))
 
-    def store(self, callnode, value, **tags):
+    def _store(self, callnode, value, **tags):
         self._layers[0].store(callnode, value, **tags)
 
     def remove(self, callnode):

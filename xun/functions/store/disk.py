@@ -66,7 +66,7 @@ class Disk(Store):
     def filter(self, *conditions):
         raise NotImplementedError
 
-    def store(self, key, value, **tags):
+    def _store(self, key, value, **tags):
         with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
             tmpdir = Path(tmpdir)
 

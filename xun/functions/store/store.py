@@ -1,3 +1,4 @@
+from ... import serialization
 from ...fs.queries import parse
 from abc import ABC, abstractmethod
 
@@ -71,17 +72,25 @@ class Store(ABC):
         pass
 
     @abstractmethod
-    def store(self, key, value, **tags):
+    def _store(self, key, value, **tags):
         pass
 
     @abstractmethod
     def remove(self, key):
         pass
+    def store(self, key, value, **tags):
+        if isinstance(value, serialization.Reference):
+            proxy_callnode = key.proxy_callnode
+            value.callnode = proxy_callnode
+            self._store(proxy_callnode, value._referencing)
+        self._store(key, value, **tags)
 
     def load_callnode(self, callnode):
         result = self._load_value(callnode._replace(subscript=()))
         for subscript in callnode.subscript:
             result = result[subscript]
+        if isinstance(result, serialization.Reference):
+            result.store = self
         return result
 
     def select(self, *tag_conditions, shape=...):
@@ -120,11 +129,11 @@ class GuardedStore(Store):
     def filter(self, *conditions):
         return self._wrapped_store.filter(*conditions)
 
-    def store(self, key, value, **tags):
+    def _store(self, key, value, **tags):
         if key in self._written:
             raise self.StoreError(f'Multiple results for {key}')
         self._written.add(key)
-        return self._wrapped_store.store(key, value, **tags)
+        return self._wrapped_store._store(key, value, **tags)
 
     def remove(self, key):
         self._wrapped_store.remove(key)
@@ -155,8 +164,8 @@ class CachedStore(Store):
     def filter(self, *conditions):
         return self._wrapped_store.filter(*conditions)
 
-    def store(self, key, value, **tags):
-        return self._wrapped_store.store(key, value, **tags)
+    def _store(self, key, value, **tags):
+        return self._wrapped_store._store(key, value, **tags)
 
     def remove(self, key):
         self._wrapped_store.remove(key)

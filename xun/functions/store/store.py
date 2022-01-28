@@ -79,7 +79,7 @@ class Store(ABC):
     def remove(self, key):
         pass
     def store(self, key, value, **tags):
-        if isinstance(value, serialization.Reference):
+        if isinstance(value, serialization.Reference) and value.is_new:
             proxy_callnode = key.proxy_callnode
             value.callnode = proxy_callnode
             self._store(proxy_callnode, value._referencing)

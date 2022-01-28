@@ -3,6 +3,7 @@ from .store import Store
 from collections import namedtuple
 from pathlib import Path
 import contextlib
+import shutil
 import tempfile
 
 
@@ -10,11 +11,13 @@ Paths = namedtuple('Paths', 'key val')
 
 
 class Disk(Store):
-    def __init__(self, dir, create_dirs=True):
+    def __init__(self, dir, tmpdir=None, create_dirs=True):
         self.dir = Path(dir)
+        self.tmpdir = Path(tmpdir) if tmpdir is not None else self.dir
         if create_dirs:
             (self.dir / 'keys').mkdir(parents=True, exist_ok=True)
             (self.dir / 'values').mkdir(parents=True, exist_ok=True)
+            self.tmpdir.mkdir(parents=True, exist_ok=True)
         elif not self.dir.exists():
             raise ValueError(f'Store Directory {str(self.dir)} does not exist')
 
@@ -67,7 +70,7 @@ class Disk(Store):
         raise NotImplementedError
 
     def _store(self, key, value, **tags):
-        with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
+        with tempfile.TemporaryDirectory(dir=self.tmpdir) as tmpdir:
             tmpdir = Path(tmpdir)
 
             temp_paths = self.paths(key, root=tmpdir)
@@ -81,8 +84,8 @@ class Disk(Store):
                 serialization.dump(key, key_file)
                 serialization.dump(value, val_file)
             # If succeeded, move files
-            temp_paths.key.replace(real_paths.key)
-            temp_paths.val.replace(real_paths.val)
+            shutil.copy(temp_paths.key, real_paths.key)
+            shutil.copy(temp_paths.val, real_paths.val)
 
         if __debug__:
             self.key_invariant(key)

@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package xungrpc;
+
+import "google/protobuf/empty.proto";
+
+service XunGRPC {
+    rpc Assign (CallNode) returns (Assignment);
+    rpc Await (CallNode) returns (Status);
+    rpc Done (CallNode) returns (google.protobuf.Empty);
+}
+
+message CallNode {
+    bytes callnode = 1;
+}
+
+message Assignment {
+    bool assigned = 1;
+}
+
+message Status {
+
+}

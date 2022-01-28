@@ -1,5 +1,7 @@
 from .helpers import PicklableMemoryStore
 from .helpers import sample_sin_blueprint
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed
 from dask.distributed import Client, LocalCluster
 from contextlib import closing
 from concurrent.futures import Future
@@ -7,6 +9,23 @@ from unittest.mock import patch
 import dask
 import pytest
 import xun
+
+
+def test_grpc_driver():
+    blueprint, expected = sample_sin_blueprint()
+
+    with PicklableMemoryStore() as store, ThreadPoolExecutor() as executor:
+        server = xun.functions.driver.grpc.Server('localhost')
+        driver = xun.functions.driver.grpc.Driver('localhost')
+        server_future = executor.submit(server.start)
+        futures = [
+            executor.submit(blueprint.run, driver=driver, store=store)
+            for _ in range(5)
+        ]
+        server_future.result(timeout=2.0)
+        results = [f.result(timeout=1.5) for f in as_completed(futures)]
+
+    assert result == expected
 
 
 def test_dask_driver():

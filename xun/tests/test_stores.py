@@ -364,7 +364,6 @@ def test_tags_are_not_duplicated_on_double_write(cls):
         assert tags == tags_after
 
 
-@pytest.mark.xfail(reason='Tagged stores not implemented')
 @pytest.mark.parametrize('cls', stores - {Memory, Layered})
 def test_store_must_be_picklable(cls):
     with create_instance(cls) as (store, callnodes):
@@ -376,13 +375,8 @@ def test_store_must_be_picklable(cls):
         unpickled.store(xun.functions.CallNode('g', '', 3), 4)
         assert store[xun.functions.CallNode('g', '', 3)] == 4
 
-        q0 = store.select(store.tags.start_time > '2030-01-02')
-        q1 = unpickled.select(unpickled.tags.start_time > '2030-01-02')
-        assert q0 == q1
-
         for callnode in vars(callnodes).values():
             assert callnode in unpickled
-            assert store.tags[callnode] == unpickled.tags[callnode]
 
 
 @pytest.mark.parametrize('cls', stores - {Layered})

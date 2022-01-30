@@ -96,7 +96,8 @@ class Disk(Store):
         paths.val.unlink()
 
     def __getstate__(self):
-        return self.dir
+        return self.dir, self.tmpdir
 
     def __setstate__(self, state):
-        self.dir = state
+        self.dir = state[0]
+        self.tmpdir = state[1]

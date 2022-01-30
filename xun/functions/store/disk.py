@@ -101,3 +101,5 @@ class Disk(Store):
     def __setstate__(self, state):
         self.dir = state[0]
         self.tmpdir = state[1]
+        self.dir.mkdir(parents=True, exist_ok=True)
+        self.tmpdir.mkdir(parents=True, exist_ok=True)

@@ -429,3 +429,40 @@ def test_layered_store_writes_to_top_layer():
         assert callnode in layered
         assert callnode in mem
         assert callnode not in store
+
+
+def test_disk_store_retry_load_value():
+    with create_instance(TmpDisk) as (store, callnodes):
+        orig__contains__ = store.__contains__
+
+        def fail__contains__(key, fail=type("", (), {'count': 2})):
+            if fail.count > 0:
+                fail.count -= 1
+                return False
+            else:
+                return orig__contains__(key)
+
+        store.__contains__ = fail__contains__
+        store.key_invariant = lambda _: None
+
+        assert store[callnodes.f_0] == 0
+
+
+def test_disk_store_retry_on_missing_value_file():
+    from xun.functions.store.disk import Paths
+    with create_instance(TmpDisk) as (store, callnodes):
+        orig_paths = store.paths
+
+        def paths(key, fail=type("", (), {'count': 2})):
+            paths = orig_paths(key)
+            if fail.count > 0:
+                fail.count -= 1
+                return Paths(key=paths.key,
+                             val=paths.val.with_suffix('.missing'))
+            else:
+                return paths
+
+        store.paths = paths
+        store.key_invariant = lambda _: None
+
+        assert store[callnodes.f_0] == 0

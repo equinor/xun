@@ -6,7 +6,7 @@ from io import BytesIO
 import numpy as np
 
 
-@_internal_type(np.ndarray, *np.typeDict.values())
+@_internal_type(np.ndarray, *np.sctypeDict.values())
 class NumpyFunctor(metaclass=IsoFunctor):
     class _Inverse(metaclass=IsoFunctor):
         def __call__(cls, b64):

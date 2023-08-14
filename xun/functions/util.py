@@ -5,6 +5,7 @@ from immutables import Map as frozenmap
 from itertools import chain
 from itertools import tee
 import collections
+import contextvars
 import copy
 import inspect
 import networkx as nx
@@ -461,7 +462,7 @@ def func_external_names(fdef):
     body, constants = separate_constants_ast(fdef.body)
     sorted_constants, _ = sort_constants_ast(constants)
     stmts = list(chain(sorted_constants, body))
-    return body_external_names(stmts, locals=locals)
+    return kw_external_names(fdef) | body_external_names(stmts, locals=locals)
 
 
 def func_arg_names(fdef):
@@ -489,6 +490,40 @@ def func_arg_names(fdef):
     CollectArgs().visit(fdef)
 
     return frozenset(args)
+
+
+def kw_external_names(fdef):
+    """FunctionDef keyword argument external names
+
+    Given a function definition ast, return the externally referenced names in
+    its keyword arguments
+
+    Parameters
+    ----------
+    fdef : ast.FunctionDef
+        The function definition AST
+
+    Returns
+    -------
+    frozenset of str
+        keyword external names
+    """
+    names = set()
+    in_keyword = contextvars.ContextVar('in_keyword', default=False)
+
+    class CollectKeywordReferencedNames(ast.NodeVisitor):
+        def visit_arguments(self, node):
+            ctx = contextvars.copy_context()
+            ctx.run(in_keyword.set, True)
+            ctx.run(self.generic_visit, node)
+
+        def visit_Name(self, node):
+            if in_keyword.get():
+                names.add(node.id)
+
+    CollectKeywordReferencedNames().visit(fdef)
+
+    return frozenset(names)
 
 
 #

@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import sqlite3
 import functools
 import threading
@@ -66,6 +67,12 @@ class SQLiteStore(Store):
         with conn:
             cur = conn.execute("SELECT EXISTS(SELECT 1 FROM keys WHERE key_hash=?)", (key.sha256(),))
             return cur.fetchone()[0]
+
+    @contextmanager
+    def batch(self):
+        conn = self.get_conn()
+        with conn:
+            yield
 
     @retry(on_exceptions=(KeyError, sqlite3.Error))
     def _load_value(self, key):

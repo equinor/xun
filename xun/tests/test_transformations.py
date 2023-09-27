@@ -134,7 +134,8 @@ def test_load_constants_transformation():
             a = _xun_pass_by_value(f)
             b = _xun_pass_by_value(h, a)
             c = _xun_pass_by_value(g, b)
-            return _xun_load_results_by_deepcopy(_xun_store, a, c)
+            with _xun_store.batch():
+                return _xun_load_results_by_deepcopy(_xun_store, a, c)
         a, c = _xun_load_constants()
         value = a + c
         return value
@@ -193,9 +194,10 @@ def test_structured_unpacking_transformation():
                 (2, ((3,), (2,)), 2), _xun_pass_by_value(f)
             )
             something = _xun_pass_by_value(h, x, y, z)
-            return _xun_load_results_by_deepcopy(
-                _xun_store, a, b, c, d, something, x, y, z, α, β
-            )
+            with _xun_store.batch():
+                return _xun_load_results_by_deepcopy(
+                    _xun_store, a, b, c, d, something, x, y, z, α, β
+                )
         a, b, c, d, something, x, y, z, α, β = _xun_load_constants()
         return a * b * x * y * z * 𝛂 * β * c * d + something
 

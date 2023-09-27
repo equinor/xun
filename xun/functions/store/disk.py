@@ -77,6 +77,10 @@ class Disk(Store):
     def __contains__(self, key):
         return self.paths(key).key.is_file()
 
+    @contextlib.contextmanager
+    def batch(self):
+        yield
+
     @retry(on_exceptions=(KeyError, FileNotFoundError))
     def _load_value(self, key):
         if __debug__:

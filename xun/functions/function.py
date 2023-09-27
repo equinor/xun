@@ -51,6 +51,7 @@ class AbstractFunction(ABC):
         Xun function code. Helper for checking/debugging generated code of
         xun function.
         """
+
         def __init__(self, func):
             self.owner = func
 
@@ -117,9 +118,16 @@ class AbstractFunction(ABC):
         """
         sha256 = hashlib.sha256()
         sha256.update(self.desc.src.encode())
-        for dependency in self.dependencies.values():
-            if dependency is not self:
-                sha256.update(dependency.hash.encode())
+        orig = sha256.digest().hex()[:5]
+        dependencies = sorted(
+            filter(
+                lambda d: d is not self or (isinstance(d, Interface) and d.target is self),
+                self.dependencies.values(),
+            ),
+            key=lambda f: f.hash.encode(),
+        )
+        for dependency in dependencies:
+            sha256.update(dependency.hash.encode())
         return base64.urlsafe_b64encode(sha256.digest()).decode()
 
     def callnode(self, *args, **kwargs):
@@ -385,7 +393,7 @@ class Function(AbstractFunction):
                 interface_hashes=frozenset(
                     i.hash for i in self.interfaces.values()
                 ),
-        )
+            )
         return self._callable
 
     def interface(self, func):
@@ -525,7 +533,7 @@ class Interface(AbstractFunction):
         if self._graph_builder is None:
             (interface_call,
              target_call,
-            ) = xform.separate_interface_and_target(self.desc, self.target)
+             ) = xform.separate_interface_and_target(self.desc, self.target)
             interface = xform.build_interface_graph(interface_call,
                                                     target_call)
             self._graph_builder = xform.assemble(self.desc,
@@ -539,7 +547,7 @@ class Interface(AbstractFunction):
         if self._callable is None:
             (interface_call,
              target_call,
-            ) = xform.separate_interface_and_target(self.desc, self.target)
+             ) = xform.separate_interface_and_target(self.desc, self.target)
             interface = xform.interface_raise_on_execution(interface_call,
                                                            target_call)
             self._callable = xform.assemble(self.desc,

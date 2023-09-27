@@ -553,7 +553,23 @@ def load_constants(body: List[ast.AST], unpacked_assignments: List[ast.AST]):
         body=[
             *imports,
             *assignments,
-            ast.Return(deep_load_referenced),
+            ast.With(
+                items=[ast.withitem(
+                    context_expr=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Name(id='_xun_store', ctx=ast.Load()),
+                            attr='batch',
+                            ctx=ast.Load()
+                        ),
+                        args=[],
+                        keywords=[]
+                    ),
+                    optional_vars=None
+                )],
+                body=[
+                    ast.Return(deep_load_referenced),
+                ]
+            )
         ],
         decorator_list=[],
         returns=None,

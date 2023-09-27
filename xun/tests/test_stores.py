@@ -36,6 +36,11 @@ def TmpDisk():
     with tempfile.TemporaryDirectory() as tmpdirname:
         yield xun.functions.store.Disk(tmpdirname)
 
+@contextmanager
+def TmpSQLite():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        yield xun.functions.store.SQLite(tmpdirname + '/test.db')
+
 
 @contextmanager
 def Layered():
@@ -50,6 +55,7 @@ def Layered():
 stores = {
     Memory,
     TmpDisk,
+    TmpSQLite,
     Layered,
 }
 

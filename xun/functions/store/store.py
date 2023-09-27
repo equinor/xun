@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from ... import serialization
 from ...fs.queries import parse
 from abc import ABC, abstractmethod
@@ -60,6 +61,11 @@ class Store(ABC):
         return _Tags(self)
 
     @abstractmethod
+    @contextmanager
+    def batch(self):
+        yield
+
+    @abstractmethod
     def _load_value(self, key):
         pass
 
@@ -78,6 +84,7 @@ class Store(ABC):
     @abstractmethod
     def remove(self, key):
         pass
+
     def store(self, key, value, **tags):
         if isinstance(value, serialization.Reference) and value.is_new:
             proxy_callnode = key.proxy_callnode
@@ -120,6 +127,11 @@ class GuardedStore(Store):
     def __contains__(self, key):
         return key in self._wrapped_store
 
+    @contextmanager
+    def batch(self):
+        with self._wrapped_store.batch():
+            yield
+
     def _load_value(self, key):
         return self._wrapped_store._load_value(key)
 
@@ -149,6 +161,11 @@ class CachedStore(Store):
 
     def __contains__(self, key):
         return key in self._wrapped_store
+
+    @contextmanager
+    def batch(self):
+        with self._wrapped_store.batch():
+            yield
 
     def _load_value(self, key):
         try:

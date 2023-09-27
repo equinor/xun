@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from ..errors import CopyError
 from .store import Store
 
@@ -15,6 +16,10 @@ class Memory(Store):
 
     def __contains__(self, callnode):
         return callnode in self._container
+
+    @contextmanager
+    def batch(self):
+        yield
 
     def _load_value(self, callnode):
         value = self._container[callnode]

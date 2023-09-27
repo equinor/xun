@@ -1,4 +1,5 @@
 from .store import Store
+import contextlib
 
 
 class Layered(Store):
@@ -40,6 +41,13 @@ class Layered(Store):
 
     def __contains__(self, callnode):
         return any(callnode in layer for layer in self._layers)
+
+    @contextlib.contextmanager
+    def batch(self):
+        with contextlib.ExitStack() as stack:
+            for layer in self._layers:
+                stack.enter_context(layer.batch())
+            yield
 
     def _load_value(self, callnode):
         for layer in self._layers:

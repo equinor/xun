@@ -6,7 +6,11 @@ https://en.wikipedia.org/wiki/Bagua
 
 ---
 
-[![equinor](https://circleci.com/gh/equinor/xun.svg?style=shield)](https://app.circleci.com/pipelines/github/equinor/xun)
+# Important
+
+This repository is archived and no longer maintained.
+
+---
 
 Xun is a distributed and functional Python framework for cluster compute. Rather than focusing on batching jobs, xun is about defining values declaratively.
 
